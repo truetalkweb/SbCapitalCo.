@@ -44,10 +44,9 @@ body {
   overflow: hidden;
 }
 
-/* LEFT PANEL - RESIZABLE */
 .panel {
   width: 330px;
-  min-width: 260px;
+  min-width: 240px;
   max-width: 520px;
   resize: horizontal;
   overflow: auto;
@@ -56,20 +55,18 @@ body {
   border-right: 1px solid #2a2e39;
 }
 
-/* CENTER CHART */
 .chart {
   flex: 1;
-  min-width: 500px;
+  min-width: 420px;
+  overflow: auto;
   padding: 10px;
   background: #131722;
-  overflow: auto;
   border-right: 1px solid #2a2e39;
 }
 
-/* RIGHT PANEL - RESIZABLE */
 .right {
   width: 330px;
-  min-width: 260px;
+  min-width: 240px;
   max-width: 520px;
   resize: horizontal;
   overflow: auto;
@@ -189,24 +186,6 @@ h3 {
   background: #3a3f4b;
 }
 
-/* Smaller laptops */
-@media (max-width: 1200px) {
-  .panel {
-    width: 300px;
-    min-width: 240px;
-  }
-
-  .right {
-    width: 300px;
-    min-width: 240px;
-  }
-
-  .chart {
-    min-width: 420px;
-  }
-}
-
-/* Tablet / Mobile */
 @media (max-width: 900px) {
   body {
     overflow: auto;
@@ -232,9 +211,5 @@ h3 {
     border-right: none;
     border-bottom: 1px solid #2a2e39;
     overflow: visible;
-  }
-
-  .chart {
-    min-width: 0;
   }
 }

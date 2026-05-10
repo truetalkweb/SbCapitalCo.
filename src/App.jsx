@@ -392,8 +392,14 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
 
-            <Chart symbol={selectedStock} timeframe={timeframe} />
+          <div className="box">
+            <Chart
+              symbol={selectedStock}
+              timeframe={timeframe}
+              livePrice={Number(selectedStockData?.price)}
+            />
           </div>
         </div>
 
@@ -434,7 +440,9 @@ export default function App() {
               }}
             />
 
-            <div style={{ marginBottom: "10px" }}>Estimated: ${estimatedValue}</div>
+            <div style={{ marginBottom: "10px" }}>
+              Estimated: ${estimatedValue}
+            </div>
 
             <div
               style={{

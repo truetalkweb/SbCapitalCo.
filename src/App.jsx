@@ -10,6 +10,18 @@ const defaultStocks = [
   { symbol: "PLTR", price: 42.7, change: "+0.00%" },
 ];
 
+const cryptoStocks = [
+  { symbol: "BTC-USD", price: 80739.85, change: "+0.69%" },
+  { symbol: "ETH-USD", price: 2331.05, change: "+1.03%" },
+  { symbol: "SOL-USD", price: 182.44, change: "+2.51%" },
+];
+
+const forexStocks = [
+  { symbol: "EUR/USD", price: 1.1785, change: "+0.52%" },
+  { symbol: "GBP/USD", price: 1.3632, change: "+0.61%" },
+  { symbol: "USD/CAD", price: 1.3722, change: "-0.22%" },
+];
+
 export default function App() {
   const [selectedStock, setSelectedStock] = useState("NVDA");
   const [searchSymbol, setSearchSymbol] = useState("");
@@ -23,13 +35,47 @@ export default function App() {
   const [showIndicators, setShowIndicators] = useState(false);
   const [showEMA9, setShowEMA9] = useState(true);
   const [showEMA20, setShowEMA20] = useState(true);
+  const [scannerTab, setScannerTab] = useState("Gainers");
 
   const socketRef = useRef(null);
   const subscribedSymbolsRef = useRef(new Set());
   const chartAreaRef = useRef(null);
 
   const selectedStockData =
-    liveStocks.find((stock) => stock.symbol === selectedStock) || liveStocks[0];
+    liveStocks.find((stock) => stock.symbol === selectedStock) ||
+    cryptoStocks.find((stock) => stock.symbol === selectedStock) ||
+    forexStocks.find((stock) => stock.symbol === selectedStock) ||
+    liveStocks[0];
+
+  let scannerStocks = [...liveStocks];
+
+  if (scannerTab === "Gainers") {
+    scannerStocks.sort(
+      (a, b) =>
+        Number(b.change.replace("%", "")) -
+        Number(a.change.replace("%", ""))
+    );
+  }
+
+  if (scannerTab === "Losers") {
+    scannerStocks.sort(
+      (a, b) =>
+        Number(a.change.replace("%", "")) -
+        Number(b.change.replace("%", ""))
+    );
+  }
+
+  if (scannerTab === "Active") {
+    scannerStocks.sort((a, b) => Number(b.price) - Number(a.price));
+  }
+
+  if (scannerTab === "Crypto") {
+    scannerStocks = cryptoStocks;
+  }
+
+  if (scannerTab === "Forex") {
+    scannerStocks = forexStocks;
+  }
 
   const estimatedValue = (
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
@@ -342,10 +388,11 @@ export default function App() {
               {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
                 <button
                   key={tab}
+                  onClick={() => setScannerTab(tab)}
                   style={{
-                    background: "#131722",
+                    background: scannerTab === tab ? "#2196f3" : "#131722",
                     border: "1px solid #2a2e39",
-                    color: "#d1d4dc",
+                    color: scannerTab === tab ? "#ffffff" : "#d1d4dc",
                     padding: "6px 10px",
                     borderRadius: "4px",
                     cursor: "pointer",
@@ -377,30 +424,24 @@ export default function App() {
               <span style={{ textAlign: "right" }}>Change</span>
             </div>
 
-            {[...liveStocks]
-              .sort((a, b) => {
-                const changeA = Number(a.change.replace("%", ""));
-                const changeB = Number(b.change.replace("%", ""));
-                return changeB - changeA;
-              })
-              .map((stock) => (
-                <div
-                  className="stock-row"
-                  key={stock.symbol}
-                  onClick={() => setSelectedStock(stock.symbol)}
-                  style={{ cursor: "pointer" }}
+            {scannerStocks.map((stock) => (
+              <div
+                className="stock-row"
+                key={stock.symbol}
+                onClick={() => setSelectedStock(stock.symbol)}
+                style={{ cursor: "pointer" }}
+              >
+                <span className="stock-symbol">{stock.symbol}</span>
+                <span className="stock-price">${stock.price}</span>
+                <span
+                  className={`stock-change ${
+                    stock.change.includes("+") ? "green" : "red"
+                  }`}
                 >
-                  <span className="stock-symbol">{stock.symbol}</span>
-                  <span className="stock-price">${stock.price}</span>
-                  <span
-                    className={`stock-change ${
-                      stock.change.includes("+") ? "green" : "red"
-                    }`}
-                  >
-                    {stock.change}
-                  </span>
-                </div>
-              ))}
+                  {stock.change}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 

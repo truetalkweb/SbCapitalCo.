@@ -5,8 +5,10 @@ import {
   CrosshairMode,
 } from "lightweight-charts";
 
-export default function Chart({ symbol, timeframe }) {
+export default function Chart({ symbol, timeframe, livePrice }) {
   const chartContainerRef = useRef(null);
+  const candleSeriesRef = useRef(null);
+  const lastCandleRef = useRef(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -42,33 +44,31 @@ export default function Chart({ symbol, timeframe }) {
       wickDownColor: "#ef5350",
     });
 
-    const basePrices = {
-      NVDA: 211.5,
-      AMD: 168.22,
-      TSLA: 251.44,
-      PLTR: 42.7,
-    };
+    candleSeriesRef.current = candleSeries;
 
-    const now = Math.floor(Date.now() / 1000);
-    let price = basePrices[symbol] || 100;
+    const now = Math.floor(Date.now() / 60) * 60;
+    let price = Number(livePrice) || 100;
     const data = [];
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 100; i > 0; i--) {
       const open = price;
-      const close = open + (Math.random() - 0.5) * 4;
-      const high = Math.max(open, close) + Math.random() * 2;
-      const low = Math.min(open, close) - Math.random() * 2;
+      const close = open + (Math.random() - 0.5) * 2;
+      const high = Math.max(open, close) + Math.random();
+      const low = Math.min(open, close) - Math.random();
 
-      data.push({
-        time: now - (100 - i) * 60,
+      const candle = {
+        time: now - i * 60,
         open: Number(open.toFixed(2)),
         high: Number(high.toFixed(2)),
         low: Number(low.toFixed(2)),
         close: Number(close.toFixed(2)),
-      });
+      };
 
+      data.push(candle);
       price = close;
     }
+
+    lastCandleRef.current = data[data.length - 1];
 
     candleSeries.setData(data);
     chart.timeScale().fitContent();
@@ -88,6 +88,35 @@ export default function Chart({ symbol, timeframe }) {
       chart.remove();
     };
   }, [symbol, timeframe]);
+
+  useEffect(() => {
+    if (!livePrice || !candleSeriesRef.current || !lastCandleRef.current) return;
+
+    const currentTime = Math.floor(Date.now() / 60) * 60;
+    const lastCandle = lastCandleRef.current;
+
+    let updatedCandle;
+
+    if (lastCandle.time === currentTime) {
+      updatedCandle = {
+        ...lastCandle,
+        high: Math.max(lastCandle.high, livePrice),
+        low: Math.min(lastCandle.low, livePrice),
+        close: livePrice,
+      };
+    } else {
+      updatedCandle = {
+        time: currentTime,
+        open: lastCandle.close,
+        high: livePrice,
+        low: livePrice,
+        close: livePrice,
+      };
+    }
+
+    lastCandleRef.current = updatedCandle;
+    candleSeriesRef.current.update(updatedCandle);
+  }, [livePrice]);
 
   return (
     <div

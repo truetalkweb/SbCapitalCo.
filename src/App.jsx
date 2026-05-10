@@ -135,7 +135,6 @@ export default function App() {
     return () => socket.close();
   }, []);
 
-  // Fallback movement so the platform stays alive when market is closed or WebSocket is quiet.
   useEffect(() => {
     const interval = setInterval(() => {
       setLiveStocks((prev) =>
@@ -246,10 +245,9 @@ export default function App() {
           SbCapital<span>Co.</span>
         </div>
 
-       <div style={{ marginLeft: "auto", fontSize: "13px", color: "#787b86" }}>
-  Data: <span className="green">LIVE/SIM ACTIVE</span>
-
-    </div>
+        <div style={{ marginLeft: "auto", fontSize: "13px", color: "#787b86" }}>
+          Data: <span className="green">LIVE/SIM ACTIVE</span>
+        </div>
       </div>
 
       <div className="main">
@@ -317,6 +315,32 @@ export default function App() {
 
             <div
               style={{
+                display: "flex",
+                gap: "6px",
+                marginBottom: "12px",
+                flexWrap: "wrap",
+              }}
+            >
+              {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
+                <button
+                  key={tab}
+                  style={{
+                    background: "#131722",
+                    border: "1px solid #2a2e39",
+                    color: "#d1d4dc",
+                    padding: "6px 10px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div
+              style={{
                 display: "grid",
                 gridTemplateColumns: "1.2fr 1fr 1fr",
                 alignItems: "center",
@@ -367,6 +391,42 @@ export default function App() {
             <div
               style={{
                 display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                marginBottom: "12px",
+                paddingBottom: "10px",
+                borderBottom: "1px solid #2a2e39",
+                flexWrap: "wrap",
+              }}
+            >
+              {[
+                "Crosshair",
+                "Indicators",
+                "Drawing Tools",
+                "Screenshot",
+                "Fullscreen",
+                "Settings",
+              ].map((tool) => (
+                <button
+                  key={tool}
+                  style={{
+                    background: "#131722",
+                    border: "1px solid #2a2e39",
+                    color: "#d1d4dc",
+                    padding: "7px 10px",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                >
+                  {tool}
+                </button>
+              ))}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 marginBottom: "12px",
@@ -380,7 +440,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <h2 style={{ margin: 0 }}>{selectedStock}</h2>
                   <span style={{ color: "#26a69a", fontWeight: "bold" }}>
-                ● LIVE/SIM
+                    ● LIVE/SIM
                   </span>
                 </div>
 
@@ -415,9 +475,7 @@ export default function App() {
                 ))}
               </div>
             </div>
-          </div>
 
-          <div className="box">
             <Chart
               symbol={selectedStock}
               timeframe={timeframe}

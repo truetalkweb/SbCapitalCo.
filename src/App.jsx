@@ -20,8 +20,13 @@ export default function App() {
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
 
+  const [showIndicators, setShowIndicators] = useState(false);
+  const [showEMA9, setShowEMA9] = useState(true);
+  const [showEMA20, setShowEMA20] = useState(true);
+
   const socketRef = useRef(null);
   const subscribedSymbolsRef = useRef(new Set());
+  const chartAreaRef = useRef(null);
 
   const selectedStockData =
     liveStocks.find((stock) => stock.symbol === selectedStock) || liveStocks[0];
@@ -73,6 +78,26 @@ export default function App() {
     };
 
     setOrders((prev) => [order, ...prev.slice(0, 9)]);
+  }
+
+  function toggleFullscreen() {
+    if (!chartAreaRef.current) return;
+
+    if (!document.fullscreenElement) {
+      chartAreaRef.current.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  function takeScreenshot() {
+    const canvas = chartAreaRef.current?.querySelector("canvas");
+    if (!canvas) return;
+
+    const link = document.createElement("a");
+    link.download = `${selectedStock}-chart.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
   }
 
   useEffect(() => {
@@ -313,14 +338,7 @@ export default function App() {
           <div className="box">
             <h3>Top Movers Scanner</h3>
 
-            <div
-              style={{
-                display: "flex",
-                gap: "6px",
-                marginBottom: "12px",
-                flexWrap: "wrap",
-              }}
-            >
+            <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
               {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
                 <button
                   key={tab}
@@ -397,31 +415,64 @@ export default function App() {
                 paddingBottom: "10px",
                 borderBottom: "1px solid #2a2e39",
                 flexWrap: "wrap",
+                position: "relative",
               }}
             >
-              {[
-                "Crosshair",
-                "Indicators",
-                "Drawing Tools",
-                "Screenshot",
-                "Fullscreen",
-                "Settings",
-              ].map((tool) => (
-                <button
-                  key={tool}
+              <button className="toolbar-btn">Crosshair</button>
+
+              <button
+                className="toolbar-btn"
+                onClick={() => setShowIndicators(!showIndicators)}
+              >
+                Indicators
+              </button>
+
+              <button className="toolbar-btn">Drawing Tools</button>
+
+              <button className="toolbar-btn" onClick={takeScreenshot}>
+                Screenshot
+              </button>
+
+              <button className="toolbar-btn" onClick={toggleFullscreen}>
+                Fullscreen
+              </button>
+
+              <button className="toolbar-btn">Settings</button>
+
+              {showIndicators && (
+                <div
                   style={{
-                    background: "#131722",
+                    position: "absolute",
+                    top: "42px",
+                    left: "80px",
+                    background: "#1b1f2a",
                     border: "1px solid #2a2e39",
-                    color: "#d1d4dc",
-                    padding: "7px 10px",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "12px",
+                    borderRadius: "6px",
+                    padding: "10px",
+                    zIndex: 20,
+                    width: "160px",
+                    fontSize: "13px",
                   }}
                 >
-                  {tool}
-                </button>
-              ))}
+                  <label style={{ display: "block", marginBottom: "8px" }}>
+                    <input
+                      type="checkbox"
+                      checked={showEMA9}
+                      onChange={() => setShowEMA9(!showEMA9)}
+                    />{" "}
+                    EMA 9
+                  </label>
+
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showEMA20}
+                      onChange={() => setShowEMA20(!showEMA20)}
+                    />{" "}
+                    EMA 20
+                  </label>
+                </div>
+              )}
             </div>
 
             <div
@@ -476,11 +527,15 @@ export default function App() {
               </div>
             </div>
 
-            <Chart
-              symbol={selectedStock}
-              timeframe={timeframe}
-              livePrice={Number(selectedStockData?.price)}
-            />
+            <div ref={chartAreaRef}>
+              <Chart
+                symbol={selectedStock}
+                timeframe={timeframe}
+                livePrice={Number(selectedStockData?.price)}
+                showEMA9={showEMA9}
+                showEMA20={showEMA20}
+              />
+            </div>
           </div>
         </div>
 
@@ -525,13 +580,7 @@ export default function App() {
               Estimated: ${estimatedValue}
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "8px",
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
               <button
                 onClick={() => placeOrder("BUY")}
                 style={{

@@ -135,6 +135,28 @@ export default function App() {
     return () => socket.close();
   }, []);
 
+  // Fallback movement so the platform stays alive when market is closed or WebSocket is quiet.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveStocks((prev) =>
+        prev.map((stock) => {
+          const oldPrice = Number(stock.price);
+          const move = (Math.random() - 0.5) * 0.45;
+          const newPrice = Math.max(oldPrice + move, 1);
+          const changePercent = (((newPrice - oldPrice) / oldPrice) * 100).toFixed(2);
+
+          return {
+            ...stock,
+            price: newPrice.toFixed(2),
+            change: `${changePercent >= 0 ? "+" : ""}${changePercent}%`,
+          };
+        })
+      );
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     async function fetchRealNews() {
       if (!FINNHUB_API_KEY) return;
@@ -225,7 +247,7 @@ export default function App() {
         </div>
 
         <div style={{ marginLeft: "auto", fontSize: "13px", color: "#787b86" }}>
-          Data: Finnhub WebSocket
+          Data: Finnhub WebSocket + Fallback Movement
         </div>
       </div>
 
@@ -357,7 +379,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <h2 style={{ margin: 0 }}>{selectedStock}</h2>
                   <span style={{ color: "#26a69a", fontWeight: "bold" }}>
-                    ● LIVE
+                    ● LIVE / SIM
                   </span>
                 </div>
 
@@ -559,6 +581,7 @@ export default function App() {
         <span>Connected: Finnhub</span>
         <span>Symbol: {selectedStock}</span>
         <span>Timeframe: {timeframe}</span>
+        <span>Fallback Movement Active</span>
         <span>Paper Trading Only</span>
       </div>
     </div>

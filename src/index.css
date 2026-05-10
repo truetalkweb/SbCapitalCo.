@@ -213,3 +213,45 @@ h3 {
     overflow: visible;
   }
 }
+.react-grid-item {
+  transition: none !important;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: #2196f3;
+  opacity: 0.25;
+  border-radius: 6px;
+}
+
+.react-resizable-handle {
+  opacity: 0.5;
+}
+.toolbar-btn {
+  height: 34px;
+  padding: 0 12px;
+  background: #131722;
+  border: 1px solid #2a2e39;
+  color: #d1d4dc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.timeframe-btn {
+  width: 42px;
+  height: 34px;
+  padding: 0;
+  background: #131722;
+  border: 1px solid #2a2e39;
+  color: #d1d4dc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeframe-btn.active {
+  background: #2196f3;
+  color: #ffffff;
+}

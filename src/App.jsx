@@ -1,3 +1,6 @@
+import GridLayout from "react-grid-layout";
+import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 import { useEffect, useRef, useState } from "react";
 import Chart from "./components/Chart";
 
@@ -31,11 +34,11 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
-
   const [showIndicators, setShowIndicators] = useState(false);
   const [showEMA9, setShowEMA9] = useState(true);
   const [showEMA20, setShowEMA20] = useState(true);
   const [scannerTab, setScannerTab] = useState("Gainers");
+  const [gridWidth, setGridWidth] = useState(window.innerWidth - 20);
 
   const socketRef = useRef(null);
   const subscribedSymbolsRef = useRef(new Set());
@@ -69,13 +72,8 @@ export default function App() {
     scannerStocks.sort((a, b) => Number(b.price) - Number(a.price));
   }
 
-  if (scannerTab === "Crypto") {
-    scannerStocks = cryptoStocks;
-  }
-
-  if (scannerTab === "Forex") {
-    scannerStocks = forexStocks;
-  }
+  if (scannerTab === "Crypto") scannerStocks = cryptoStocks;
+  if (scannerTab === "Forex") scannerStocks = forexStocks;
 
   const estimatedValue = (
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
@@ -86,10 +84,17 @@ export default function App() {
     { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
   ]);
 
+  const layout = [
+    { i: "scanner", x: 0, y: 0, w: 3, h: 19, minW: 2, minH: 13 },
+    { i: "chart", x: 3, y: 0, w: 6, h: 19, minW: 5, minH: 15 },
+    { i: "trade", x: 9, y: 0, w: 3, h: 11, minW: 2, minH: 8 },
+    { i: "news", x: 9, y: 11, w: 3, h: 8, minW: 2, minH: 6 },
+    { i: "level2", x: 0, y: 19, w: 12, h: 6, minW: 4, minH: 4 },
+  ];
+
   function subscribeToSymbol(symbol) {
     if (!socketRef.current) return;
     if (subscribedSymbolsRef.current.has(symbol)) return;
-
     socketRef.current.send(JSON.stringify({ type: "subscribe", symbol }));
     subscribedSymbolsRef.current.add(symbol);
   }
@@ -145,6 +150,12 @@ export default function App() {
     link.href = canvas.toDataURL("image/png");
     link.click();
   }
+
+  useEffect(() => {
+    const handleResize = () => setGridWidth(window.innerWidth - 20);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const savedStocks = localStorage.getItem("sb_watchlist");
@@ -309,6 +320,31 @@ export default function App() {
     return () => clearInterval(interval);
   }, [selectedStockData]);
 
+  const toolbarButtonStyle = {
+    height: "32px",
+    padding: "0 10px",
+    background: "#131722",
+    border: "1px solid #2a2e39",
+    color: "#d1d4dc",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  };
+
+  const timeframeButtonStyle = (item) => ({
+    width: "42px",
+    height: "34px",
+    padding: 0,
+    background: timeframe === item ? "#2196f3" : "#131722",
+    border: "1px solid #2a2e39",
+    color: timeframe === item ? "#ffffff" : "#d1d4dc",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: "700",
+  });
+
   return (
     <div className="app">
       <div className="header">
@@ -321,10 +357,22 @@ export default function App() {
         </div>
       </div>
 
-      <div className="main">
-        <div className="panel">
-          <div className="box">
-            <h3>Search Symbol</h3>
+      <div className="main" style={{ display: "block", overflow: "auto" }}>
+        <GridLayout
+          className="layout"
+          layout={layout}
+          cols={12}
+          rowHeight={36}
+          width={gridWidth}
+          draggableHandle=".panel-title"
+          compactType={null}
+          preventCollision={false}
+          margin={[10, 10]}
+        >
+          <div key="scanner" className="box" style={{ overflow: "auto" }}>
+            <h3 className="panel-title" style={{ cursor: "move", marginBottom: "12px" }}>
+              Watchlist + Scanner
+            </h3>
 
             <input
               value={searchSymbol}
@@ -355,13 +403,12 @@ export default function App() {
                 borderRadius: "4px",
                 cursor: "pointer",
                 fontWeight: "bold",
+                marginBottom: "12px",
               }}
             >
               Add Symbol
             </button>
-          </div>
 
-          <div className="box">
             <h3>Watchlist</h3>
 
             {liveStocks.map((stock) => (
@@ -369,7 +416,7 @@ export default function App() {
                 key={stock.symbol}
                 onClick={() => setSelectedStock(stock.symbol)}
                 style={{
-                  padding: "12px 0",
+                  padding: "10px 0",
                   borderBottom: "1px solid #2a2e39",
                   cursor: "pointer",
                   color: selectedStock === stock.symbol ? "#2196f3" : "#d1d4dc",
@@ -379,10 +426,8 @@ export default function App() {
                 {stock.symbol}
               </div>
             ))}
-          </div>
 
-          <div className="box">
-            <h3>Top Movers Scanner</h3>
+            <h3 style={{ marginTop: "18px" }}>Top Movers Scanner</h3>
 
             <div style={{ display: "flex", gap: "6px", marginBottom: "12px", flexWrap: "wrap" }}>
               {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
@@ -390,13 +435,15 @@ export default function App() {
                   key={tab}
                   onClick={() => setScannerTab(tab)}
                   style={{
+                    height: "30px",
                     background: scannerTab === tab ? "#2196f3" : "#131722",
                     border: "1px solid #2a2e39",
                     color: scannerTab === tab ? "#ffffff" : "#d1d4dc",
-                    padding: "6px 10px",
+                    padding: "0 9px",
                     borderRadius: "4px",
                     cursor: "pointer",
                     fontSize: "12px",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   {tab}
@@ -408,15 +455,12 @@ export default function App() {
               style={{
                 display: "grid",
                 gridTemplateColumns: "1.2fr 1fr 1fr",
-                alignItems: "center",
                 columnGap: "14px",
                 fontSize: "12px",
                 color: "#787b86",
                 paddingBottom: "10px",
                 borderBottom: "1px solid #2a2e39",
-                marginBottom: "4px",
                 fontWeight: "600",
-                width: "100%",
               }}
             >
               <span>Symbol</span>
@@ -443,48 +487,50 @@ export default function App() {
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="chart">
-          <div className="box">
+          <div key="chart" className="box" style={{ overflow: "hidden" }}>
+            <h3 className="panel-title" style={{ cursor: "move", marginBottom: "12px" }}>
+              Chart
+            </h3>
+
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "8px",
-                marginBottom: "12px",
+                gap: "7px",
+                marginBottom: "10px",
                 paddingBottom: "10px",
                 borderBottom: "1px solid #2a2e39",
                 flexWrap: "wrap",
                 position: "relative",
               }}
             >
-              <button className="toolbar-btn">Crosshair</button>
+              <button style={toolbarButtonStyle}>Crosshair</button>
 
               <button
-                className="toolbar-btn"
+                style={toolbarButtonStyle}
                 onClick={() => setShowIndicators(!showIndicators)}
               >
                 Indicators
               </button>
 
-              <button className="toolbar-btn">Drawing Tools</button>
+              <button style={toolbarButtonStyle}>Draw</button>
 
-              <button className="toolbar-btn" onClick={takeScreenshot}>
+              <button style={toolbarButtonStyle} onClick={takeScreenshot}>
                 Screenshot
               </button>
 
-              <button className="toolbar-btn" onClick={toggleFullscreen}>
+              <button style={toolbarButtonStyle} onClick={toggleFullscreen}>
                 Fullscreen
               </button>
 
-              <button className="toolbar-btn">Settings</button>
+              <button style={toolbarButtonStyle}>Settings</button>
 
               {showIndicators && (
                 <div
                   style={{
                     position: "absolute",
-                    top: "42px",
+                    top: "40px",
                     left: "80px",
                     background: "#1b1f2a",
                     border: "1px solid #2a2e39",
@@ -521,7 +567,7 @@ export default function App() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: "12px",
+                marginBottom: "10px",
                 borderBottom: "1px solid #2a2e39",
                 paddingBottom: "10px",
                 gap: "10px",
@@ -529,13 +575,12 @@ export default function App() {
               }}
             >
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <h2 style={{ margin: 0 }}>{selectedStock}</h2>
-                  <span style={{ color: "#26a69a", fontWeight: "bold" }}>
-                    ● LIVE/SIM
-                  </span>
-                </div>
-
+                <h2 style={{ margin: 0, fontSize: "28px", lineHeight: "1.1" }}>
+                  {selectedStock}
+                </h2>
+                <span style={{ color: "#26a69a", fontWeight: "bold", fontSize: "13px" }}>
+                  ● LIVE/SIM
+                </span>
                 <div style={{ display: "flex", gap: "12px", marginTop: "6px" }}>
                   <span>${selectedStockData?.price}</span>
                   <span
@@ -553,14 +598,7 @@ export default function App() {
                   <button
                     key={item}
                     onClick={() => setTimeframe(item)}
-                    style={{
-                      background: timeframe === item ? "#2196f3" : "#131722",
-                      border: "1px solid #2a2e39",
-                      color: timeframe === item ? "#ffffff" : "#d1d4dc",
-                      padding: "7px 12px",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                    }}
+                    style={timeframeButtonStyle(item)}
                   >
                     {item}
                   </button>
@@ -578,11 +616,11 @@ export default function App() {
               />
             </div>
           </div>
-        </div>
 
-        <div className="right">
-          <div className="box">
-            <h3>Portfolio</h3>
+          <div key="trade" className="box" style={{ overflow: "auto" }}>
+            <h3 className="panel-title" style={{ cursor: "move" }}>
+              Portfolio + Orders
+            </h3>
 
             <div style={{ fontSize: "13px", lineHeight: "1.8" }}>
               <div>Buying Power: $100,000.00</div>
@@ -592,10 +630,8 @@ export default function App() {
                 Mode: <span className="green">Paper Trading</span>
               </div>
             </div>
-          </div>
 
-          <div className="box">
-            <h3>Order Ticket</h3>
+            <h3 style={{ marginTop: "18px" }}>Order Ticket</h3>
 
             <div style={{ marginBottom: "12px", fontSize: "14px" }}>
               <div>Symbol: {selectedStock}</div>
@@ -650,10 +686,8 @@ export default function App() {
                 SELL
               </button>
             </div>
-          </div>
 
-          <div className="box">
-            <h3>Recent Orders</h3>
+            <h3 style={{ marginTop: "18px" }}>Recent Orders</h3>
 
             {orders.length === 0 ? (
               <p style={{ color: "#787b86", fontSize: "12px" }}>
@@ -685,8 +719,10 @@ export default function App() {
             )}
           </div>
 
-          <div className="box">
-            <h3>Market News</h3>
+          <div key="news" className="box" style={{ overflow: "auto" }}>
+            <h3 className="panel-title" style={{ cursor: "move" }}>
+              Market News
+            </h3>
 
             {newsLoading ? (
               <p>Loading...</p>
@@ -702,8 +738,10 @@ export default function App() {
             )}
           </div>
 
-          <div className="box">
-            <h3>Level 2</h3>
+          <div key="level2" className="box" style={{ overflow: "auto" }}>
+            <h3 className="panel-title" style={{ cursor: "move" }}>
+              Level 2
+            </h3>
 
             {level2.map((row, index) => (
               <div
@@ -723,14 +761,14 @@ export default function App() {
               </div>
             ))}
           </div>
-        </div>
+        </GridLayout>
       </div>
 
       <div className="status-bar">
         <span>Connected: Finnhub</span>
         <span>Symbol: {selectedStock}</span>
         <span>Timeframe: {timeframe}</span>
-        <span>Fallback Movement Active</span>
+        <span>Pro Workspace Active</span>
         <span>Paper Trading Only</span>
       </div>
     </div>

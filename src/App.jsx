@@ -246,9 +246,10 @@ export default function App() {
           SbCapital<span>Co.</span>
         </div>
 
-        <div style={{ marginLeft: "auto", fontSize: "13px", color: "#787b86" }}>
-          Data: Finnhub WebSocket + Fallback Movement
-        </div>
+       <div style={{ marginLeft: "auto", fontSize: "13px", color: "#787b86" }}>
+  Data: <span className="green">LIVE/SIM ACTIVE</span>
+
+    </div>
       </div>
 
       <div className="main">
@@ -379,7 +380,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <h2 style={{ margin: 0 }}>{selectedStock}</h2>
                   <span style={{ color: "#26a69a", fontWeight: "bold" }}>
-                    ● LIVE / SIM
+                ● LIVE/SIM
                   </span>
                 </div>
 

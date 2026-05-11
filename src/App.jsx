@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "./components/Chart";
 
 const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
@@ -56,12 +56,21 @@ export default function App() {
   const [selectedStock, setSelectedStock] = useState(() =>
     loadSetting("sb_selected_stock", "NVDA")
   );
+  const [secondarySymbol, setSecondarySymbol] = useState(() =>
+    loadSetting("sb_secondary_symbol", "TSLA")
+  );
   const [searchSymbol, setSearchSymbol] = useState("");
   const [liveStocks, setLiveStocks] = useState(() =>
     loadSetting("sb_watchlist", defaultStocks)
   );
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
+  );
+  const [secondaryTimeframe, setSecondaryTimeframe] = useState(() =>
+    loadSetting("sb_secondary_timeframe", "5m")
+  );
+  const [layoutMode, setLayoutMode] = useState(() =>
+    loadSetting("sb_layout_mode", "2")
   );
   const [quantity, setQuantity] = useState(10);
   const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
@@ -86,6 +95,13 @@ export default function App() {
   const [fmpActive, setFmpActive] = useState([]);
   const [scannerLoading, setScannerLoading] = useState(false);
 
+  const [level2, setLevel2] = useState([
+    { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
+    { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
+    { marketMaker: "BATS", bid: 211.35, ask: 211.65, size: 850 },
+    { marketMaker: "IEX", bid: 211.3, ask: 211.7, size: 620 },
+  ]);
+
   const socketRef = useRef(null);
   const subscribedSymbolsRef = useRef(new Set());
   const chartAreaRef = useRef(null);
@@ -104,14 +120,25 @@ export default function App() {
     red: "#ef5350",
   };
 
+  const allSymbols = useMemo(
+    () => [
+      ...liveStocks,
+      ...fmpGainers,
+      ...fmpLosers,
+      ...fmpActive,
+      ...cryptoStocks,
+      ...forexStocks,
+      ...smallCapMovers,
+    ],
+    [liveStocks, fmpGainers, fmpLosers, fmpActive]
+  );
+
   const selectedStockData =
-    liveStocks.find((s) => s.symbol === selectedStock) ||
-    fmpGainers.find((s) => s.symbol === selectedStock) ||
-    fmpLosers.find((s) => s.symbol === selectedStock) ||
-    fmpActive.find((s) => s.symbol === selectedStock) ||
-    cryptoStocks.find((s) => s.symbol === selectedStock) ||
-    forexStocks.find((s) => s.symbol === selectedStock) ||
-    smallCapMovers.find((s) => s.symbol === selectedStock) ||
+    allSymbols.find((s) => s.symbol === selectedStock) || liveStocks[0];
+
+  const secondaryStockData =
+    allSymbols.find((s) => s.symbol === secondarySymbol) ||
+    allSymbols.find((s) => s.symbol === "TSLA") ||
     liveStocks[0];
 
   let scannerStocks = [...liveStocks];
@@ -135,22 +162,16 @@ export default function App() {
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
   ).toFixed(2);
 
-  const [level2, setLevel2] = useState([
-    { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
-    { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
-    { marketMaker: "BATS", bid: 211.35, ask: 211.65, size: 850 },
-    { marketMaker: "IEX", bid: 211.3, ask: 211.7, size: 620 },
-  ]);
-
   function panelStyle(extra = {}) {
     return {
       background: theme.panel,
       border: `1px solid ${theme.border}`,
       color: theme.text,
-      borderRadius: "8px",
+      borderRadius: "10px",
       padding: "12px",
       overflow: "auto",
       minHeight: 0,
+      boxShadow: isDark ? "0 0 18px rgba(0,0,0,0.18)" : "0 4px 14px rgba(0,0,0,0.06)",
       ...extra,
     };
   }
@@ -159,11 +180,12 @@ export default function App() {
     return (
       <div
         style={{
-          fontSize: "14px",
-          fontWeight: 800,
+          fontSize: "13px",
+          fontWeight: 900,
           borderBottom: `1px solid ${theme.border}`,
           paddingBottom: "8px",
           marginBottom: "10px",
+          letterSpacing: "0.2px",
         }}
       >
         {title}
@@ -177,29 +199,30 @@ export default function App() {
     background: active ? theme.blue : theme.panel2,
     border: `1px solid ${theme.border}`,
     color: active ? "#ffffff" : theme.text,
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-  });
-
-  const timeframeButtonStyle = (item) => ({
-    width: "42px",
-    height: "34px",
-    padding: 0,
-    background: timeframe === item ? theme.blue : theme.panel2,
-    border: `1px solid ${theme.border}`,
-    color: timeframe === item ? "#ffffff" : theme.text,
-    borderRadius: "4px",
+    borderRadius: "5px",
     cursor: "pointer",
     fontSize: "12px",
     fontWeight: 800,
+    whiteSpace: "nowrap",
+  });
+
+  const timeframeButtonStyle = (active = false) => ({
+    width: "42px",
+    height: "32px",
+    padding: 0,
+    background: active ? theme.blue : theme.panel2,
+    border: `1px solid ${theme.border}`,
+    color: active ? "#ffffff" : theme.text,
+    borderRadius: "5px",
+    cursor: "pointer",
+    fontSize: "12px",
+    fontWeight: 900,
   });
 
   function subscribeToSymbol(symbol) {
     if (!socketRef.current) return;
     if (subscribedSymbolsRef.current.has(symbol)) return;
+
     socketRef.current.send(JSON.stringify({ type: "subscribe", symbol }));
     subscribedSymbolsRef.current.add(symbol);
   }
@@ -223,17 +246,25 @@ export default function App() {
   }
 
   function resetWorkspace() {
-    localStorage.removeItem("sb_selected_stock");
-    localStorage.removeItem("sb_timeframe");
-    localStorage.removeItem("sb_theme_mode");
-    localStorage.removeItem("sb_show_ema9");
-    localStorage.removeItem("sb_show_ema20");
-    localStorage.removeItem("sb_scanner_tab");
-    localStorage.removeItem("sb_watchlist");
-    localStorage.removeItem("sb_orders");
+    [
+      "sb_selected_stock",
+      "sb_secondary_symbol",
+      "sb_timeframe",
+      "sb_secondary_timeframe",
+      "sb_layout_mode",
+      "sb_theme_mode",
+      "sb_show_ema9",
+      "sb_show_ema20",
+      "sb_scanner_tab",
+      "sb_watchlist",
+      "sb_orders",
+    ].forEach((key) => localStorage.removeItem(key));
 
     setSelectedStock("NVDA");
+    setSecondarySymbol("TSLA");
     setTimeframe("15m");
+    setSecondaryTimeframe("5m");
+    setLayoutMode("2");
     setThemeMode("dark");
     setShowEMA9(true);
     setShowEMA20(true);
@@ -278,35 +309,29 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("sb_selected_stock", JSON.stringify(selectedStock));
-  }, [selectedStock]);
-
-  useEffect(() => {
+    localStorage.setItem("sb_secondary_symbol", JSON.stringify(secondarySymbol));
     localStorage.setItem("sb_timeframe", JSON.stringify(timeframe));
-  }, [timeframe]);
-
-  useEffect(() => {
+    localStorage.setItem("sb_secondary_timeframe", JSON.stringify(secondaryTimeframe));
+    localStorage.setItem("sb_layout_mode", JSON.stringify(layoutMode));
     localStorage.setItem("sb_theme_mode", JSON.stringify(themeMode));
-  }, [themeMode]);
-
-  useEffect(() => {
     localStorage.setItem("sb_show_ema9", JSON.stringify(showEMA9));
-  }, [showEMA9]);
-
-  useEffect(() => {
     localStorage.setItem("sb_show_ema20", JSON.stringify(showEMA20));
-  }, [showEMA20]);
-
-  useEffect(() => {
     localStorage.setItem("sb_scanner_tab", JSON.stringify(scannerTab));
-  }, [scannerTab]);
-
-  useEffect(() => {
     localStorage.setItem("sb_watchlist", JSON.stringify(liveStocks));
-  }, [liveStocks]);
-
-  useEffect(() => {
     localStorage.setItem("sb_orders", JSON.stringify(orders));
-  }, [orders]);
+  }, [
+    selectedStock,
+    secondarySymbol,
+    timeframe,
+    secondaryTimeframe,
+    layoutMode,
+    themeMode,
+    showEMA9,
+    showEMA20,
+    scannerTab,
+    liveStocks,
+    orders,
+  ]);
 
   useEffect(() => {
     async function fetchFmpScanners() {
@@ -321,13 +346,9 @@ export default function App() {
           fetch(`https://financialmodelingprep.com/stable/actively-trading-list?apikey=${FMP_API_KEY}`),
         ]);
 
-        const gainersData = await gainersRes.json();
-        const losersData = await losersRes.json();
-        const activeData = await activeRes.json();
-
-        setFmpGainers(formatFmpStocks(gainersData));
-        setFmpLosers(formatFmpStocks(losersData));
-        setFmpActive(formatFmpStocks(activeData));
+        setFmpGainers(formatFmpStocks(await gainersRes.json()));
+        setFmpLosers(formatFmpStocks(await losersRes.json()));
+        setFmpActive(formatFmpStocks(await activeRes.json()));
       } catch {
         setFmpGainers([]);
         setFmpLosers([]);
@@ -338,7 +359,6 @@ export default function App() {
     }
 
     fetchFmpScanners();
-
     const interval = setInterval(fetchFmpScanners, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
@@ -383,28 +403,7 @@ export default function App() {
     };
 
     return () => socket.close();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLiveStocks((prev) =>
-        prev.map((stock) => {
-          const oldPrice = Number(stock.price);
-          const move = (Math.random() - 0.5) * 0.45;
-          const newPrice = Math.max(oldPrice + move, 1);
-          const changePercent = (((newPrice - oldPrice) / oldPrice) * 100).toFixed(2);
-
-          return {
-            ...stock,
-            price: newPrice.toFixed(2),
-            change: `${changePercent >= 0 ? "+" : ""}${changePercent}%`,
-          };
-        })
-      );
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
+  }, [liveStocks]);
 
   useEffect(() => {
     async function fetchNews() {
@@ -500,7 +499,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [selectedStockData]);
 
-  function ScannerTable({ rows }) {
+  function ScannerTable({ rows, onPick = setSelectedStock }) {
     return (
       <>
         <div
@@ -522,7 +521,7 @@ export default function App() {
         {rows.map((stock) => (
           <div
             key={stock.symbol}
-            onClick={() => setSelectedStock(stock.symbol)}
+            onClick={() => onPick(stock.symbol)}
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr 1fr",
@@ -549,142 +548,83 @@ export default function App() {
     );
   }
 
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: theme.bg,
-        color: theme.text,
-        overflow: "auto",
-      }}
-    >
+  function renderChartPanel({
+    title,
+    symbol,
+    setSymbol,
+    tf,
+    setTf,
+    livePrice,
+    secondary = false,
+  }) {
+    return (
       <div
         style={{
-          height: "44px",
-          background: theme.panel,
-          borderBottom: `1px solid ${theme.border}`,
+          ...panelStyle(),
+          overflow: "hidden",
           display: "flex",
-          alignItems: "center",
-          padding: "0 12px",
-          gap: "12px",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
+          flexDirection: "column",
+          height: "100%",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: "18px" }}>
-          SbCapital<span style={{ color: theme.blue }}>Co.</span>
-        </div>
-
-        <span style={{ color: theme.muted, fontSize: "12px" }}>
-          Pro Trading Workspace
-        </span>
-
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "12px" }}>
-            Data: <span style={{ color: theme.green, fontWeight: 800 }}>LIVE/SIM</span>
-          </span>
-
-          <button
-            onClick={() => setThemeMode(isDark ? "light" : "dark")}
-            style={buttonStyle(false)}
-          >
-            {isDark ? "Light Mode" : "Dark Mode"}
-          </button>
-
-          <button onClick={resetWorkspace} style={buttonStyle(false)}>
-            Reset
-          </button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "270px minmax(620px, 1fr) 320px",
-          gridTemplateRows: "minmax(560px, 1fr) 260px",
-          gap: "8px",
-          padding: "8px",
-          height: "calc(100vh - 70px)",
-        }}
-      >
-        <div style={{ ...panelStyle(), gridColumn: "1 / 2", gridRow: "1 / 2" }}>
-          {panelTitle("Watchlist + Scanner")}
-
-          <input
-            value={searchSymbol}
-            onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addSymbol();
-            }}
-            placeholder="AAPL, MSFT, SPY..."
-            style={{
-              width: "100%",
-              padding: "9px",
-              background: theme.panel2,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              borderRadius: "4px",
-              marginBottom: "8px",
-            }}
-          />
-
-          <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
-            Add Symbol
-          </button>
-
-          <h3 style={{ marginTop: "14px" }}>Watchlist</h3>
-
-          {liveStocks.map((stock) => (
-            <div
-              key={stock.symbol}
-              onClick={() => setSelectedStock(stock.symbol)}
-              style={{
-                padding: "9px 0",
-                borderBottom: `1px solid ${theme.border}`,
-                cursor: "pointer",
-                color: selectedStock === stock.symbol ? theme.blue : theme.text,
-                fontWeight: selectedStock === stock.symbol ? 900 : 500,
-              }}
-            >
-              {stock.symbol}
-            </div>
-          ))}
-
-          <h3 style={{ marginTop: "16px" }}>
-            Scanner {scannerLoading ? "Loading..." : ""}
-          </h3>
-
-          <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
-            {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setScannerTab(tab)}
-                style={buttonStyle(scannerTab === tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <ScannerTable rows={scannerStocks} />
-        </div>
-
-        <div style={{ ...panelStyle(), gridColumn: "1 / 2", gridRow: "2 / 3" }}>
-          {panelTitle("Small Cap Top Movers")}
-          <ScannerTable rows={smallCapMovers} />
-        </div>
-
         <div
           style={{
-            ...panelStyle(),
-            gridColumn: "2 / 3",
-            gridRow: "1 / 2",
-            overflow: "hidden",
+            borderBottom: `1px solid ${theme.border}`,
+            paddingBottom: "8px",
+            marginBottom: "10px",
           }}
         >
-          {panelTitle("Main Chart")}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", color: theme.muted }}>{title}</div>
+              <div style={{ fontSize: secondary ? "20px" : "24px", fontWeight: 900 }}>
+                {symbol}
+              </div>
+              <span style={{ color: secondary ? theme.blue : theme.green, fontWeight: 800, fontSize: "12px" }}>
+                ● {secondary ? "SECONDARY" : "LIVE/SIM"}
+              </span>
+            </div>
 
+            {secondary && (
+              <input
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                style={{
+                  width: "90px",
+                  height: "32px",
+                  padding: "0 8px",
+                  background: theme.panel2,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.text,
+                  borderRadius: "4px",
+                  fontWeight: 800,
+                }}
+              />
+            )}
+
+            <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+              {["1m", "5m", "15m", "1H", "1D"].map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setTf(item)}
+                  style={timeframeButtonStyle(tf === item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {!secondary && (
           <div
             style={{
               display: "flex",
@@ -695,21 +635,16 @@ export default function App() {
             }}
           >
             <button style={buttonStyle(false)}>Crosshair</button>
-
             <button style={buttonStyle(false)} onClick={() => setShowIndicators(!showIndicators)}>
               Indicators
             </button>
-
             <button style={buttonStyle(false)}>Draw</button>
-
             <button style={buttonStyle(false)} onClick={takeScreenshot}>
               Screenshot
             </button>
-
             <button style={buttonStyle(false)} onClick={toggleFullscreen}>
               Fullscreen
             </button>
-
             <button style={buttonStyle(false)}>Settings</button>
 
             {showIndicators && (
@@ -746,210 +681,323 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              borderTop: `1px solid ${theme.border}`,
-              borderBottom: `1px solid ${theme.border}`,
-              padding: "10px 0",
-              marginBottom: "10px",
-              gap: "10px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <h2 style={{ margin: 0, fontSize: "28px" }}>{selectedStock}</h2>
-              <span style={{ color: theme.green, fontWeight: 800 }}>● LIVE/SIM</span>
-              <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
-                <span>${selectedStockData?.price}</span>
-                <span
-                  style={{
-                    color: selectedStockData?.change.includes("+")
-                      ? theme.green
-                      : theme.red,
-                  }}
-                >
-                  {selectedStockData?.change}
-                </span>
+        <div
+          ref={!secondary ? chartAreaRef : null}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            height: "100%",
+          }}
+        >
+          <Chart
+            symbol={symbol}
+            timeframe={tf}
+            livePrice={Number(livePrice || 100)}
+            showEMA9={showEMA9}
+            showEMA20={showEMA20}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        background: theme.bg,
+        color: theme.text,
+        overflow: "auto",
+      }}
+    >
+      <div
+        style={{
+          height: "46px",
+          background: theme.panel,
+          borderBottom: `1px solid ${theme.border}`,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 12px",
+          gap: "10px",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+        }}
+      >
+        <div style={{ fontWeight: 900, fontSize: "18px" }}>
+          SbCapital<span style={{ color: theme.blue }}>Co.</span>
+        </div>
+
+        <span style={{ color: theme.muted, fontSize: "12px" }}>
+          Pro Trading Workspace
+        </span>
+
+        <button onClick={() => setLayoutMode("1")} style={buttonStyle(layoutMode === "1")}>
+          1 Chart
+        </button>
+
+        <button onClick={() => setLayoutMode("2")} style={buttonStyle(layoutMode === "2")}>
+          2 Charts
+        </button>
+
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "12px" }}>
+            Data: <span style={{ color: theme.green, fontWeight: 800 }}>Finnhub + FMP</span>
+          </span>
+
+          <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={buttonStyle(false)}>
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </button>
+
+          <button onClick={resetWorkspace} style={buttonStyle(false)}>
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "280px minmax(760px, 1fr) 330px",
+          gap: "10px",
+          padding: "10px",
+          alignItems: "start",
+        }}
+      >
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div style={panelStyle({ height: "640px" })}>
+            {panelTitle("Watchlist + Real Scanner")}
+
+            <input
+              value={searchSymbol}
+              onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addSymbol();
+              }}
+              placeholder="AAPL, MSFT, SPY..."
+              style={{
+                width: "100%",
+                padding: "9px",
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                borderRadius: "4px",
+                marginBottom: "8px",
+              }}
+            />
+
+            <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
+              Add Symbol
+            </button>
+
+            <h3 style={{ marginTop: "14px" }}>Watchlist</h3>
+
+            {liveStocks.map((stock) => (
+              <div
+                key={stock.symbol}
+                onClick={() => setSelectedStock(stock.symbol)}
+                style={{
+                  padding: "9px 0",
+                  borderBottom: `1px solid ${theme.border}`,
+                  cursor: "pointer",
+                  color: selectedStock === stock.symbol ? theme.blue : theme.text,
+                  fontWeight: selectedStock === stock.symbol ? 900 : 500,
+                }}
+              >
+                {stock.symbol}
               </div>
-            </div>
+            ))}
 
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-              {["1m", "5m", "15m", "1H", "1D"].map((item) => (
+            <h3 style={{ marginTop: "16px" }}>
+              Scanner {scannerLoading ? "Loading..." : ""}
+            </h3>
+
+            <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
+              {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
                 <button
-                  key={item}
-                  onClick={() => setTimeframe(item)}
-                  style={timeframeButtonStyle(item)}
+                  key={tab}
+                  onClick={() => setScannerTab(tab)}
+                  style={buttonStyle(scannerTab === tab)}
                 >
-                  {item}
+                  {tab}
                 </button>
               ))}
             </div>
+
+            <ScannerTable rows={scannerStocks} />
           </div>
 
-          <div ref={chartAreaRef} style={{ height: "calc(100% - 145px)" }}>
-            <Chart
-              symbol={selectedStock}
-              timeframe={timeframe}
-              livePrice={Number(selectedStockData?.price)}
-              showEMA9={showEMA9}
-              showEMA20={showEMA20}
-            />
+          <div style={panelStyle({ height: "250px" })}>
+            {panelTitle("Small Cap Top Movers")}
+            <ScannerTable rows={smallCapMovers} />
           </div>
         </div>
 
-        <div style={{ ...panelStyle(), gridColumn: "2 / 3", gridRow: "2 / 3" }}>
-          {panelTitle("Market News")}
-
-          {newsLoading ? (
-            <p>Loading...</p>
-          ) : (
-            news.map((item) => (
-              <a
-                key={item.id}
-                href={item.url}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  display: "block",
-                  color: theme.text,
-                  textDecoration: "none",
-                  borderBottom: `1px solid ${theme.border}`,
-                  padding: "8px 0",
-                  fontSize: "12px",
-                }}
-              >
-                <div style={{ color: theme.muted, fontSize: "10px" }}>
-                  {item.time} · {item.source}
-                </div>
-                <div>{item.text}</div>
-              </a>
-            ))
-          )}
-        </div>
-
-        <div style={{ ...panelStyle(), gridColumn: "3 / 4", gridRow: "1 / 2" }}>
-          {panelTitle("Paper Trade + Level 1/2")}
-
-          <div style={{ fontSize: "13px", lineHeight: "1.8" }}>
-            <div>Buying Power: $100,000.00</div>
-            <div>Active Symbol: {selectedStock}</div>
-            <div>Current Price: ${selectedStockData?.price}</div>
-            <div>Total Orders: {orders.length}</div>
-          </div>
-
-          <input
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div
             style={{
-              width: "100%",
-              padding: "9px",
-              background: theme.panel2,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              borderRadius: "4px",
-              marginTop: "10px",
-              marginBottom: "8px",
+              display: "grid",
+              gridTemplateColumns: layoutMode === "2" ? "1fr 1fr" : "1fr",
+              gap: "10px",
+              height: "650px",
             }}
-          />
+          >
+            {renderChartPanel({
+              title: "Main Chart",
+              symbol: selectedStock,
+              setSymbol: setSelectedStock,
+              tf: timeframe,
+              setTf: setTimeframe,
+              livePrice: selectedStockData?.price,
+            })}
 
-          <div style={{ marginBottom: "8px", fontSize: "12px" }}>
-            Estimated: ${estimatedValue}
+            {layoutMode === "2" &&
+              renderChartPanel({
+                title: "Secondary Chart",
+                symbol: secondarySymbol,
+                setSymbol: setSecondarySymbol,
+                tf: secondaryTimeframe,
+                setTf: setSecondaryTimeframe,
+                livePrice: secondaryStockData?.price,
+                secondary: true,
+              })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            <button
-              onClick={() => placeOrder("BUY")}
-              style={{ ...buttonStyle(true), background: theme.green, border: "none" }}
-            >
-              BUY
-            </button>
+          <div style={panelStyle({ height: "250px" })}>
+            {panelTitle("Market News")}
 
-            <button
-              onClick={() => placeOrder("SELL")}
-              style={{ ...buttonStyle(true), background: theme.red, border: "none" }}
-            >
-              SELL
-            </button>
-          </div>
-
-          <h3 style={{ marginTop: "18px" }}>Level 1</h3>
-
-          <div style={{ fontSize: "13px", lineHeight: "1.9" }}>
-            <div>Last: ${selectedStockData?.price}</div>
-            <div>
-              Change:{" "}
-              <span
-                style={{
-                  color: selectedStockData?.change.includes("+")
-                    ? theme.green
-                    : theme.red,
-                }}
-              >
-                {selectedStockData?.change}
-              </span>
-            </div>
-            <div>Volume: {selectedStockData?.volume || "2.89M"}</div>
-            <div>Bid: ${(Number(selectedStockData?.price) - 0.05).toFixed(2)}</div>
-            <div>Ask: ${(Number(selectedStockData?.price) + 0.05).toFixed(2)}</div>
-          </div>
-
-          <h3 style={{ marginTop: "14px" }}>Level 2</h3>
-
-          {level2.map((row, index) => (
-            <div
-              key={index}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                padding: "7px 0",
-                borderBottom: `1px solid ${theme.border}`,
-                fontSize: "12px",
-              }}
-            >
-              <span>{row.marketMaker}</span>
-              <span style={{ color: theme.green }}>{row.bid}</span>
-              <span style={{ color: theme.red }}>{row.ask}</span>
-              <span>{row.size}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ ...panelStyle(), gridColumn: "3 / 4", gridRow: "2 / 3" }}>
-          {panelTitle("Recent Paper Orders")}
-
-          {orders.length === 0 ? (
-            <p style={{ color: theme.muted, fontSize: "12px" }}>
-              No paper trades yet.
-            </p>
-          ) : (
-            orders.map((order) => (
-              <div
-                key={order.id}
-                style={{
-                  borderBottom: `1px solid ${theme.border}`,
-                  padding: "8px 0",
-                  fontSize: "12px",
-                }}
-              >
-                <div
+            {newsLoading ? (
+              <p>Loading...</p>
+            ) : (
+              news.map((item) => (
+                <a
+                  key={item.id}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
                   style={{
-                    color: order.side === "BUY" ? theme.green : theme.red,
-                    fontWeight: 900,
+                    display: "block",
+                    color: theme.text,
+                    textDecoration: "none",
+                    borderBottom: `1px solid ${theme.border}`,
+                    padding: "8px 0",
+                    fontSize: "12px",
                   }}
                 >
-                  {order.side} {order.symbol}
-                </div>
-                <div>Qty: {order.quantity}</div>
-                <div>Value: ${order.value}</div>
-                <div style={{ color: theme.muted }}>{order.time}</div>
+                  <div style={{ color: theme.muted, fontSize: "10px" }}>
+                    {item.time} · {item.source}
+                  </div>
+                  <div>{item.text}</div>
+                </a>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: "10px" }}>
+          <div style={panelStyle({ height: "640px" })}>
+            {panelTitle("Paper Trade + Level 1/2")}
+
+            <div style={{ fontSize: "13px", lineHeight: "1.8" }}>
+              <div>Buying Power: $100,000.00</div>
+              <div>Active Symbol: {selectedStock}</div>
+              <div>Current Price: ${selectedStockData?.price}</div>
+              <div>Total Orders: {orders.length}</div>
+            </div>
+
+            <input
+              type="number"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "9px",
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                borderRadius: "4px",
+                marginTop: "10px",
+                marginBottom: "8px",
+              }}
+            />
+
+            <div style={{ marginBottom: "8px", fontSize: "12px" }}>
+              Estimated: ${estimatedValue}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <button onClick={() => placeOrder("BUY")} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
+                BUY
+              </button>
+
+              <button onClick={() => placeOrder("SELL")} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
+                SELL
+              </button>
+            </div>
+
+            <h3 style={{ marginTop: "18px" }}>Level 1</h3>
+
+            <div style={{ fontSize: "13px", lineHeight: "1.9" }}>
+              <div>Last: ${selectedStockData?.price}</div>
+              <div>
+                Change:{" "}
+                <span style={{ color: selectedStockData?.change.includes("+") ? theme.green : theme.red }}>
+                  {selectedStockData?.change}
+                </span>
               </div>
-            ))
-          )}
+              <div>Volume: {selectedStockData?.volume || "2.89M"}</div>
+              <div>Bid: ${(Number(selectedStockData?.price) - 0.05).toFixed(2)}</div>
+              <div>Ask: ${(Number(selectedStockData?.price) + 0.05).toFixed(2)}</div>
+            </div>
+
+            <h3 style={{ marginTop: "14px" }}>Level 2</h3>
+
+            {level2.map((row, index) => (
+              <div
+                key={index}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                  padding: "7px 0",
+                  borderBottom: `1px solid ${theme.border}`,
+                  fontSize: "12px",
+                }}
+              >
+                <span>{row.marketMaker}</span>
+                <span style={{ color: theme.green }}>{row.bid}</span>
+                <span style={{ color: theme.red }}>{row.ask}</span>
+                <span>{row.size}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={panelStyle({ height: "250px" })}>
+            {panelTitle("Recent Paper Orders")}
+
+            {orders.length === 0 ? (
+              <p style={{ color: theme.muted, fontSize: "12px" }}>No paper trades yet.</p>
+            ) : (
+              orders.map((order) => (
+                <div
+                  key={order.id}
+                  style={{
+                    borderBottom: `1px solid ${theme.border}`,
+                    padding: "8px 0",
+                    fontSize: "12px",
+                  }}
+                >
+                  <div style={{ color: order.side === "BUY" ? theme.green : theme.red, fontWeight: 900 }}>
+                    {order.side} {order.symbol}
+                  </div>
+                  <div>Qty: {order.quantity}</div>
+                  <div>Value: ${order.value}</div>
+                  <div style={{ color: theme.muted }}>{order.time}</div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 
@@ -967,9 +1015,9 @@ export default function App() {
         }}
       >
         <span>Connected: Finnhub + FMP</span>
-        <span>Symbol: {selectedStock}</span>
-        <span>Timeframe: {timeframe}</span>
-        <span>Real Scanner Data</span>
+        <span>Main: {selectedStock}</span>
+        <span>Secondary: {secondarySymbol}</span>
+        <span>Layout: {layoutMode} Chart</span>
         <span>Paper Trading Only</span>
       </div>
     </div>

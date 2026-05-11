@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Chart from "./components/Chart";
 
 const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
+const FMP_API_KEY = import.meta.env.VITE_FMP_API_KEY;
 
 const defaultStocks = [
   { symbol: "NVDA", price: 211.5, change: "+0.00%", volume: "6.25M" },
@@ -38,6 +39,19 @@ function loadSetting(key, fallback) {
   }
 }
 
+function formatFmpStocks(data) {
+  if (!Array.isArray(data)) return [];
+
+  return data.slice(0, 20).map((item) => ({
+    symbol: item.symbol,
+    price: Number(item.price || 0).toFixed(2),
+    change: item.changesPercentage
+      ? `${Number(item.changesPercentage).toFixed(2)}%`
+      : "+0.00%",
+    volume: item.volume ? String(item.volume) : "—",
+  }));
+}
+
 export default function App() {
   const [selectedStock, setSelectedStock] = useState(() =>
     loadSetting("sb_selected_stock", "NVDA")
@@ -67,6 +81,11 @@ export default function App() {
     loadSetting("sb_theme_mode", "dark")
   );
 
+  const [fmpGainers, setFmpGainers] = useState([]);
+  const [fmpLosers, setFmpLosers] = useState([]);
+  const [fmpActive, setFmpActive] = useState([]);
+  const [scannerLoading, setScannerLoading] = useState(false);
+
   const socketRef = useRef(null);
   const subscribedSymbolsRef = useRef(new Set());
   const chartAreaRef = useRef(null);
@@ -87,6 +106,9 @@ export default function App() {
 
   const selectedStockData =
     liveStocks.find((s) => s.symbol === selectedStock) ||
+    fmpGainers.find((s) => s.symbol === selectedStock) ||
+    fmpLosers.find((s) => s.symbol === selectedStock) ||
+    fmpActive.find((s) => s.symbol === selectedStock) ||
     cryptoStocks.find((s) => s.symbol === selectedStock) ||
     forexStocks.find((s) => s.symbol === selectedStock) ||
     smallCapMovers.find((s) => s.symbol === selectedStock) ||
@@ -95,23 +117,15 @@ export default function App() {
   let scannerStocks = [...liveStocks];
 
   if (scannerTab === "Gainers") {
-    scannerStocks.sort(
-      (a, b) =>
-        Number(b.change.replace("%", "")) -
-        Number(a.change.replace("%", ""))
-    );
+    scannerStocks = fmpGainers.length ? fmpGainers : [...liveStocks];
   }
 
   if (scannerTab === "Losers") {
-    scannerStocks.sort(
-      (a, b) =>
-        Number(a.change.replace("%", "")) -
-        Number(b.change.replace("%", ""))
-    );
+    scannerStocks = fmpLosers.length ? fmpLosers : [...liveStocks];
   }
 
   if (scannerTab === "Active") {
-    scannerStocks.sort((a, b) => Number(b.price) - Number(a.price));
+    scannerStocks = fmpActive.length ? fmpActive : [...liveStocks];
   }
 
   if (scannerTab === "Crypto") scannerStocks = cryptoStocks;
@@ -293,6 +307,42 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("sb_orders", JSON.stringify(orders));
   }, [orders]);
+
+  useEffect(() => {
+    async function fetchFmpScanners() {
+      if (!FMP_API_KEY) return;
+
+      setScannerLoading(true);
+
+      try {
+        const [gainersRes, losersRes, activeRes] = await Promise.all([
+          fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${FMP_API_KEY}`),
+          fetch(`https://financialmodelingprep.com/stable/actively-trading-list?apikey=${FMP_API_KEY}`),
+        ]);
+
+        const gainersData = await gainersRes.json();
+        const losersData = await losersRes.json();
+        const activeData = await activeRes.json();
+
+        setFmpGainers(formatFmpStocks(gainersData));
+        setFmpLosers(formatFmpStocks(losersData));
+        setFmpActive(formatFmpStocks(activeData));
+      } catch {
+        setFmpGainers([]);
+        setFmpLosers([]);
+        setFmpActive([]);
+      }
+
+      setScannerLoading(false);
+    }
+
+    fetchFmpScanners();
+
+    const interval = setInterval(fetchFmpScanners, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!FINNHUB_API_KEY) return;
@@ -601,7 +651,9 @@ export default function App() {
             </div>
           ))}
 
-          <h3 style={{ marginTop: "16px" }}>Scanner</h3>
+          <h3 style={{ marginTop: "16px" }}>
+            Scanner {scannerLoading ? "Loading..." : ""}
+          </h3>
 
           <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
             {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
@@ -914,10 +966,10 @@ export default function App() {
           padding: "0 12px",
         }}
       >
-        <span>Connected: Finnhub</span>
+        <span>Connected: Finnhub + FMP</span>
         <span>Symbol: {selectedStock}</span>
         <span>Timeframe: {timeframe}</span>
-        <span>Auto-Saved Settings</span>
+        <span>Real Scanner Data</span>
         <span>Paper Trading Only</span>
       </div>
     </div>

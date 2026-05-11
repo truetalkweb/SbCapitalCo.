@@ -28,7 +28,6 @@ function calculateEMA(data, period) {
 
   return data.map((candle) => {
     ema = (candle.close - ema) * multiplier + ema;
-
     return {
       time: candle.time,
       value: Number(ema.toFixed(2)),
@@ -41,7 +40,7 @@ function generateFallbackCandles(livePrice) {
   let price = Number(livePrice) || 100;
   const data = [];
 
-  for (let i = 100; i > 0; i--) {
+  for (let i = 160; i > 0; i--) {
     const open = price;
     const close = open + (Math.random() - 0.5) * 2;
     const high = Math.max(open, close) + Math.random();
@@ -78,17 +77,13 @@ export default function Chart({
   function updateIndicators() {
     if (!ema9SeriesRef.current || !ema20SeriesRef.current) return;
 
-    if (showEMA9) {
-      ema9SeriesRef.current.setData(calculateEMA(candlesRef.current, 9));
-    } else {
-      ema9SeriesRef.current.setData([]);
-    }
+    ema9SeriesRef.current.setData(
+      showEMA9 ? calculateEMA(candlesRef.current, 9) : []
+    );
 
-    if (showEMA20) {
-      ema20SeriesRef.current.setData(calculateEMA(candlesRef.current, 20));
-    } else {
-      ema20SeriesRef.current.setData([]);
-    }
+    ema20SeriesRef.current.setData(
+      showEMA20 ? calculateEMA(candlesRef.current, 20) : []
+    );
   }
 
   useEffect(() => {
@@ -96,10 +91,11 @@ export default function Chart({
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: chartContainerRef.current.clientHeight,
       layout: {
-        background: { color: "#131722" },
+        background: { color: "#0b1220" },
         textColor: "#d1d4dc",
+        fontSize: 12,
       },
       grid: {
         vertLines: { color: "#1f2937" },
@@ -110,17 +106,20 @@ export default function Chart({
       },
       rightPriceScale: {
         borderColor: "#2a2e39",
+        textColor: "#d1d4dc",
       },
       timeScale: {
         borderColor: "#2a2e39",
         timeVisible: true,
+        secondsVisible: false,
       },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a",
       downColor: "#ef5350",
-      borderVisible: false,
+      borderUpColor: "#26a69a",
+      borderDownColor: "#ef5350",
       wickUpColor: "#26a69a",
       wickDownColor: "#ef5350",
     });
@@ -194,6 +193,7 @@ export default function Chart({
 
       chart.applyOptions({
         width: chartContainerRef.current.clientWidth,
+        height: chartContainerRef.current.clientHeight,
       });
     });
 
@@ -210,9 +210,7 @@ export default function Chart({
   }, [showEMA9, showEMA20]);
 
   useEffect(() => {
-    if (!livePrice || !candleSeriesRef.current || !lastCandleRef.current) {
-      return;
-    }
+    if (!livePrice || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const currentTime = Math.floor(Date.now() / 60) * 60;
     const lastCandle = lastCandleRef.current;
@@ -239,7 +237,7 @@ export default function Chart({
         close: Number(livePrice.toFixed(2)),
       };
 
-      candlesRef.current = [...candlesRef.current, updatedCandle].slice(-150);
+      candlesRef.current = [...candlesRef.current, updatedCandle].slice(-200);
     }
 
     lastCandleRef.current = updatedCandle;
@@ -253,7 +251,10 @@ export default function Chart({
       ref={chartContainerRef}
       style={{
         width: "100%",
-        height: "500px",
+        height: "100%",
+        minHeight: "520px",
+        borderRadius: "6px",
+        overflow: "hidden",
       }}
     />
   );

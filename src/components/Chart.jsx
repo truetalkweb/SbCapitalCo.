@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -28,6 +28,7 @@ function calculateEMA(data, period) {
 
   return data.map((candle) => {
     ema = (candle.close - ema) * multiplier + ema;
+
     return {
       time: candle.time,
       value: Number(ema.toFixed(2)),
@@ -60,7 +61,7 @@ function generateFallbackCandles(livePrice) {
   return data;
 }
 
-export default function Chart({
+function Chart({
   symbol,
   timeframe,
   livePrice,
@@ -90,8 +91,8 @@ export default function Chart({
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight,
+      width: chartContainerRef.current.clientWidth || 800,
+      height: chartContainerRef.current.clientHeight || 520,
       layout: {
         background: { color: "#0b1220" },
         textColor: "#d1d4dc",
@@ -192,8 +193,8 @@ export default function Chart({
       if (!chartContainerRef.current) return;
 
       chart.applyOptions({
-        width: chartContainerRef.current.clientWidth,
-        height: chartContainerRef.current.clientHeight,
+        width: chartContainerRef.current.clientWidth || 800,
+        height: chartContainerRef.current.clientHeight || 520,
       });
     });
 
@@ -259,3 +260,5 @@ export default function Chart({
     />
   );
 }
+
+export default React.memo(Chart);

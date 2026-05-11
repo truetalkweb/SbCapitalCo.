@@ -74,6 +74,13 @@ export default function App() {
   );
   const [quantity, setQuantity] = useState(10);
   const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
+  const [positions, setPositions] = useState(() =>
+    loadSetting("sb_positions", {})
+  );
+  const [realizedPnL, setRealizedPnL] = useState(() =>
+    loadSetting("sb_realized_pnl", 0)
+  );
+
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
@@ -162,6 +169,14 @@ export default function App() {
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
   ).toFixed(2);
 
+  const totalUnrealizedPnL = Object.entries(positions).reduce(
+    (total, [symbol, pos]) => {
+      const live = Number(allSymbols.find((s) => s.symbol === symbol)?.price || 0);
+      return total + (live - pos.average) * pos.quantity;
+    },
+    0
+  );
+
   function panelStyle(extra = {}) {
     return {
       background: theme.panel,
@@ -171,7 +186,9 @@ export default function App() {
       padding: "12px",
       overflow: "auto",
       minHeight: 0,
-      boxShadow: isDark ? "0 0 18px rgba(0,0,0,0.18)" : "0 4px 14px rgba(0,0,0,0.06)",
+      boxShadow: isDark
+        ? "0 0 18px rgba(0,0,0,0.18)"
+        : "0 4px 14px rgba(0,0,0,0.06)",
       ...extra,
     };
   }
@@ -258,6 +275,8 @@ export default function App() {
       "sb_scanner_tab",
       "sb_watchlist",
       "sb_orders",
+      "sb_positions",
+      "sb_realized_pnl",
     ].forEach((key) => localStorage.removeItem(key));
 
     setSelectedStock("NVDA");
@@ -271,20 +290,72 @@ export default function App() {
     setScannerTab("Gainers");
     setLiveStocks(defaultStocks);
     setOrders([]);
+    setPositions({});
+    setRealizedPnL(0);
   }
 
   function placeOrder(side) {
+    const currentPrice = Number(selectedStockData?.price || 0);
+    const qty = Number(quantity);
+
+    if (!qty || qty <= 0 || !currentPrice) return;
+
+    const existing = positions[selectedStock] || {
+      quantity: 0,
+      average: 0,
+    };
+
+    let updatedPositions = { ...positions };
+    let updatedRealized = Number(realizedPnL || 0);
+
+    if (side === "BUY") {
+      const totalCost = existing.average * existing.quantity + currentPrice * qty;
+      const newQty = existing.quantity + qty;
+
+      updatedPositions[selectedStock] = {
+        quantity: newQty,
+        average: totalCost / newQty,
+      };
+    }
+
+    if (side === "SELL") {
+      const sellQty = Math.min(qty, existing.quantity);
+
+      if (sellQty <= 0) return;
+
+      const pnl = (currentPrice - existing.average) * sellQty;
+      updatedRealized += pnl;
+
+      const remaining = existing.quantity - sellQty;
+
+      if (remaining <= 0) {
+        delete updatedPositions[selectedStock];
+      } else {
+        updatedPositions[selectedStock] = {
+          ...existing,
+          quantity: remaining,
+        };
+      }
+    }
+
+    setPositions(updatedPositions);
+    setRealizedPnL(updatedRealized);
+
     const order = {
       id: Date.now(),
       side,
       symbol: selectedStock,
-      quantity,
-      price: selectedStockData?.price,
-      value: estimatedValue,
+      quantity: qty,
+      price: currentPrice.toFixed(2),
+      value: (currentPrice * qty).toFixed(2),
+      realizedPnL:
+        side === "SELL"
+          ? ((currentPrice - existing.average) * Math.min(qty, existing.quantity)).toFixed(2)
+          : null,
       time: new Date().toLocaleTimeString(),
     };
 
-    setOrders((prev) => [order, ...prev.slice(0, 12)]);
+    setOrders((prev) => [order, ...prev.slice(0, 20)]);
   }
 
   function toggleFullscreen() {
@@ -319,6 +390,8 @@ export default function App() {
     localStorage.setItem("sb_scanner_tab", JSON.stringify(scannerTab));
     localStorage.setItem("sb_watchlist", JSON.stringify(liveStocks));
     localStorage.setItem("sb_orders", JSON.stringify(orders));
+    localStorage.setItem("sb_positions", JSON.stringify(positions));
+    localStorage.setItem("sb_realized_pnl", JSON.stringify(realizedPnL));
   }, [
     selectedStock,
     secondarySymbol,
@@ -331,6 +404,8 @@ export default function App() {
     scannerTab,
     liveStocks,
     orders,
+    positions,
+    realizedPnL,
   ]);
 
   useEffect(() => {
@@ -371,7 +446,7 @@ export default function App() {
     socketRef.current = socket;
 
     socket.onopen = () => {
-      liveStocks.forEach((stock) => subscribeToSymbol(stock.symbol));
+      defaultStocks.forEach((stock) => subscribeToSymbol(stock.symbol));
     };
 
     socket.onmessage = (event) => {
@@ -403,7 +478,7 @@ export default function App() {
     };
 
     return () => socket.close();
-  }, [liveStocks]);
+  }, []);
 
   useEffect(() => {
     async function fetchNews() {
@@ -588,7 +663,13 @@ export default function App() {
               <div style={{ fontSize: secondary ? "20px" : "24px", fontWeight: 900 }}>
                 {symbol}
               </div>
-              <span style={{ color: secondary ? theme.blue : theme.green, fontWeight: 800, fontSize: "12px" }}>
+              <span
+                style={{
+                  color: secondary ? theme.blue : theme.green,
+                  fontWeight: 800,
+                  fontSize: "12px",
+                }}
+              >
                 ● {secondary ? "SECONDARY" : "LIVE/SIM"}
               </span>
             </div>
@@ -635,7 +716,10 @@ export default function App() {
             }}
           >
             <button style={buttonStyle(false)}>Crosshair</button>
-            <button style={buttonStyle(false)} onClick={() => setShowIndicators(!showIndicators)}>
+            <button
+              style={buttonStyle(false)}
+              onClick={() => setShowIndicators(!showIndicators)}
+            >
               Indicators
             </button>
             <button style={buttonStyle(false)}>Draw</button>
@@ -905,6 +989,28 @@ export default function App() {
               <div>Active Symbol: {selectedStock}</div>
               <div>Current Price: ${selectedStockData?.price}</div>
               <div>Total Orders: {orders.length}</div>
+              <div>
+                Realized P&L:{" "}
+                <span
+                  style={{
+                    color: realizedPnL >= 0 ? theme.green : theme.red,
+                    fontWeight: 900,
+                  }}
+                >
+                  ${Number(realizedPnL).toFixed(2)}
+                </span>
+              </div>
+              <div>
+                Unrealized P&L:{" "}
+                <span
+                  style={{
+                    color: totalUnrealizedPnL >= 0 ? theme.green : theme.red,
+                    fontWeight: 900,
+                  }}
+                >
+                  ${Number(totalUnrealizedPnL).toFixed(2)}
+                </span>
+              </div>
             </div>
 
             <input
@@ -936,6 +1042,48 @@ export default function App() {
                 SELL
               </button>
             </div>
+
+            <h3 style={{ marginTop: "18px" }}>Open Positions</h3>
+
+            {Object.keys(positions).length === 0 ? (
+              <div style={{ color: theme.muted, fontSize: "12px" }}>
+                No open positions
+              </div>
+            ) : (
+              Object.entries(positions).map(([symbol, pos]) => {
+                const live = Number(
+                  allSymbols.find((s) => s.symbol === symbol)?.price || 0
+                );
+
+                const unrealized = (live - pos.average) * pos.quantity;
+
+                return (
+                  <div
+                    key={symbol}
+                    style={{
+                      padding: "8px 0",
+                      borderBottom: `1px solid ${theme.border}`,
+                      fontSize: "12px",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900 }}>{symbol}</div>
+                    <div>Qty: {pos.quantity}</div>
+                    <div>Avg: ${pos.average.toFixed(2)}</div>
+                    <div>
+                      Unrealized:{" "}
+                      <span
+                        style={{
+                          color: unrealized >= 0 ? theme.green : theme.red,
+                          fontWeight: 900,
+                        }}
+                      >
+                        ${unrealized.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
 
             <h3 style={{ marginTop: "18px" }}>Level 1</h3>
 
@@ -992,7 +1140,21 @@ export default function App() {
                     {order.side} {order.symbol}
                   </div>
                   <div>Qty: {order.quantity}</div>
+                  <div>Price: ${order.price}</div>
                   <div>Value: ${order.value}</div>
+                  {order.realizedPnL !== null && (
+                    <div>
+                      P&L:{" "}
+                      <span
+                        style={{
+                          color: Number(order.realizedPnL) >= 0 ? theme.green : theme.red,
+                          fontWeight: 900,
+                        }}
+                      >
+                        ${order.realizedPnL}
+                      </span>
+                    </div>
+                  )}
                   <div style={{ color: theme.muted }}>{order.time}</div>
                 </div>
               ))
@@ -1018,6 +1180,7 @@ export default function App() {
         <span>Main: {selectedStock}</span>
         <span>Secondary: {secondarySymbol}</span>
         <span>Layout: {layoutMode} Chart</span>
+        <span>Realized P&L: ${Number(realizedPnL).toFixed(2)}</span>
         <span>Paper Trading Only</span>
       </div>
     </div>

@@ -102,6 +102,12 @@ export default function App() {
   const [fmpActive, setFmpActive] = useState([]);
   const [scannerLoading, setScannerLoading] = useState(false);
 
+  const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
+  const [alertInput, setAlertInput] = useState("");
+  const [syncCharts, setSyncCharts] = useState(() =>
+    loadSetting("sb_sync_charts", false)
+  );
+
   const [level2, setLevel2] = useState([
     { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
     { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
@@ -177,18 +183,39 @@ export default function App() {
     0
   );
 
+  const basePrice = Number(selectedStockData?.price || 100);
+
+  const ladderRows = useMemo(() => {
+    return Array.from({ length: 15 }, (_, index) => {
+      const offset = 7 - index;
+      const price = basePrice + offset * 0.05;
+      const bidSize = offset <= 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+      const askSize = offset >= 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+      const maxSize = 1000;
+
+      return {
+        price: price.toFixed(2),
+        bidSize,
+        askSize,
+        bidWidth: `${Math.min(100, (bidSize / maxSize) * 100)}%`,
+        askWidth: `${Math.min(100, (askSize / maxSize) * 100)}%`,
+        isLast: Math.abs(price - basePrice) < 0.03,
+      };
+    });
+  }, [basePrice, level2]);
+
   function panelStyle(extra = {}) {
     return {
       background: theme.panel,
       border: `1px solid ${theme.border}`,
       color: theme.text,
-      borderRadius: "10px",
-      padding: "12px",
-      overflow: "auto",
+      borderRadius: "6px",
+      padding: "6px",
+      overflow: "hidden",
       minHeight: 0,
       boxShadow: isDark
-        ? "0 0 18px rgba(0,0,0,0.18)"
-        : "0 4px 14px rgba(0,0,0,0.06)",
+        ? "0 0 0 1px rgba(255,255,255,0.02)"
+        : "0 1px 8px rgba(0,0,0,0.04)",
       ...extra,
     };
   }
@@ -197,11 +224,11 @@ export default function App() {
     return (
       <div
         style={{
-          fontSize: "13px",
+          fontSize: "12px",
           fontWeight: 900,
           borderBottom: `1px solid ${theme.border}`,
-          paddingBottom: "8px",
-          marginBottom: "10px",
+          paddingBottom: "6px",
+          marginBottom: "6px",
           letterSpacing: "0.2px",
         }}
       >
@@ -211,28 +238,28 @@ export default function App() {
   }
 
   const buttonStyle = (active = false) => ({
-    height: "30px",
-    padding: "0 10px",
+    height: "28px",
+    padding: "0 9px",
     background: active ? theme.blue : theme.panel2,
     border: `1px solid ${theme.border}`,
     color: active ? "#ffffff" : theme.text,
-    borderRadius: "5px",
+    borderRadius: "4px",
     cursor: "pointer",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 800,
     whiteSpace: "nowrap",
   });
 
   const timeframeButtonStyle = (active = false) => ({
-    width: "42px",
-    height: "32px",
+    width: "40px",
+    height: "28px",
     padding: 0,
     background: active ? theme.blue : theme.panel2,
     border: `1px solid ${theme.border}`,
     color: active ? "#ffffff" : theme.text,
-    borderRadius: "5px",
+    borderRadius: "4px",
     cursor: "pointer",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 900,
   });
 
@@ -258,8 +285,49 @@ export default function App() {
     }
 
     setSelectedStock(cleanSymbol);
+    if (syncCharts) setSecondarySymbol(cleanSymbol);
     subscribeToSymbol(cleanSymbol);
     setSearchSymbol("");
+  }
+
+  function selectMainSymbol(symbol) {
+    setSelectedStock(symbol);
+    if (syncCharts) setSecondarySymbol(symbol);
+  }
+
+  function setMainTimeframe(value) {
+    setTimeframe(value);
+    if (syncCharts) setSecondaryTimeframe(value);
+  }
+
+  function addPriceAlert() {
+    const trigger = Number(alertInput);
+
+    if (!trigger || trigger <= 0) return;
+
+    const nextAlert = {
+      id: Date.now(),
+      symbol: selectedStock,
+      trigger,
+      direction: trigger >= Number(selectedStockData?.price || 0) ? "above" : "below",
+      active: true,
+      createdAt: new Date().toLocaleTimeString(),
+    };
+
+    setAlerts((prev) => [nextAlert, ...prev.slice(0, 8)]);
+    setAlertInput("");
+  }
+
+  function removeAlert(id) {
+    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+  }
+
+  function resetReplay() {
+    setOrders([]);
+    setPositions({});
+    setRealizedPnL(0);
+    setAlerts([]);
+    setSyncCharts(false);
   }
 
   function resetWorkspace() {
@@ -277,6 +345,8 @@ export default function App() {
       "sb_orders",
       "sb_positions",
       "sb_realized_pnl",
+      "sb_alerts",
+      "sb_sync_charts",
     ].forEach((key) => localStorage.removeItem(key));
 
     setSelectedStock("NVDA");
@@ -392,6 +462,8 @@ export default function App() {
     localStorage.setItem("sb_orders", JSON.stringify(orders));
     localStorage.setItem("sb_positions", JSON.stringify(positions));
     localStorage.setItem("sb_realized_pnl", JSON.stringify(realizedPnL));
+    localStorage.setItem("sb_alerts", JSON.stringify(alerts));
+    localStorage.setItem("sb_sync_charts", JSON.stringify(syncCharts));
   }, [
     selectedStock,
     secondarySymbol,
@@ -406,7 +478,66 @@ export default function App() {
     orders,
     positions,
     realizedPnL,
+    alerts,
+    syncCharts,
   ]);
+
+  useEffect(() => {
+    function handleHotkeys(event) {
+      const tag = event.target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+
+      if (event.shiftKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        placeOrder("BUY");
+      }
+
+      if (event.shiftKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        placeOrder("SELL");
+      }
+
+      if (event.shiftKey && event.key === "1") {
+        event.preventDefault();
+        setLayoutMode("1");
+      }
+
+      if (event.shiftKey && event.key === "2") {
+        event.preventDefault();
+        setLayoutMode("2");
+      }
+
+      if (event.key === "Escape") {
+        setShowIndicators(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleHotkeys);
+
+    return () => window.removeEventListener("keydown", handleHotkeys);
+  }, [quantity, selectedStock, selectedStockData, positions, realizedPnL]);
+
+  useEffect(() => {
+    setAlerts((prev) =>
+      prev.map((alert) => {
+        if (!alert.active || alert.symbol !== selectedStock) return alert;
+
+        const price = Number(selectedStockData?.price || 0);
+        const triggered =
+          alert.direction === "above"
+            ? price >= alert.trigger
+            : price <= alert.trigger;
+
+        if (!triggered) return alert;
+
+        return {
+          ...alert,
+          active: false,
+          triggeredAt: new Date().toLocaleTimeString(),
+        };
+      })
+    );
+  }, [selectedStockData, selectedStock]);
 
   useEffect(() => {
     async function fetchFmpScanners() {
@@ -574,16 +705,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [selectedStockData]);
 
-  function ScannerTable({ rows, onPick = setSelectedStock }) {
+  function ScannerTable({ rows, onPick = selectMainSymbol }) {
     return (
       <>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
-            fontSize: "11px",
+            fontSize: "10px",
             color: theme.muted,
-            paddingBottom: "7px",
+            paddingBottom: "6px",
             borderBottom: `1px solid ${theme.border}`,
             fontWeight: 700,
           }}
@@ -601,10 +732,10 @@ export default function App() {
               display: "grid",
               gridTemplateColumns: "1fr 1fr 1fr",
               gap: "6px",
-              padding: "8px 0",
+              padding: "4px 0",
               borderBottom: `1px solid ${theme.border}`,
               cursor: "pointer",
-              fontSize: "12px",
+              fontSize: "11px",
             }}
           >
             <span style={{ fontWeight: 800 }}>{stock.symbol}</span>
@@ -635,18 +766,23 @@ export default function App() {
     return (
       <div
         style={{
-          ...panelStyle(),
+          ...panelStyle({
+            padding: "0px",
+            background: "#050b14",
+          }),
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
           height: "100%",
+          minHeight: 0,
         }}
       >
         <div
           style={{
+            padding: "6px 10px",
+            marginBottom: "0px",
+            background: theme.panel,
             borderBottom: `1px solid ${theme.border}`,
-            paddingBottom: "8px",
-            marginBottom: "10px",
           }}
         >
           <div
@@ -654,23 +790,23 @@ export default function App() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              gap: "10px",
+              gap: "8px",
               flexWrap: "wrap",
             }}
           >
             <div>
-              <div style={{ fontSize: "12px", color: theme.muted }}>{title}</div>
-              <div style={{ fontSize: secondary ? "20px" : "24px", fontWeight: 900 }}>
+              <div style={{ fontSize: "10px", color: theme.muted }}>{title}</div>
+              <div style={{ fontSize: secondary ? "16px" : "19px", fontWeight: 900 }}>
                 {symbol}
               </div>
               <span
                 style={{
                   color: secondary ? theme.blue : theme.green,
                   fontWeight: 800,
-                  fontSize: "12px",
+                  fontSize: "10px",
                 }}
               >
-                ● {secondary ? "SECONDARY" : "LIVE/SIM"}
+                ● {secondary ? "QUOTE LIVE · CHART LIVE/SIM" : "QUOTE LIVE · CHART LIVE/SIM"}
               </span>
             </div>
 
@@ -679,9 +815,9 @@ export default function App() {
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value.toUpperCase())}
                 style={{
-                  width: "90px",
-                  height: "32px",
-                  padding: "0 8px",
+                  width: "82px",
+                  height: "28px",
+                  padding: "0 7px",
                   background: theme.panel2,
                   border: `1px solid ${theme.border}`,
                   color: theme.text,
@@ -691,7 +827,7 @@ export default function App() {
               />
             )}
 
-            <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
               {["1m", "5m", "15m", "1H", "1D"].map((item) => (
                 <button
                   key={item}
@@ -709,10 +845,13 @@ export default function App() {
           <div
             style={{
               display: "flex",
-              gap: "7px",
-              marginBottom: "10px",
+              gap: "5px",
+              marginBottom: "0px",
+              padding: "5px 8px",
               flexWrap: "wrap",
               position: "relative",
+              background: theme.panel,
+              borderBottom: `1px solid ${theme.border}`,
             }}
           >
             <button style={buttonStyle(false)}>Crosshair</button>
@@ -735,7 +874,7 @@ export default function App() {
               <div
                 style={{
                   position: "absolute",
-                  top: "38px",
+                  top: "36px",
                   left: "78px",
                   background: theme.panel,
                   border: `1px solid ${theme.border}`,
@@ -773,6 +912,7 @@ export default function App() {
             flex: 1,
             minHeight: 0,
             height: "100%",
+            background: "#050b14",
           }}
         >
           <Chart
@@ -790,32 +930,31 @@ export default function App() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        height: "100vh",
         background: theme.bg,
         color: theme.text,
-        overflow: "auto",
+        overflow: "hidden",
+        fontFamily:
+          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
       }}
     >
       <div
         style={{
-          height: "46px",
+          height: "42px",
           background: theme.panel,
           borderBottom: `1px solid ${theme.border}`,
           display: "flex",
           alignItems: "center",
-          padding: "0 12px",
-          gap: "10px",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
+          padding: "0 10px",
+          gap: "8px",
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: "18px" }}>
+        <div style={{ fontWeight: 900, fontSize: "16px" }}>
           SbCapital<span style={{ color: theme.blue }}>Co.</span>
         </div>
 
-        <span style={{ color: theme.muted, fontSize: "12px" }}>
-          Pro Trading Workspace
+        <span style={{ color: theme.muted, fontSize: "11px" }}>
+          Pro TradingView-Style Workspace
         </span>
 
         <button onClick={() => setLayoutMode("1")} style={buttonStyle(layoutMode === "1")}>
@@ -826,13 +965,21 @@ export default function App() {
           2 Charts
         </button>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "12px" }}>
+        <button onClick={() => setSyncCharts(!syncCharts)} style={buttonStyle(syncCharts)}>
+          Sync {syncCharts ? "On" : "Off"}
+        </button>
+
+        <button onClick={resetReplay} style={buttonStyle(false)}>
+          Replay Reset
+        </button>
+
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "7px" }}>
+          <span style={{ fontSize: "11px" }}>
             Data: <span style={{ color: theme.green, fontWeight: 800 }}>Finnhub + FMP</span>
           </span>
 
           <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={buttonStyle(false)}>
-            {isDark ? "Light Mode" : "Dark Mode"}
+            {isDark ? "Light" : "Dark"}
           </button>
 
           <button onClick={resetWorkspace} style={buttonStyle(false)}>
@@ -843,97 +990,114 @@ export default function App() {
 
       <div
         style={{
+          height: "calc(100vh - 68px)",
           display: "grid",
-          gridTemplateColumns: "280px minmax(760px, 1fr) 330px",
-          gap: "10px",
-          padding: "10px",
-          alignItems: "start",
+          gridTemplateColumns:
+            layoutMode === "2"
+              ? "240px minmax(1200px, 1fr) 300px"
+              : "240px minmax(1400px, 1fr) 300px",
+          gap: "6px",
+          padding: "6px",
+          overflow: "hidden",
         }}
       >
-        <div style={{ display: "grid", gap: "10px" }}>
-          <div style={panelStyle({ height: "640px" })}>
-            {panelTitle("Watchlist + Real Scanner")}
+        <div
+          style={panelStyle({
+            height: "100%",
+            overflowY: "auto",
+          })}
+        >
+          {panelTitle("Watchlist + Scanner")}
 
-            <input
-              value={searchSymbol}
-              onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addSymbol();
-              }}
-              placeholder="AAPL, MSFT, SPY..."
+          <input
+            value={searchSymbol}
+            onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addSymbol();
+            }}
+            placeholder="AAPL, MSFT, SPY..."
+            style={{
+              width: "100%",
+              padding: "8px",
+              background: theme.panel2,
+              border: `1px solid ${theme.border}`,
+              color: theme.text,
+              borderRadius: "4px",
+              marginBottom: "6px",
+              fontSize: "11px",
+            }}
+          />
+
+          <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
+            Add Symbol
+          </button>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Watchlist</h3>
+
+          {liveStocks.map((stock) => (
+            <div
+              key={stock.symbol}
+              onClick={() => selectMainSymbol(stock.symbol)}
               style={{
-                width: "100%",
-                padding: "9px",
-                background: theme.panel2,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "4px",
-                marginBottom: "8px",
+                padding: "6px 0",
+                borderBottom: `1px solid ${theme.border}`,
+                cursor: "pointer",
+                color: selectedStock === stock.symbol ? theme.blue : theme.text,
+                fontWeight: selectedStock === stock.symbol ? 900 : 500,
+                fontSize: "11px",
               }}
-            />
-
-            <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
-              Add Symbol
-            </button>
-
-            <h3 style={{ marginTop: "14px" }}>Watchlist</h3>
-
-            {liveStocks.map((stock) => (
-              <div
-                key={stock.symbol}
-                onClick={() => setSelectedStock(stock.symbol)}
-                style={{
-                  padding: "9px 0",
-                  borderBottom: `1px solid ${theme.border}`,
-                  cursor: "pointer",
-                  color: selectedStock === stock.symbol ? theme.blue : theme.text,
-                  fontWeight: selectedStock === stock.symbol ? 900 : 500,
-                }}
-              >
-                {stock.symbol}
-              </div>
-            ))}
-
-            <h3 style={{ marginTop: "16px" }}>
-              Scanner {scannerLoading ? "Loading..." : ""}
-            </h3>
-
-            <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
-              {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setScannerTab(tab)}
-                  style={buttonStyle(scannerTab === tab)}
-                >
-                  {tab}
-                </button>
-              ))}
+            >
+              {stock.symbol}
             </div>
+          ))}
 
-            <ScannerTable rows={scannerStocks} />
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>
+            Scanner {scannerLoading ? "Loading..." : ""}
+          </h3>
+
+          <div style={{ display: "flex", gap: "5px", marginBottom: "6px", flexWrap: "wrap" }}>
+            {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setScannerTab(tab)}
+                style={buttonStyle(scannerTab === tab)}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
 
-          <div style={panelStyle({ height: "250px" })}>
-            {panelTitle("Small Cap Top Movers")}
-            <ScannerTable rows={smallCapMovers} />
-          </div>
+          <ScannerTable rows={scannerStocks} />
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Small Cap Movers</h3>
+          <ScannerTable rows={smallCapMovers} />
         </div>
 
-        <div style={{ display: "grid", gap: "10px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateRows: "1fr 130px",
+            gap: "6px",
+            height: "100%",
+            minHeight: 0,
+            overflow: "hidden",
+          }}
+        >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: layoutMode === "2" ? "1fr 1fr" : "1fr",
-              gap: "10px",
-              height: "650px",
+              gridTemplateColumns: layoutMode === "2" ? "minmax(0, 1fr) minmax(0, 1fr)" : "1fr",
+              gap: "6px",
+              minHeight: 0,
+              overflow: "hidden",
             }}
           >
             {renderChartPanel({
               title: "Main Chart",
               symbol: selectedStock,
-              setSymbol: setSelectedStock,
+              setSymbol: selectMainSymbol,
               tf: timeframe,
-              setTf: setTimeframe,
+              setTf: setMainTimeframe,
               livePrice: selectedStockData?.price,
             })}
 
@@ -949,7 +1113,12 @@ export default function App() {
               })}
           </div>
 
-          <div style={panelStyle({ height: "250px" })}>
+          <div
+            style={panelStyle({
+              height: "130px",
+              overflowY: "auto",
+            })}
+          >
             {panelTitle("Market News")}
 
             {newsLoading ? (
@@ -966,11 +1135,12 @@ export default function App() {
                     color: theme.text,
                     textDecoration: "none",
                     borderBottom: `1px solid ${theme.border}`,
-                    padding: "8px 0",
-                    fontSize: "12px",
+                    padding: "3px 0",
+                    fontSize: "10px",
+                    lineHeight: "1.3",
                   }}
                 >
-                  <div style={{ color: theme.muted, fontSize: "10px" }}>
+                  <div style={{ color: theme.muted, fontSize: "9px" }}>
                     {item.time} · {item.source}
                   </div>
                   <div>{item.text}</div>
@@ -980,186 +1150,290 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: "10px" }}>
-          <div style={panelStyle({ height: "640px" })}>
-            {panelTitle("Paper Trade + Level 1/2")}
+        <div
+          style={panelStyle({
+            height: "100%",
+            overflowY: "auto",
+          })}
+        >
+          {panelTitle("Paper Trade + Level 1/2")}
 
-            <div style={{ fontSize: "13px", lineHeight: "1.8" }}>
-              <div>Buying Power: $100,000.00</div>
-              <div>Active Symbol: {selectedStock}</div>
-              <div>Current Price: ${selectedStockData?.price}</div>
-              <div>Total Orders: {orders.length}</div>
-              <div>
-                Realized P&L:{" "}
-                <span
-                  style={{
-                    color: realizedPnL >= 0 ? theme.green : theme.red,
-                    fontWeight: 900,
-                  }}
-                >
-                  ${Number(realizedPnL).toFixed(2)}
-                </span>
-              </div>
-              <div>
-                Unrealized P&L:{" "}
-                <span
-                  style={{
-                    color: totalUnrealizedPnL >= 0 ? theme.green : theme.red,
-                    fontWeight: 900,
-                  }}
-                >
-                  ${Number(totalUnrealizedPnL).toFixed(2)}
-                </span>
-              </div>
+          <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
+            <div>Buying Power: $100,000.00</div>
+            <div>Active Symbol: {selectedStock}</div>
+            <div>Current Price: ${selectedStockData?.price}</div>
+            <div>Total Orders: {orders.length}</div>
+            <div>
+              Realized P&L:{" "}
+              <span style={{ color: realizedPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
+                ${Number(realizedPnL).toFixed(2)}
+              </span>
             </div>
+            <div>
+              Unrealized P&L:{" "}
+              <span style={{ color: totalUnrealizedPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
+                ${Number(totalUnrealizedPnL).toFixed(2)}
+              </span>
+            </div>
+          </div>
 
+          <input
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px",
+              background: theme.panel2,
+              border: `1px solid ${theme.border}`,
+              color: theme.text,
+              borderRadius: "4px",
+              marginTop: "8px",
+              marginBottom: "6px",
+              fontSize: "11px",
+            }}
+          />
+
+          <div style={{ marginBottom: "6px", fontSize: "11px" }}>
+            Estimated: ${estimatedValue}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+            <button onClick={() => placeOrder("BUY")} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
+              BUY
+            </button>
+
+            <button onClick={() => placeOrder("SELL")} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
+              SELL
+            </button>
+          </div>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Price Alerts</h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 72px", gap: "6px" }}>
             <input
               type="number"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              value={alertInput}
+              onChange={(e) => setAlertInput(e.target.value)}
+              placeholder={`Alert @ ${selectedStockData?.price || ""}`}
               style={{
                 width: "100%",
-                padding: "9px",
+                padding: "7px",
                 background: theme.panel2,
                 border: `1px solid ${theme.border}`,
                 color: theme.text,
                 borderRadius: "4px",
-                marginTop: "10px",
-                marginBottom: "8px",
+                fontSize: "11px",
               }}
             />
 
-            <div style={{ marginBottom: "8px", fontSize: "12px" }}>
-              Estimated: ${estimatedValue}
+            <button onClick={addPriceAlert} style={buttonStyle(true)}>
+              Add
+            </button>
+          </div>
+
+          {alerts.length === 0 ? (
+            <div style={{ color: theme.muted, fontSize: "11px", marginTop: "6px" }}>
+              No alerts set.
             </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              <button onClick={() => placeOrder("BUY")} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
-                BUY
-              </button>
-
-              <button onClick={() => placeOrder("SELL")} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
-                SELL
-              </button>
-            </div>
-
-            <h3 style={{ marginTop: "18px" }}>Open Positions</h3>
-
-            {Object.keys(positions).length === 0 ? (
-              <div style={{ color: theme.muted, fontSize: "12px" }}>
-                No open positions
-              </div>
-            ) : (
-              Object.entries(positions).map(([symbol, pos]) => {
-                const live = Number(
-                  allSymbols.find((s) => s.symbol === symbol)?.price || 0
-                );
-
-                const unrealized = (live - pos.average) * pos.quantity;
-
-                return (
-                  <div
-                    key={symbol}
-                    style={{
-                      padding: "8px 0",
-                      borderBottom: `1px solid ${theme.border}`,
-                      fontSize: "12px",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900 }}>{symbol}</div>
-                    <div>Qty: {pos.quantity}</div>
-                    <div>Avg: ${pos.average.toFixed(2)}</div>
-                    <div>
-                      Unrealized:{" "}
-                      <span
-                        style={{
-                          color: unrealized >= 0 ? theme.green : theme.red,
-                          fontWeight: 900,
-                        }}
-                      >
-                        ${unrealized.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            <h3 style={{ marginTop: "18px" }}>Level 1</h3>
-
-            <div style={{ fontSize: "13px", lineHeight: "1.9" }}>
-              <div>Last: ${selectedStockData?.price}</div>
-              <div>
-                Change:{" "}
-                <span style={{ color: selectedStockData?.change.includes("+") ? theme.green : theme.red }}>
-                  {selectedStockData?.change}
-                </span>
-              </div>
-              <div>Volume: {selectedStockData?.volume || "2.89M"}</div>
-              <div>Bid: ${(Number(selectedStockData?.price) - 0.05).toFixed(2)}</div>
-              <div>Ask: ${(Number(selectedStockData?.price) + 0.05).toFixed(2)}</div>
-            </div>
-
-            <h3 style={{ marginTop: "14px" }}>Level 2</h3>
-
-            {level2.map((row, index) => (
+          ) : (
+            alerts.map((alert) => (
               <div
-                key={index}
+                key={alert.id}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                  padding: "7px 0",
+                  gridTemplateColumns: "1fr auto",
+                  gap: "6px",
+                  padding: "4px 0",
                   borderBottom: `1px solid ${theme.border}`,
-                  fontSize: "12px",
+                  fontSize: "10px",
+                  color: alert.active ? theme.text : theme.muted,
                 }}
               >
-                <span>{row.marketMaker}</span>
-                <span style={{ color: theme.green }}>{row.bid}</span>
-                <span style={{ color: theme.red }}>{row.ask}</span>
-                <span>{row.size}</span>
+                <span>
+                  {alert.symbol} {alert.direction} ${alert.trigger.toFixed(2)}{" "}
+                  <b style={{ color: alert.active ? theme.green : theme.red }}>
+                    {alert.active ? "ACTIVE" : "TRIGGERED"}
+                  </b>
+                </span>
+                <button onClick={() => removeAlert(alert.id)} style={buttonStyle(false)}>
+                  X
+                </button>
               </div>
-            ))}
+            ))
+          )}
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>DOM Ladder + Depth Heatmap</h3>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 70px 1fr",
+              gap: "2px",
+              fontSize: "10px",
+              color: theme.muted,
+              paddingBottom: "4px",
+              borderBottom: `1px solid ${theme.border}`,
+            }}
+          >
+            <span>Bid</span>
+            <span style={{ textAlign: "center" }}>Price</span>
+            <span style={{ textAlign: "right" }}>Ask</span>
           </div>
 
-          <div style={panelStyle({ height: "250px" })}>
-            {panelTitle("Recent Paper Orders")}
-
-            {orders.length === 0 ? (
-              <p style={{ color: theme.muted, fontSize: "12px" }}>No paper trades yet.</p>
-            ) : (
-              orders.map((order) => (
+          {ladderRows.map((row) => (
+            <div
+              key={row.price}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 70px 1fr",
+                gap: "2px",
+                alignItems: "center",
+                minHeight: "20px",
+                fontSize: "10px",
+                background: row.isLast ? "rgba(33,150,243,0.12)" : "transparent",
+                borderBottom: `1px solid ${theme.border}`,
+              }}
+            >
+              <div style={{ position: "relative", textAlign: "left", overflow: "hidden" }}>
                 <div
-                  key={order.id}
                   style={{
+                    position: "absolute",
+                    right: 0,
+                    top: 2,
+                    bottom: 2,
+                    width: row.bidWidth,
+                    background: "rgba(0,200,150,0.22)",
+                  }}
+                />
+                <span style={{ position: "relative", color: theme.green }}>
+                  {row.bidSize || ""}
+                </span>
+              </div>
+
+              <div style={{ textAlign: "center", fontWeight: 900, color: row.isLast ? theme.blue : theme.text }}>
+                {row.price}
+              </div>
+
+              <div style={{ position: "relative", textAlign: "right", overflow: "hidden" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 2,
+                    bottom: 2,
+                    width: row.askWidth,
+                    background: "rgba(239,83,80,0.22)",
+                  }}
+                />
+                <span style={{ position: "relative", color: theme.red }}>
+                  {row.askSize || ""}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Open Positions</h3>
+
+          {Object.keys(positions).length === 0 ? (
+            <div style={{ color: theme.muted, fontSize: "11px" }}>
+              No open positions
+            </div>
+          ) : (
+            Object.entries(positions).map(([symbol, pos]) => {
+              const live = Number(allSymbols.find((s) => s.symbol === symbol)?.price || 0);
+              const unrealized = (live - pos.average) * pos.quantity;
+
+              return (
+                <div
+                  key={symbol}
+                  style={{
+                    padding: "4px 0",
                     borderBottom: `1px solid ${theme.border}`,
-                    padding: "8px 0",
-                    fontSize: "12px",
+                    fontSize: "11px",
                   }}
                 >
-                  <div style={{ color: order.side === "BUY" ? theme.green : theme.red, fontWeight: 900 }}>
-                    {order.side} {order.symbol}
+                  <div style={{ fontWeight: 900 }}>{symbol}</div>
+                  <div>Qty: {pos.quantity}</div>
+                  <div>Avg: ${pos.average.toFixed(2)}</div>
+                  <div>
+                    Unrealized:{" "}
+                    <span style={{ color: unrealized >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
+                      ${unrealized.toFixed(2)}
+                    </span>
                   </div>
-                  <div>Qty: {order.quantity}</div>
-                  <div>Price: ${order.price}</div>
-                  <div>Value: ${order.value}</div>
-                  {order.realizedPnL !== null && (
-                    <div>
-                      P&L:{" "}
-                      <span
-                        style={{
-                          color: Number(order.realizedPnL) >= 0 ? theme.green : theme.red,
-                          fontWeight: 900,
-                        }}
-                      >
-                        ${order.realizedPnL}
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ color: theme.muted }}>{order.time}</div>
                 </div>
-              ))
-            )}
+              );
+            })
+          )}
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Level 1</h3>
+
+          <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
+            <div>Last: ${selectedStockData?.price}</div>
+            <div>
+              Change:{" "}
+              <span style={{ color: selectedStockData?.change.includes("+") ? theme.green : theme.red }}>
+                {selectedStockData?.change}
+              </span>
+            </div>
+            <div>Volume: {selectedStockData?.volume || "2.89M"}</div>
+            <div>Bid: ${(Number(selectedStockData?.price) - 0.05).toFixed(2)}</div>
+            <div>Ask: ${(Number(selectedStockData?.price) + 0.05).toFixed(2)}</div>
           </div>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Level 2</h3>
+
+          {level2.map((row, index) => (
+            <div
+              key={index}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                padding: "4px 0",
+                borderBottom: `1px solid ${theme.border}`,
+                fontSize: "11px",
+              }}
+            >
+              <span>{row.marketMaker}</span>
+              <span style={{ color: theme.green }}>{row.bid}</span>
+              <span style={{ color: theme.red }}>{row.ask}</span>
+              <span>{row.size}</span>
+            </div>
+          ))}
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Recent Paper Orders</h3>
+
+          {orders.length === 0 ? (
+            <p style={{ color: theme.muted, fontSize: "11px" }}>No paper trades yet.</p>
+          ) : (
+            orders.map((order) => (
+              <div
+                key={order.id}
+                style={{
+                  borderBottom: `1px solid ${theme.border}`,
+                  padding: "4px 0",
+                  fontSize: "11px",
+                }}
+              >
+                <div style={{ color: order.side === "BUY" ? theme.green : theme.red, fontWeight: 900 }}>
+                  {order.side} {order.symbol}
+                </div>
+                <div>Qty: {order.quantity}</div>
+                <div>Price: ${order.price}</div>
+                <div>Value: ${order.value}</div>
+                {order.realizedPnL !== null && (
+                  <div>
+                    P&L:{" "}
+                    <span style={{ color: Number(order.realizedPnL) >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
+                      ${order.realizedPnL}
+                    </span>
+                  </div>
+                )}
+                <div style={{ color: theme.muted }}>{order.time}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -1169,11 +1443,11 @@ export default function App() {
           background: theme.panel,
           borderTop: `1px solid ${theme.border}`,
           color: theme.muted,
-          fontSize: "11px",
+          fontSize: "10px",
           display: "flex",
           alignItems: "center",
-          gap: "18px",
-          padding: "0 12px",
+          gap: "14px",
+          padding: "0 10px",
         }}
       >
         <span>Connected: Finnhub + FMP</span>
@@ -1182,6 +1456,7 @@ export default function App() {
         <span>Layout: {layoutMode} Chart</span>
         <span>Realized P&L: ${Number(realizedPnL).toFixed(2)}</span>
         <span>Paper Trading Only</span>
+        <span>Hotkeys: Shift+B Buy · Shift+S Sell</span>
       </div>
     </div>
   );

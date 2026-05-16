@@ -41,11 +41,12 @@ function generateFallbackCandles(livePrice) {
   let price = Number(livePrice) || 100;
   const data = [];
 
-  for (let i = 160; i > 0; i--) {
+  for (let i = 180; i > 0; i--) {
     const open = price;
-    const close = open + (Math.random() - 0.5) * 2;
-    const high = Math.max(open, close) + Math.random();
-    const low = Math.min(open, close) - Math.random();
+    const move = (Math.random() - 0.5) * (price * 0.012);
+    const close = open + move;
+    const high = Math.max(open, close) + Math.random() * (price * 0.006);
+    const low = Math.min(open, close) - Math.random() * (price * 0.006);
 
     data.push({
       time: now - i * 60,
@@ -68,95 +69,125 @@ function Chart({
   showEMA9 = true,
   showEMA20 = true,
 }) {
-  const chartContainerRef = useRef(null);
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
-  const ema9SeriesRef = useRef(null);
-  const ema20SeriesRef = useRef(null);
-  const lastCandleRef = useRef(null);
+  const ema9Ref = useRef(null);
+  const ema20Ref = useRef(null);
   const candlesRef = useRef([]);
+  const lastCandleRef = useRef(null);
 
   function updateIndicators() {
-    if (!ema9SeriesRef.current || !ema20SeriesRef.current) return;
+    if (!ema9Ref.current || !ema20Ref.current) return;
 
-    ema9SeriesRef.current.setData(
+    ema9Ref.current.setData(
       showEMA9 ? calculateEMA(candlesRef.current, 9) : []
     );
 
-    ema20SeriesRef.current.setData(
+    ema20Ref.current.setData(
       showEMA20 ? calculateEMA(candlesRef.current, 20) : []
     );
   }
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!containerRef.current) return;
 
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth || 800,
-      height: chartContainerRef.current.clientHeight || 520,
+    const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height: containerRef.current.clientHeight,
       layout: {
-        background: { color: "#0b1220" },
+        background: { color: "#050b14" },
         textColor: "#d1d4dc",
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: "#1f2937" },
-        horzLines: { color: "#1f2937" },
+        vertLines: { color: "#111c2d" },
+        horzLines: { color: "#111c2d" },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
       },
       rightPriceScale: {
-        borderColor: "#2a2e39",
+        borderColor: "#1f2937",
         textColor: "#d1d4dc",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.12,
+        },
       },
       timeScale: {
-        borderColor: "#2a2e39",
+        borderColor: "#1f2937",
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 8,
+        barSpacing: 8,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        lockVisibleTimeRangeOnResize: false,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: true,
+        mouseWheel: true,
+        pinch: true,
       },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#26a69a",
+      upColor: "#00c896",
       downColor: "#ef5350",
-      borderUpColor: "#26a69a",
+      borderUpColor: "#00c896",
       borderDownColor: "#ef5350",
-      wickUpColor: "#26a69a",
+      wickUpColor: "#00c896",
       wickDownColor: "#ef5350",
+      priceLineColor: "#2196f3",
+      priceLineWidth: 1,
+      lastValueVisible: true,
+      priceLineVisible: true,
     });
 
     const ema9Series = chart.addSeries(LineSeries, {
       color: "#2196f3",
       lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
     const ema20Series = chart.addSeries(LineSeries, {
       color: "#f59e0b",
       lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
     });
 
+    chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
-    ema9SeriesRef.current = ema9Series;
-    ema20SeriesRef.current = ema20Series;
+    ema9Ref.current = ema9Series;
+    ema20Ref.current = ema20Series;
 
     async function loadCandles() {
       try {
         const now = Math.floor(Date.now() / 1000);
         const { resolution, from } = getTimeframeSettings(timeframe);
 
-        const response = await fetch(
+        const res = await fetch(
           `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${FINNHUB_API_KEY}`
         );
 
-        const data = await response.json();
+        const data = await res.json();
 
-        if (data.s === "ok" && data.t?.length > 0) {
-          const candles = data.t.map((time, index) => ({
+        if (data.s === "ok" && Array.isArray(data.t) && data.t.length > 0) {
+          const candles = data.t.map((time, i) => ({
             time,
-            open: Number(data.o[index].toFixed(2)),
-            high: Number(data.h[index].toFixed(2)),
-            low: Number(data.l[index].toFixed(2)),
-            close: Number(data.c[index].toFixed(2)),
+            open: Number(data.o[i].toFixed(2)),
+            high: Number(data.h[i].toFixed(2)),
+            low: Number(data.l[i].toFixed(2)),
+            close: Number(data.c[i].toFixed(2)),
           }));
 
           candlesRef.current = candles;
@@ -164,6 +195,7 @@ function Chart({
 
           candleSeries.setData(candles);
           updateIndicators();
+          chart.timeScale().fitContent();
         } else {
           const fallback = generateFallbackCandles(livePrice);
 
@@ -172,9 +204,8 @@ function Chart({
 
           candleSeries.setData(fallback);
           updateIndicators();
+          chart.timeScale().fitContent();
         }
-
-        chart.timeScale().fitContent();
       } catch {
         const fallback = generateFallbackCandles(livePrice);
 
@@ -190,15 +221,15 @@ function Chart({
     loadCandles();
 
     const resizeObserver = new ResizeObserver(() => {
-      if (!chartContainerRef.current) return;
+      if (!containerRef.current || !chartRef.current) return;
 
-      chart.applyOptions({
-        width: chartContainerRef.current.clientWidth || 800,
-        height: chartContainerRef.current.clientHeight || 520,
+      chartRef.current.applyOptions({
+        width: containerRef.current.clientWidth,
+        height: containerRef.current.clientHeight,
       });
     });
 
-    resizeObserver.observe(chartContainerRef.current);
+    resizeObserver.observe(containerRef.current);
 
     return () => {
       resizeObserver.disconnect();
@@ -214,48 +245,49 @@ function Chart({
     if (!livePrice || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const currentTime = Math.floor(Date.now() / 60) * 60;
-    const lastCandle = lastCandleRef.current;
+    const last = lastCandleRef.current;
+    const price = Number(livePrice);
 
-    let updatedCandle;
+    let updated;
 
-    if (lastCandle.time === currentTime) {
-      updatedCandle = {
-        ...lastCandle,
-        high: Math.max(lastCandle.high, livePrice),
-        low: Math.min(lastCandle.low, livePrice),
-        close: Number(livePrice.toFixed(2)),
+    if (last.time === currentTime) {
+      updated = {
+        ...last,
+        high: Math.max(last.high, price),
+        low: Math.min(last.low, price),
+        close: Number(price.toFixed(2)),
       };
 
       candlesRef.current = candlesRef.current.map((candle) =>
-        candle.time === currentTime ? updatedCandle : candle
+        candle.time === currentTime ? updated : candle
       );
     } else {
-      updatedCandle = {
+      updated = {
         time: currentTime,
-        open: lastCandle.close,
-        high: Number(livePrice.toFixed(2)),
-        low: Number(livePrice.toFixed(2)),
-        close: Number(livePrice.toFixed(2)),
+        open: last.close,
+        high: Number(price.toFixed(2)),
+        low: Number(price.toFixed(2)),
+        close: Number(price.toFixed(2)),
       };
 
-      candlesRef.current = [...candlesRef.current, updatedCandle].slice(-200);
+      candlesRef.current = [...candlesRef.current, updated].slice(-250);
     }
 
-    lastCandleRef.current = updatedCandle;
-
-    candleSeriesRef.current.update(updatedCandle);
+    lastCandleRef.current = updated;
+    candleSeriesRef.current.update(updated);
     updateIndicators();
   }, [livePrice, showEMA9, showEMA20]);
 
   return (
     <div
-      ref={chartContainerRef}
+      ref={containerRef}
       style={{
         width: "100%",
         height: "100%",
-        minHeight: "520px",
-        borderRadius: "6px",
+        minHeight: 0,
+        background: "#050b14",
         overflow: "hidden",
+        cursor: "grab",
       }}
     />
   );

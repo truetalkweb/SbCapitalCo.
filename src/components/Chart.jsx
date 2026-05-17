@@ -8,6 +8,15 @@ import {
 
 const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
 
+function getTimeframeSeconds(timeframe) {
+  if (timeframe === "1m") return 60;
+  if (timeframe === "5m") return 60 * 5;
+  if (timeframe === "15m") return 60 * 15;
+  if (timeframe === "1H") return 60 * 60;
+  if (timeframe === "1D") return 60 * 60 * 24;
+  return 60 * 15;
+}
+
 function getTimeframeSettings(timeframe) {
   const now = Math.floor(Date.now() / 1000);
 
@@ -18,6 +27,11 @@ function getTimeframeSettings(timeframe) {
   if (timeframe === "1D") return { resolution: "D", from: now - 60 * 60 * 24 * 180 };
 
   return { resolution: "15", from: now - 60 * 60 * 24 * 5 };
+}
+
+function bucketTime(timestamp, timeframe) {
+  const seconds = getTimeframeSeconds(timeframe);
+  return Math.floor(timestamp / seconds) * seconds;
 }
 
 function calculateEMA(data, period) {
@@ -36,8 +50,9 @@ function calculateEMA(data, period) {
   });
 }
 
-function generateFallbackCandles(livePrice) {
-  const now = Math.floor(Date.now() / 60) * 60;
+function generateFallbackCandles(livePrice, timeframe) {
+  const seconds = getTimeframeSeconds(timeframe);
+  const now = bucketTime(Math.floor(Date.now() / 1000), timeframe);
   let price = Number(livePrice) || 100;
   const data = [];
 
@@ -49,7 +64,7 @@ function generateFallbackCandles(livePrice) {
     const low = Math.min(open, close) - Math.random() * (price * 0.006);
 
     data.push({
-      time: now - i * 60,
+      time: now - i * seconds,
       open: Number(open.toFixed(2)),
       high: Number(high.toFixed(2)),
       low: Number(low.toFixed(2)),
@@ -68,6 +83,11 @@ function Chart({
   livePrice,
   showEMA9 = true,
   showEMA20 = true,
+  onStatusChange,
+  replayMode = false,
+  replayIndex = null,
+  onReplayData,
+  replayTrades = [],
 }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -76,6 +96,16 @@ function Chart({
   const ema20Ref = useRef(null);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
+  const lastLivePriceRef = useRef(null);
+  const statusRef = useRef("LOADING");
+  const replayModeRef = useRef(false);
+
+  function setStatus(nextStatus) {
+    statusRef.current = nextStatus;
+    if (typeof onStatusChange === "function") {
+      onStatusChange(nextStatus);
+    }
+  }
 
   function updateIndicators() {
     if (!ema9Ref.current || !ema20Ref.current) return;
@@ -89,8 +119,53 @@ function Chart({
     );
   }
 
+  function applyLivePrice(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
+
+    const price = Number(priceValue);
+    const currentBucket = bucketTime(timestamp, timeframe);
+    const last = lastCandleRef.current;
+
+    let updated;
+
+    if (last.time === currentBucket) {
+      updated = {
+        ...last,
+        high: Number(Math.max(last.high, price).toFixed(2)),
+        low: Number(Math.min(last.low, price).toFixed(2)),
+        close: Number(price.toFixed(2)),
+      };
+
+      candlesRef.current = candlesRef.current.map((candle) =>
+        candle.time === currentBucket ? updated : candle
+      );
+    } else if (currentBucket > last.time) {
+      updated = {
+        time: currentBucket,
+        open: Number(last.close.toFixed(2)),
+        high: Number(price.toFixed(2)),
+        low: Number(price.toFixed(2)),
+        close: Number(price.toFixed(2)),
+      };
+
+      candlesRef.current = [...candlesRef.current, updated].slice(-300);
+    } else {
+      return;
+    }
+
+    lastCandleRef.current = updated;
+    candleSeriesRef.current.update(updated);
+    updateIndicators();
+
+    if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED") {
+      setStatus("LIVE");
+    }
+  }
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    setStatus("LOADING");
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -194,27 +269,37 @@ function Chart({
           lastCandleRef.current = candles[candles.length - 1];
 
           candleSeries.setData(candles);
+          if (typeof onReplayData === "function") onReplayData(candles);
           updateIndicators();
           chart.timeScale().fitContent();
+          setStatus("LIVE");
+
+          if (lastLivePriceRef.current) {
+            applyLivePrice(lastLivePriceRef.current);
+          }
         } else {
-          const fallback = generateFallbackCandles(livePrice);
+          const fallback = generateFallbackCandles(livePrice, timeframe);
 
           candlesRef.current = fallback;
           lastCandleRef.current = fallback[fallback.length - 1];
 
           candleSeries.setData(fallback);
+          if (typeof onReplayData === "function") onReplayData(fallback);
           updateIndicators();
           chart.timeScale().fitContent();
+          setStatus("SIM");
         }
       } catch {
-        const fallback = generateFallbackCandles(livePrice);
+        const fallback = generateFallbackCandles(livePrice, timeframe);
 
         candlesRef.current = fallback;
         lastCandleRef.current = fallback[fallback.length - 1];
 
         candleSeries.setData(fallback);
+        if (typeof onReplayData === "function") onReplayData(fallback);
         updateIndicators();
         chart.timeScale().fitContent();
+        setStatus("SIM");
       }
     }
 
@@ -234,6 +319,10 @@ function Chart({
     return () => {
       resizeObserver.disconnect();
       chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      ema9Ref.current = null;
+      ema20Ref.current = null;
     };
   }, [symbol, timeframe]);
 
@@ -242,41 +331,57 @@ function Chart({
   }, [showEMA9, showEMA20]);
 
   useEffect(() => {
-    if (!livePrice || !candleSeriesRef.current || !lastCandleRef.current) return;
+    if (!livePrice || replayMode) return;
 
-    const currentTime = Math.floor(Date.now() / 60) * 60;
-    const last = lastCandleRef.current;
-    const price = Number(livePrice);
+    lastLivePriceRef.current = Number(livePrice);
+    applyLivePrice(Number(livePrice));
+  }, [livePrice, showEMA9, showEMA20, timeframe, replayMode]);
 
-    let updated;
+  useEffect(() => {
+    replayModeRef.current = replayMode;
 
-    if (last.time === currentTime) {
-      updated = {
-        ...last,
-        high: Math.max(last.high, price),
-        low: Math.min(last.low, price),
-        close: Number(price.toFixed(2)),
-      };
+    if (!candleSeriesRef.current || !candlesRef.current.length) return;
 
-      candlesRef.current = candlesRef.current.map((candle) =>
-        candle.time === currentTime ? updated : candle
-      );
-    } else {
-      updated = {
-        time: currentTime,
-        open: last.close,
-        high: Number(price.toFixed(2)),
-        low: Number(price.toFixed(2)),
-        close: Number(price.toFixed(2)),
-      };
-
-      candlesRef.current = [...candlesRef.current, updated].slice(-250);
+    if (!replayMode) {
+      candleSeriesRef.current.setData(candlesRef.current);
+      updateIndicators();
+      return;
     }
 
-    lastCandleRef.current = updated;
-    candleSeriesRef.current.update(updated);
-    updateIndicators();
-  }, [livePrice, showEMA9, showEMA20]);
+    const safeIndex =
+      typeof replayIndex === "number"
+        ? Math.min(Math.max(replayIndex, 5), candlesRef.current.length - 1)
+        : candlesRef.current.length - 1;
+
+    const visibleCandles = candlesRef.current.slice(0, safeIndex + 1);
+
+    candleSeriesRef.current.setData(visibleCandles);
+
+    if (ema9Ref.current) {
+      ema9Ref.current.setData(showEMA9 ? calculateEMA(visibleCandles, 9) : []);
+    }
+
+    if (ema20Ref.current) {
+      ema20Ref.current.setData(showEMA20 ? calculateEMA(visibleCandles, 20) : []);
+    }
+
+    const markers = replayTrades
+      .filter((trade) => trade.time)
+      .map((trade) => ({
+        time: trade.time,
+        position: trade.type === "BUY" ? "belowBar" : "aboveBar",
+        color: trade.type === "BUY" ? "#00c896" : "#ef5350",
+        shape: trade.type === "BUY" ? "arrowUp" : "arrowDown",
+        text:
+          trade.type === "BUY"
+            ? `BUY ${trade.qty}`
+            : `SELL ${trade.qty} ${trade.pnl ? `$${Number(trade.pnl).toFixed(2)}` : ""}`,
+      }));
+
+    if (typeof candleSeriesRef.current.setMarkers === "function") {
+      candleSeriesRef.current.setMarkers(markers);
+    }
+  }, [replayMode, replayIndex, replayTrades, showEMA9, showEMA20]);
 
   return (
     <div

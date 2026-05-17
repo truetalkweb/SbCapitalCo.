@@ -108,6 +108,17 @@ export default function App() {
     loadSetting("sb_sync_charts", false)
   );
 
+  const [mainChartStatus, setMainChartStatus] = useState("LOADING");
+  const [secondaryChartStatus, setSecondaryChartStatus] = useState("LOADING");
+
+  const [replayMode, setReplayMode] = useState(false);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+  const [replayIndex, setReplayIndex] = useState(80);
+  const [mainReplayData, setMainReplayData] = useState([]);
+  const [replayTrades, setReplayTrades] = useState([]);
+  const [replayEquity, setReplayEquity] = useState([100000]);
+
   const [level2, setLevel2] = useState([
     { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
     { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
@@ -203,6 +214,37 @@ export default function App() {
       };
     });
   }, [basePrice, level2]);
+
+  const replayStats = useMemo(() => {
+    const closedTrades = replayTrades.filter((trade) => trade.type === "SELL");
+    const winners = closedTrades.filter((trade) => Number(trade.pnl) > 0);
+    const losers = closedTrades.filter((trade) => Number(trade.pnl) < 0);
+    const netPnL = closedTrades.reduce((total, trade) => total + Number(trade.pnl || 0), 0);
+    const winRate = closedTrades.length
+      ? ((winners.length / closedTrades.length) * 100).toFixed(1)
+      : "0.0";
+
+    const avgWin = winners.length
+      ? winners.reduce((total, trade) => total + Number(trade.pnl), 0) / winners.length
+      : 0;
+
+    const avgLoss = losers.length
+      ? losers.reduce((total, trade) => total + Number(trade.pnl), 0) / losers.length
+      : 0;
+
+    return {
+      totalTrades: closedTrades.length,
+      winners: winners.length,
+      losers: losers.length,
+      netPnL,
+      winRate,
+      avgWin,
+      avgLoss,
+      equity: replayEquity[replayEquity.length - 1] || 100000,
+    };
+  }, [replayTrades, replayEquity]);
+
+  const replayCandle = mainReplayData[replayIndex] || null;
 
   function panelStyle(extra = {}) {
     return {
@@ -322,12 +364,75 @@ export default function App() {
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
   }
 
+  function stepReplay() {
+    setReplayIndex((prev) => {
+      if (!mainReplayData.length) return prev;
+      return Math.min(prev + 1, mainReplayData.length - 1);
+    });
+  }
+
+  function replayBuy() {
+    const candle = mainReplayData[replayIndex];
+    if (!candle) return;
+
+    const price = Number(candle.close);
+    const qty = Number(quantity) || 1;
+
+    setReplayTrades((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        type: "BUY",
+        symbol: selectedStock,
+        qty,
+        price,
+        time: candle.time,
+      },
+    ]);
+  }
+
+  function replaySell() {
+    const candle = mainReplayData[replayIndex];
+    if (!candle) return;
+
+    const price = Number(candle.close);
+    const qty = Number(quantity) || 1;
+
+    const lastOpenBuy = [...replayTrades]
+      .reverse()
+      .find((trade) => trade.type === "BUY" && !trade.closed);
+
+    const pnl = lastOpenBuy ? (price - lastOpenBuy.price) * qty : 0;
+    const nextEquity = (replayEquity[replayEquity.length - 1] || 100000) + pnl;
+
+    setReplayTrades((prev) =>
+      prev
+        .map((trade) =>
+          trade.id === lastOpenBuy?.id ? { ...trade, closed: true } : trade
+        )
+        .concat({
+          id: Date.now(),
+          type: "SELL",
+          symbol: selectedStock,
+          qty,
+          price,
+          pnl,
+          time: candle.time,
+        })
+    );
+
+    setReplayEquity((prev) => [...prev, nextEquity]);
+  }
+
   function resetReplay() {
+    setReplayPlaying(false);
+    setReplayIndex(80);
+    setReplayTrades([]);
+    setReplayEquity([100000]);
     setOrders([]);
     setPositions({});
     setRealizedPnL(0);
     setAlerts([]);
-    setSyncCharts(false);
   }
 
   function resetWorkspace() {
@@ -516,6 +621,25 @@ export default function App() {
 
     return () => window.removeEventListener("keydown", handleHotkeys);
   }, [quantity, selectedStock, selectedStockData, positions, realizedPnL]);
+
+  useEffect(() => {
+    if (!replayMode || !replayPlaying) return;
+
+    const interval = setInterval(() => {
+      setReplayIndex((prev) => {
+        if (!mainReplayData.length) return prev;
+
+        if (prev >= mainReplayData.length - 1) {
+          setReplayPlaying(false);
+          return prev;
+        }
+
+        return prev + 1;
+      });
+    }, Math.max(120, 900 / replaySpeed));
+
+    return () => clearInterval(interval);
+  }, [replayMode, replayPlaying, replaySpeed, mainReplayData.length]);
 
   useEffect(() => {
     setAlerts((prev) =>
@@ -762,6 +886,8 @@ export default function App() {
     setTf,
     livePrice,
     secondary = false,
+    chartStatus = "LOADING",
+    onStatusChange,
   }) {
     return (
       <div
@@ -806,7 +932,7 @@ export default function App() {
                   fontSize: "10px",
                 }}
               >
-                ● {secondary ? "QUOTE LIVE · CHART LIVE/SIM" : "QUOTE LIVE · CHART LIVE/SIM"}
+                ● QUOTE LIVE · CHART {chartStatus}
               </span>
             </div>
 
@@ -921,6 +1047,11 @@ export default function App() {
             livePrice={Number(livePrice || 100)}
             showEMA9={showEMA9}
             showEMA20={showEMA20}
+            onStatusChange={onStatusChange}
+            replayMode={replayMode && !secondary}
+            replayIndex={replayIndex}
+            onReplayData={setMainReplayData}
+            replayTrades={replayTrades}
           />
         </div>
       </div>
@@ -969,13 +1100,20 @@ export default function App() {
           Sync {syncCharts ? "On" : "Off"}
         </button>
 
+        <button onClick={() => setReplayMode(!replayMode)} style={buttonStyle(replayMode)}>
+          Replay {replayMode ? "On" : "Off"}
+        </button>
+
         <button onClick={resetReplay} style={buttonStyle(false)}>
-          Replay Reset
+          Reset Replay
         </button>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "7px" }}>
           <span style={{ fontSize: "11px" }}>
             Data: <span style={{ color: theme.green, fontWeight: 800 }}>Finnhub + FMP</span>
+          </span>
+          <span style={{ fontSize: "11px", color: theme.muted }}>
+            Chart: {mainChartStatus}
           </span>
 
           <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={buttonStyle(false)}>
@@ -1099,6 +1237,8 @@ export default function App() {
               tf: timeframe,
               setTf: setMainTimeframe,
               livePrice: selectedStockData?.price,
+              chartStatus: mainChartStatus,
+              onStatusChange: setMainChartStatus,
             })}
 
             {layoutMode === "2" &&
@@ -1110,6 +1250,8 @@ export default function App() {
                 setTf: setSecondaryTimeframe,
                 livePrice: secondaryStockData?.price,
                 secondary: true,
+                chartStatus: secondaryChartStatus,
+                onStatusChange: setSecondaryChartStatus,
               })}
           </div>
 
@@ -1206,6 +1348,48 @@ export default function App() {
             <button onClick={() => placeOrder("SELL")} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
               SELL
             </button>
+          </div>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Replay + Backtest</h3>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+            <button onClick={() => setReplayPlaying(!replayPlaying)} style={buttonStyle(replayPlaying)}>
+              {replayPlaying ? "Pause" : "Play"}
+            </button>
+            <button onClick={stepReplay} style={buttonStyle(false)}>
+              Step
+            </button>
+            <button onClick={resetReplay} style={buttonStyle(false)}>
+              Reset
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+            {[1, 2, 5].map((speed) => (
+              <button
+                key={speed}
+                onClick={() => setReplaySpeed(speed)}
+                style={buttonStyle(replaySpeed === speed)}
+              >
+                {speed}x
+              </button>
+            ))}
+            <button onClick={replayBuy} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
+              Replay Buy
+            </button>
+            <button onClick={replaySell} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
+              Replay Sell
+            </button>
+          </div>
+
+          <div style={{ marginTop: "6px", fontSize: "10px", lineHeight: "1.55" }}>
+            <div>Replay Candle: {mainReplayData.length ? `${Math.min(replayIndex + 1, mainReplayData.length)} / ${mainReplayData.length}` : "Loading"}</div>
+            <div>Replay Price: ${replayCandle?.close ? Number(replayCandle.close).toFixed(2) : "—"}</div>
+            <div>Equity: ${Number(replayStats.equity).toFixed(2)}</div>
+            <div>Net P&L: <span style={{ color: replayStats.netPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>${replayStats.netPnL.toFixed(2)}</span></div>
+            <div>Trades: {replayStats.totalTrades} · Win Rate: {replayStats.winRate}%</div>
+            <div>Winners: {replayStats.winners} · Losers: {replayStats.losers}</div>
+            <div>Avg Win: ${replayStats.avgWin.toFixed(2)} · Avg Loss: ${replayStats.avgLoss.toFixed(2)}</div>
           </div>
 
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Price Alerts</h3>
@@ -1457,6 +1641,8 @@ export default function App() {
         <span>Realized P&L: ${Number(realizedPnL).toFixed(2)}</span>
         <span>Paper Trading Only</span>
         <span>Hotkeys: Shift+B Buy · Shift+S Sell</span>
+        <span>Chart Engine: Timeframe Aggregated</span>
+        <span>Phase 3: Replay + Backtesting</span>
       </div>
     </div>
   );

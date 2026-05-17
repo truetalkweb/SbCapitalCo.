@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Chart from "./components/Chart";
+import { auth, db } from "./firebase";
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
 const FMP_API_KEY = import.meta.env.VITE_FMP_API_KEY;
@@ -53,6 +61,13 @@ function formatFmpStocks(data) {
 }
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState("login");
+  const [authMessage, setAuthMessage] = useState("");
+  const [cloudStatus, setCloudStatus] = useState("Local workspace");
+
   const [selectedStock, setSelectedStock] = useState(() =>
     loadSetting("sb_selected_stock", "NVDA")
   );
@@ -243,6 +258,148 @@ export default function App() {
       equity: replayEquity[replayEquity.length - 1] || 100000,
     };
   }, [replayTrades, replayEquity]);
+
+  const workspacePayload = useMemo(
+    () => ({
+      selectedStock,
+      secondarySymbol,
+      liveStocks,
+      timeframe,
+      secondaryTimeframe,
+      layoutMode,
+      quantity,
+      orders,
+      positions,
+      realizedPnL,
+      alerts,
+      syncCharts,
+      themeMode,
+      showEMA9,
+      showEMA20,
+      scannerTab,
+      replayMode,
+      replaySpeed,
+      replayIndex,
+      replayTrades,
+      replayEquity,
+    }),
+    [
+      selectedStock,
+      secondarySymbol,
+      liveStocks,
+      timeframe,
+      secondaryTimeframe,
+      layoutMode,
+      quantity,
+      orders,
+      positions,
+      realizedPnL,
+      alerts,
+      syncCharts,
+      themeMode,
+      showEMA9,
+      showEMA20,
+      scannerTab,
+      replayMode,
+      replaySpeed,
+      replayIndex,
+      replayTrades,
+      replayEquity,
+    ]
+  );
+
+  function applyWorkspace(data) {
+    if (!data) return;
+    if (data.selectedStock) setSelectedStock(data.selectedStock);
+    if (data.secondarySymbol) setSecondarySymbol(data.secondarySymbol);
+    if (Array.isArray(data.liveStocks)) setLiveStocks(data.liveStocks);
+    if (data.timeframe) setTimeframe(data.timeframe);
+    if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
+    if (data.layoutMode) setLayoutMode(data.layoutMode);
+    if (data.quantity) setQuantity(data.quantity);
+    if (Array.isArray(data.orders)) setOrders(data.orders);
+    if (data.positions) setPositions(data.positions);
+    if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
+    if (Array.isArray(data.alerts)) setAlerts(data.alerts);
+    if (typeof data.syncCharts === "boolean") setSyncCharts(data.syncCharts);
+    if (data.themeMode) setThemeMode(data.themeMode);
+    if (typeof data.showEMA9 === "boolean") setShowEMA9(data.showEMA9);
+    if (typeof data.showEMA20 === "boolean") setShowEMA20(data.showEMA20);
+    if (data.scannerTab) setScannerTab(data.scannerTab);
+    if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
+    if (data.replaySpeed) setReplaySpeed(data.replaySpeed);
+    if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
+    if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
+    if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
+  }
+
+  async function handleAuthSubmit(mode = authMode) {
+    setAuthMessage("");
+
+    try {
+      if (!authEmail || !authPassword) {
+        setAuthMessage("Enter email and password.");
+        return;
+      }
+
+      if (mode === "signup") {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        setAuthMessage("Account created.");
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+        setAuthMessage("Signed in.");
+      }
+
+      setAuthPassword("");
+    } catch (error) {
+      setAuthMessage(error.message || "Authentication failed.");
+    }
+  }
+
+  async function saveWorkspaceToCloud() {
+    if (!user) {
+      setCloudStatus("Sign in to save cloud workspace");
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "workspaces", user.uid), {
+        ...workspacePayload,
+        updatedAt: serverTimestamp(),
+        owner: user.uid,
+      });
+
+      setCloudStatus(`Cloud saved ${new Date().toLocaleTimeString()}`);
+    } catch {
+      setCloudStatus("Cloud save failed");
+    }
+  }
+
+  async function loadWorkspaceFromCloud() {
+    if (!user) {
+      setCloudStatus("Sign in to load cloud workspace");
+      return;
+    }
+
+    try {
+      const snapshot = await getDoc(doc(db, "workspaces", user.uid));
+
+      if (!snapshot.exists()) {
+        setCloudStatus("No cloud workspace found");
+        return;
+      }
+
+      applyWorkspace(snapshot.data());
+      setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
+    } catch {
+      setCloudStatus("Cloud load failed");
+    }
+  }
+
+  async function handleLogout() {
+    await signOut(auth);
+    setCloudStatus("Local workspace");
+  }
 
   const replayCandle = mainReplayData[replayIndex] || null;
 
@@ -552,6 +709,32 @@ export default function App() {
     link.href = canvas.toDataURL("image/png");
     link.click();
   }
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+
+      if (!currentUser) {
+        setCloudStatus("Local workspace");
+        return;
+      }
+
+      setCloudStatus(`Signed in: ${currentUser.email}`);
+
+      try {
+        const snapshot = await getDoc(doc(db, "workspaces", currentUser.uid));
+
+        if (snapshot.exists()) {
+          applyWorkspace(snapshot.data());
+          setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
+        }
+      } catch {
+        setCloudStatus("Signed in · cloud load skipped");
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("sb_selected_stock", JSON.stringify(selectedStock));
@@ -1120,6 +1303,14 @@ export default function App() {
             {isDark ? "Light" : "Dark"}
           </button>
 
+          <button onClick={saveWorkspaceToCloud} style={buttonStyle(Boolean(user))}>
+            Cloud Save
+          </button>
+
+          <button onClick={loadWorkspaceFromCloud} style={buttonStyle(false)}>
+            Cloud Load
+          </button>
+
           <button onClick={resetWorkspace} style={buttonStyle(false)}>
             Reset
           </button>
@@ -1169,6 +1360,96 @@ export default function App() {
           <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
             Add Symbol
           </button>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Account + Cloud</h3>
+
+          {user ? (
+            <div style={{ fontSize: "10px", lineHeight: "1.5" }}>
+              <div style={{ color: theme.green, fontWeight: 900 }}>Signed in</div>
+              <div style={{ color: theme.muted, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {user.email}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px", marginTop: "6px" }}>
+                <button onClick={saveWorkspaceToCloud} style={buttonStyle(true)}>
+                  Save
+                </button>
+                <button onClick={loadWorkspaceFromCloud} style={buttonStyle(false)}>
+                  Load
+                </button>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                style={{ ...buttonStyle(false), width: "100%", marginTop: "6px" }}
+              >
+                Logout
+              </button>
+
+              <div style={{ color: theme.muted, marginTop: "5px" }}>{cloudStatus}</div>
+            </div>
+          ) : (
+            <div>
+              <input
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="Email"
+                style={{
+                  width: "100%",
+                  padding: "7px",
+                  background: theme.panel2,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.text,
+                  borderRadius: "4px",
+                  marginBottom: "5px",
+                  fontSize: "11px",
+                }}
+              />
+
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Password"
+                style={{
+                  width: "100%",
+                  padding: "7px",
+                  background: theme.panel2,
+                  border: `1px solid ${theme.border}`,
+                  color: theme.text,
+                  borderRadius: "4px",
+                  marginBottom: "5px",
+                  fontSize: "11px",
+                }}
+              />
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5px" }}>
+                <button
+                  onClick={() => {
+                    setAuthMode("login");
+                    handleAuthSubmit("login");
+                  }}
+                  style={buttonStyle(authMode === "login")}
+                >
+                  Login
+                </button>
+
+                <button
+                  onClick={() => {
+                    setAuthMode("signup");
+                    handleAuthSubmit("signup");
+                  }}
+                  style={buttonStyle(authMode === "signup")}
+                >
+                  Sign Up
+                </button>
+              </div>
+
+              <div style={{ color: theme.muted, fontSize: "10px", marginTop: "5px" }}>
+                {authMessage || cloudStatus}
+              </div>
+            </div>
+          )}
 
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Watchlist</h3>
 
@@ -1643,6 +1924,7 @@ export default function App() {
         <span>Hotkeys: Shift+B Buy · Shift+S Sell</span>
         <span>Chart Engine: Timeframe Aggregated</span>
         <span>Phase 3: Replay + Backtesting</span>
+        <span>Cloud: {user ? user.email : "Local"}</span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import Chart from "./components/Chart";
 import { auth, db } from "./firebase";
 import {
@@ -11,6 +12,7 @@ import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
 const FMP_API_KEY = import.meta.env.VITE_FMP_API_KEY;
+const BROKER_API_URL = import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000";
 
 const defaultStocks = [
   { symbol: "NVDA", price: 211.5, change: "+0.00%", volume: "6.25M" },
@@ -133,6 +135,15 @@ export default function App() {
   const [mainReplayData, setMainReplayData] = useState([]);
   const [replayTrades, setReplayTrades] = useState([]);
   const [replayEquity, setReplayEquity] = useState([100000]);
+
+  const [brokerStatus, setBrokerStatus] = useState("Disconnected");
+  const [brokerConnected, setBrokerConnected] = useState(false);
+  const [brokerAccounts, setBrokerAccounts] = useState([]);
+  const [selectedBrokerAccount, setSelectedBrokerAccount] = useState("");
+  const [brokerBalances, setBrokerBalances] = useState(null);
+  const [brokerPositions, setBrokerPositions] = useState([]);
+  const [brokerOrders, setBrokerOrders] = useState([]);
+  const [brokerLoading, setBrokerLoading] = useState(false);
 
   const [level2, setLevel2] = useState([
     { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
@@ -402,6 +413,86 @@ export default function App() {
   }
 
   const replayCandle = mainReplayData[replayIndex] || null;
+
+  const primaryBrokerBalance =
+    brokerBalances?.combinedBalances?.[0] ||
+    brokerBalances?.perCurrencyBalances?.[0] ||
+    null;
+
+  async function checkBrokerStatus() {
+    setBrokerLoading(true);
+
+    try {
+      const response = await axios.get(`${BROKER_API_URL}/api/questrade/status`);
+
+      setBrokerConnected(Boolean(response.data?.connected));
+      setBrokerStatus(response.data?.connected ? "Connected" : "Disconnected");
+    } catch {
+      setBrokerConnected(false);
+      setBrokerStatus("Backend offline");
+    }
+
+    setBrokerLoading(false);
+  }
+
+  async function loadBrokerAccounts() {
+    setBrokerLoading(true);
+
+    try {
+      const response = await axios.get(`${BROKER_API_URL}/api/questrade/accounts`);
+      const accounts = response.data?.accounts || [];
+
+      setBrokerAccounts(accounts);
+
+      if (accounts.length && !selectedBrokerAccount) {
+        setSelectedBrokerAccount(accounts[0].number);
+      }
+
+      setBrokerConnected(true);
+      setBrokerStatus("Connected");
+    } catch {
+      setBrokerConnected(false);
+      setBrokerStatus("Accounts failed");
+    }
+
+    setBrokerLoading(false);
+  }
+
+  async function loadBrokerAccountData(accountNumber = selectedBrokerAccount) {
+    if (!accountNumber) {
+      setBrokerStatus("Select account first");
+      return;
+    }
+
+    setBrokerLoading(true);
+
+    try {
+      const [balancesRes, positionsRes, ordersRes] = await Promise.all([
+        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/balances`),
+        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/positions`),
+        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/orders`),
+      ]);
+
+      setBrokerBalances(balancesRes.data);
+      setBrokerPositions(positionsRes.data?.positions || []);
+      setBrokerOrders(ordersRes.data?.orders || []);
+      setBrokerStatus(`Synced ${new Date().toLocaleTimeString()}`);
+      setBrokerConnected(true);
+    } catch {
+      setBrokerStatus("Sync failed");
+    }
+
+    setBrokerLoading(false);
+  }
+
+  async function refreshBroker() {
+    await checkBrokerStatus();
+    await loadBrokerAccounts();
+
+    if (selectedBrokerAccount) {
+      await loadBrokerAccountData(selectedBrokerAccount);
+    }
+  }
 
   function panelStyle(extra = {}) {
     return {
@@ -735,6 +826,16 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    checkBrokerStatus();
+  }, []);
+
+  useEffect(() => {
+    if (selectedBrokerAccount) {
+      loadBrokerAccountData(selectedBrokerAccount);
+    }
+  }, [selectedBrokerAccount]);
 
   useEffect(() => {
     localStorage.setItem("sb_selected_stock", JSON.stringify(selectedStock));
@@ -1298,6 +1399,9 @@ export default function App() {
           <span style={{ fontSize: "11px", color: theme.muted }}>
             Chart: {mainChartStatus}
           </span>
+          <span style={{ fontSize: "11px", color: brokerConnected ? theme.green : theme.red, fontWeight: 800 }}>
+            Broker: {brokerStatus}
+          </span>
 
           <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={buttonStyle(false)}>
             {isDark ? "Light" : "Dark"}
@@ -1579,7 +1683,117 @@ export default function App() {
             overflowY: "auto",
           })}
         >
-          {panelTitle("Paper Trade + Level 1/2")}
+          {panelTitle("Broker + Paper Trade + Level 1/2")}
+
+          <h3 style={{ marginTop: "0px", fontSize: "13px" }}>Questrade Live Broker</h3>
+
+          <div style={{ fontSize: "11px", lineHeight: "1.6" }}>
+            <div>
+              Status:{" "}
+              <span style={{ color: brokerConnected ? theme.green : theme.red, fontWeight: 900 }}>
+                {brokerStatus}
+              </span>
+            </div>
+            <div>Backend: {BROKER_API_URL}</div>
+            <div>Accounts: {brokerAccounts.length}</div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
+            <button onClick={refreshBroker} style={buttonStyle(brokerConnected)}>
+              {brokerLoading ? "Loading..." : "Connect"}
+            </button>
+            <button onClick={() => loadBrokerAccountData()} style={buttonStyle(false)}>
+              Sync
+            </button>
+          </div>
+
+          {brokerAccounts.length > 0 && (
+            <select
+              value={selectedBrokerAccount}
+              onChange={(e) => setSelectedBrokerAccount(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "7px",
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                borderRadius: "4px",
+                marginTop: "6px",
+                fontSize: "11px",
+              }}
+            >
+              {brokerAccounts.map((account) => (
+                <option key={account.number} value={account.number}>
+                  {account.type} · {account.number} · {account.status}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {primaryBrokerBalance && (
+            <div style={{ marginTop: "6px", fontSize: "10px", lineHeight: "1.55" }}>
+              <div>Currency: {primaryBrokerBalance.currency || "—"}</div>
+              <div>Cash: ${Number(primaryBrokerBalance.cash || 0).toFixed(2)}</div>
+              <div>Market Value: ${Number(primaryBrokerBalance.marketValue || 0).toFixed(2)}</div>
+              <div>Total Equity: ${Number(primaryBrokerBalance.totalEquity || 0).toFixed(2)}</div>
+              <div>Buying Power: ${Number(primaryBrokerBalance.buyingPower || 0).toFixed(2)}</div>
+            </div>
+          )}
+
+          {brokerPositions.length > 0 && (
+            <>
+              <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Live Positions</h3>
+              {brokerPositions.slice(0, 6).map((position, index) => (
+                <div
+                  key={`${position.symbol}-${index}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: "5px",
+                    padding: "4px 0",
+                    borderBottom: `1px solid ${theme.border}`,
+                    fontSize: "10px",
+                  }}
+                >
+                  <span style={{ fontWeight: 900 }}>{position.symbol}</span>
+                  <span>Qty {position.openQuantity}</span>
+                  <span
+                    style={{
+                      color: Number(position.openPnl || 0) >= 0 ? theme.green : theme.red,
+                      textAlign: "right",
+                    }}
+                  >
+                    ${Number(position.openPnl || 0).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {brokerOrders.length > 0 && (
+            <>
+              <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Live Orders</h3>
+              {brokerOrders.slice(0, 5).map((order, index) => (
+                <div
+                  key={`${order.id || index}`}
+                  style={{
+                    padding: "4px 0",
+                    borderBottom: `1px solid ${theme.border}`,
+                    fontSize: "10px",
+                  }}
+                >
+                  <div style={{ fontWeight: 900 }}>
+                    {order.action} {order.symbol}
+                  </div>
+                  <div>
+                    Qty: {order.totalQuantity} · Status: {order.state}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Paper Trading</h3>
 
           <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
             <div>Buying Power: $100,000.00</div>
@@ -1925,6 +2139,7 @@ export default function App() {
         <span>Chart Engine: Timeframe Aggregated</span>
         <span>Phase 3: Replay + Backtesting</span>
         <span>Cloud: {user ? user.email : "Local"}</span>
+        <span>Broker: {brokerStatus}</span>
       </div>
     </div>
   );

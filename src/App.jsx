@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Chart from "./components/Chart";
+import TradingSidebar from "./components/TradingSidebar";
 import { auth, db } from "./firebase";
 import {
   createUserWithEmailAndPassword,
@@ -40,6 +41,18 @@ const smallCapMovers = [
   { symbol: "PTL", price: 4.0, change: "+2.45%", volume: "314.15K" },
 ];
 
+const workspaceViews = [
+  { id: "charts", label: "Charts", icon: "📈" },
+  { id: "scanner", label: "Scanner", icon: "🔎" },
+  { id: "watchlist", label: "Watchlist", icon: "⭐" },
+  { id: "replay", label: "Replay", icon: "▶" },
+  { id: "portfolio", label: "Portfolio", icon: "💼" },
+  { id: "alerts", label: "Alerts", icon: "🔔" },
+  { id: "journal", label: "Journal", icon: "📝" },
+  { id: "broker", label: "Broker", icon: "🏦" },
+  { id: "settings", label: "Settings", icon: "⚙" },
+];
+
 function loadSetting(key, fallback) {
   try {
     const saved = localStorage.getItem(key);
@@ -69,6 +82,9 @@ export default function App() {
   const [authMode, setAuthMode] = useState("login");
   const [authMessage, setAuthMessage] = useState("");
   const [cloudStatus, setCloudStatus] = useState("Local workspace");
+  const [activeWorkspace, setActiveWorkspace] = useState(() =>
+    loadSetting("sb_active_workspace", "charts")
+  );
 
   const [selectedStock, setSelectedStock] = useState(() =>
     loadSetting("sb_selected_stock", "NVDA")
@@ -293,6 +309,7 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      activeWorkspace,
     }),
     [
       selectedStock,
@@ -316,6 +333,7 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      activeWorkspace,
     ]
   );
 
@@ -342,6 +360,7 @@ export default function App() {
     if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
     if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
     if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
+    if (data.activeWorkspace) setActiveWorkspace(data.activeWorkspace);
   }
 
   async function handleAuthSubmit(mode = authMode) {
@@ -700,6 +719,7 @@ export default function App() {
       "sb_realized_pnl",
       "sb_alerts",
       "sb_sync_charts",
+      "sb_active_workspace",
     ].forEach((key) => localStorage.removeItem(key));
 
     setSelectedStock("NVDA");
@@ -715,6 +735,7 @@ export default function App() {
     setOrders([]);
     setPositions({});
     setRealizedPnL(0);
+    setActiveWorkspace("charts");
   }
 
   function placeOrder(side) {
@@ -853,6 +874,7 @@ export default function App() {
     localStorage.setItem("sb_realized_pnl", JSON.stringify(realizedPnL));
     localStorage.setItem("sb_alerts", JSON.stringify(alerts));
     localStorage.setItem("sb_sync_charts", JSON.stringify(syncCharts));
+    localStorage.setItem("sb_active_workspace", JSON.stringify(activeWorkspace));
   }, [
     selectedStock,
     secondarySymbol,
@@ -869,6 +891,7 @@ export default function App() {
     realizedPnL,
     alerts,
     syncCharts,
+    activeWorkspace,
   ]);
 
   useEffect(() => {
@@ -1162,6 +1185,28 @@ export default function App() {
     );
   }
 
+  const showLeftDock =
+    activeWorkspace === "charts" ||
+    activeWorkspace === "scanner" ||
+    activeWorkspace === "watchlist" ||
+    activeWorkspace === "journal" ||
+    activeWorkspace === "settings";
+
+  const showRightDock =
+    activeWorkspace === "charts" ||
+    activeWorkspace === "broker" ||
+    activeWorkspace === "replay" ||
+    activeWorkspace === "portfolio" ||
+    activeWorkspace === "alerts";
+
+  const centerRows =
+    activeWorkspace === "scanner" ||
+    activeWorkspace === "watchlist" ||
+    activeWorkspace === "journal" ||
+    activeWorkspace === "settings"
+      ? "1fr"
+      : "1fr 130px";
+
   function renderChartPanel({
     title,
     symbol,
@@ -1369,8 +1414,20 @@ export default function App() {
         </div>
 
         <span style={{ color: theme.muted, fontSize: "11px" }}>
-          Pro TradingView-Style Workspace
+          Pro Dockable Trading Workspace
         </span>
+
+        <div style={{ display: "flex", gap: "5px", marginLeft: "4px" }}>
+          {workspaceViews.slice(0, 4).map((view) => (
+            <button
+              key={view.id}
+              onClick={() => setActiveWorkspace(view.id)}
+              style={buttonStyle(activeWorkspace === view.id)}
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
 
         <button onClick={() => setLayoutMode("1")} style={buttonStyle(layoutMode === "1")}>
           1 Chart
@@ -1426,21 +1483,79 @@ export default function App() {
           height: "calc(100vh - 68px)",
           display: "grid",
           gridTemplateColumns:
-            layoutMode === "2"
-              ? "240px minmax(1200px, 1fr) 300px"
-              : "240px minmax(1400px, 1fr) 300px",
+  layoutMode === "2"
+    ? `64px ${showLeftDock ? "250px" : "0px"} minmax(0, 1fr) ${showRightDock ? "320px" : "0px"}`
+    : `64px ${showLeftDock ? "250px" : "0px"} minmax(0, 1fr) ${showRightDock ? "320px" : "0px"}`,
           gap: "6px",
           padding: "6px",
           overflow: "hidden",
         }}
       >
+        <TradingSidebar
+          activeWorkspace={activeWorkspace}
+          setActiveWorkspace={setActiveWorkspace}
+          brokerConnected={brokerConnected}
+          brokerStatus={brokerStatus}
+        />
+
         <div
           style={panelStyle({
             height: "100%",
             overflowY: "auto",
+            display: showLeftDock ? "block" : "none",
           })}
         >
-          {panelTitle("Watchlist + Scanner")}
+          {panelTitle(
+            activeWorkspace === "scanner"
+              ? "Scanner Command Center"
+              : activeWorkspace === "watchlist"
+              ? "Watchlist"
+              : activeWorkspace === "journal"
+              ? "Trading Journal"
+              : activeWorkspace === "settings"
+              ? "Workspace Settings"
+              : "Watchlist + Scanner"
+          )}
+
+          {activeWorkspace === "journal" && (
+            <div
+              style={{
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                borderRadius: "6px",
+                padding: "8px",
+                fontSize: "11px",
+                lineHeight: "1.6",
+                marginBottom: "10px",
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: "4px" }}>Session Notes</div>
+              <div style={{ color: theme.muted }}>
+                Journal module foundation is ready. Next upgrade can add trade notes,
+                emotional tags, screenshots, and cloud-saved analytics.
+              </div>
+            </div>
+          )}
+
+          {activeWorkspace === "settings" && (
+            <div
+              style={{
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                borderRadius: "6px",
+                padding: "8px",
+                fontSize: "11px",
+                lineHeight: "1.6",
+                marginBottom: "10px",
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: "4px" }}>Workspace Controls</div>
+              <div>Active View: {activeWorkspace}</div>
+              <div>Layout: {layoutMode} chart</div>
+              <div>Sync: {syncCharts ? "On" : "Off"}</div>
+              <div>Cloud: {user ? "Signed In" : "Local"}</div>
+            </div>
+          )}
 
           <input
             value={searchSymbol}
@@ -1599,7 +1714,7 @@ export default function App() {
         <div
           style={{
             display: "grid",
-            gridTemplateRows: "1fr 130px",
+            gridTemplateRows: centerRows,
             gap: "6px",
             height: "100%",
             minHeight: 0,
@@ -1640,6 +1755,7 @@ export default function App() {
               })}
           </div>
 
+          {(activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") && (
           <div
             style={panelStyle({
               height: "130px",
@@ -1675,12 +1791,14 @@ export default function App() {
               ))
             )}
           </div>
+          )}
         </div>
 
         <div
           style={panelStyle({
             height: "100%",
             overflowY: "auto",
+            display: showRightDock ? "block" : "none",
           })}
         >
           {panelTitle("Broker + Paper Trade + Level 1/2")}
@@ -2140,6 +2258,7 @@ export default function App() {
         <span>Phase 3: Replay + Backtesting</span>
         <span>Cloud: {user ? user.email : "Local"}</span>
         <span>Broker: {brokerStatus}</span>
+        <span>Workspace: {activeWorkspace}</span>
       </div>
     </div>
   );

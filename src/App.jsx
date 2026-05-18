@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { auth, db } from "./firebase";
 import {
   createUserWithEmailAndPassword,
@@ -106,6 +107,12 @@ export default function App() {
     loadSetting("sb_layout_mode", "2")
   );
   const [quantity, setQuantity] = useState(10);
+  const [orderSide, setOrderSide] = useState("BUY");
+  const [orderType, setOrderType] = useState("MARKET");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
+  const [takeProfit, setTakeProfit] = useState("");
+  const [orderMessage, setOrderMessage] = useState("");
   const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
   const [positions, setPositions] = useState(() =>
     loadSetting("sb_positions", {})
@@ -186,6 +193,24 @@ export default function App() {
     red: "#ef5350",
   };
 
+  const resizeHandleStyle = {
+    background: theme.border,
+    borderRadius: "10px",
+    flexShrink: 0,
+  };
+
+  const verticalResizeHandleStyle = {
+    width: "5px",
+    cursor: "col-resize",
+    ...resizeHandleStyle,
+  };
+
+  const horizontalResizeHandleStyle = {
+    height: "5px",
+    cursor: "row-resize",
+    ...resizeHandleStyle,
+  };
+
   const allSymbols = useMemo(
     () => [
       ...liveStocks,
@@ -227,6 +252,26 @@ export default function App() {
   const estimatedValue = (
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
   ).toFixed(2);
+
+  const orderEntryPrice =
+    orderType === "LIMIT" && Number(limitPrice) > 0
+      ? Number(limitPrice)
+      : Number(selectedStockData?.price || 0);
+
+  const orderRisk =
+    Number(stopLoss) > 0 && orderEntryPrice > 0
+      ? Math.abs(orderEntryPrice - Number(stopLoss)) * Number(quantity || 0)
+      : 0;
+
+  const orderReward =
+    Number(takeProfit) > 0 && orderEntryPrice > 0
+      ? Math.abs(Number(takeProfit) - orderEntryPrice) * Number(quantity || 0)
+      : 0;
+
+  const riskReward =
+    orderRisk > 0 && orderReward > 0
+      ? (orderReward / orderRisk).toFixed(2)
+      : "—";
 
   const totalUnrealizedPnL = Object.entries(positions).reduce(
     (total, [symbol, pos]) => {
@@ -800,6 +845,52 @@ export default function App() {
     };
 
     setOrders((prev) => [order, ...prev.slice(0, 20)]);
+  }
+
+  function submitOrderTicket() {
+    setOrderMessage("");
+
+    const qty = Number(quantity);
+    const currentPrice = Number(selectedStockData?.price || 0);
+    const entryPrice =
+      orderType === "LIMIT" && Number(limitPrice) > 0
+        ? Number(limitPrice)
+        : currentPrice;
+
+    if (!qty || qty <= 0) {
+      setOrderMessage("Enter a valid quantity.");
+      return;
+    }
+
+    if (!entryPrice || entryPrice <= 0) {
+      setOrderMessage("Enter a valid entry price.");
+      return;
+    }
+
+    if (orderType === "LIMIT" && !Number(limitPrice)) {
+      setOrderMessage("Limit orders need a limit price.");
+      return;
+    }
+
+    const simulatedOrder = {
+      id: Date.now(),
+      side: orderSide,
+      symbol: selectedStock,
+      quantity: qty,
+      price: entryPrice.toFixed(2),
+      value: (entryPrice * qty).toFixed(2),
+      orderType,
+      stopLoss: Number(stopLoss) > 0 ? Number(stopLoss).toFixed(2) : null,
+      takeProfit: Number(takeProfit) > 0 ? Number(takeProfit).toFixed(2) : null,
+      riskReward,
+      time: new Date().toLocaleTimeString(),
+      status: "Paper Filled",
+      realizedPnL: null,
+    };
+
+    placeOrder(orderSide);
+    setOrders((prev) => [simulatedOrder, ...prev.slice(0, 20)]);
+    setOrderMessage(`${orderSide} ${qty} ${selectedStock} submitted as paper ${orderType.toLowerCase()} order.`);
   }
 
   function toggleFullscreen() {
@@ -1478,31 +1569,33 @@ export default function App() {
         </div>
       </div>
 
-      <div
+      <PanelGroup
+        direction="horizontal"
         style={{
           height: "calc(100vh - 68px)",
-          display: "grid",
-          gridTemplateColumns:
-  layoutMode === "2"
-    ? `64px ${showLeftDock ? "250px" : "0px"} minmax(0, 1fr) ${showRightDock ? "320px" : "0px"}`
-    : `64px ${showLeftDock ? "250px" : "0px"} minmax(0, 1fr) ${showRightDock ? "320px" : "0px"}`,
-          gap: "6px",
           padding: "6px",
+          gap: "6px",
           overflow: "hidden",
         }}
       >
-        <TradingSidebar
+        <Panel defaultSize={4} minSize={4} maxSize={6}>
+          <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
           brokerConnected={brokerConnected}
           brokerStatus={brokerStatus}
         />
+        </Panel>
 
-        <div
+        <PanelResizeHandle style={verticalResizeHandleStyle} />
+
+        {showLeftDock && (
+          <>
+            <Panel defaultSize={18} minSize={12} maxSize={32}>
+              <div
           style={panelStyle({
             height: "100%",
             overflowY: "auto",
-            display: showLeftDock ? "block" : "none",
           })}
         >
           {panelTitle(
@@ -1710,8 +1803,14 @@ export default function App() {
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Small Cap Movers</h3>
           <ScannerTable rows={smallCapMovers} />
         </div>
+            </Panel>
 
-        <div
+            <PanelResizeHandle style={verticalResizeHandleStyle} />
+          </>
+        )}
+
+        <Panel defaultSize={showRightDock ? 58 : 78} minSize={30}>
+          <div
           style={{
             display: "grid",
             gridTemplateRows: centerRows,
@@ -1721,39 +1820,40 @@ export default function App() {
             overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: layoutMode === "2" ? "minmax(0, 1fr) minmax(0, 1fr)" : "1fr",
-              gap: "6px",
-              minHeight: 0,
-              overflow: "hidden",
-            }}
-          >
-            {renderChartPanel({
-              title: "Main Chart",
-              symbol: selectedStock,
-              setSymbol: selectMainSymbol,
-              tf: timeframe,
-              setTf: setMainTimeframe,
-              livePrice: selectedStockData?.price,
-              chartStatus: mainChartStatus,
-              onStatusChange: setMainChartStatus,
-            })}
-
-            {layoutMode === "2" &&
-              renderChartPanel({
-                title: "Secondary Chart",
-                symbol: secondarySymbol,
-                setSymbol: setSecondarySymbol,
-                tf: secondaryTimeframe,
-                setTf: setSecondaryTimeframe,
-                livePrice: secondaryStockData?.price,
-                secondary: true,
-                chartStatus: secondaryChartStatus,
-                onStatusChange: setSecondaryChartStatus,
+          <PanelGroup direction="horizontal" style={{ minHeight: 0 }}>
+            <Panel defaultSize={layoutMode === "2" ? 50 : 100} minSize={30}>
+              {renderChartPanel({
+                title: "Main Chart",
+                symbol: selectedStock,
+                setSymbol: selectMainSymbol,
+                tf: timeframe,
+                setTf: setMainTimeframe,
+                livePrice: selectedStockData?.price,
+                chartStatus: mainChartStatus,
+                onStatusChange: setMainChartStatus,
               })}
-          </div>
+            </Panel>
+
+            {layoutMode === "2" && (
+              <>
+                <PanelResizeHandle style={verticalResizeHandleStyle} />
+
+                <Panel defaultSize={50} minSize={30}>
+                  {renderChartPanel({
+                    title: "Secondary Chart",
+                    symbol: secondarySymbol,
+                    setSymbol: setSecondarySymbol,
+                    tf: secondaryTimeframe,
+                    setTf: setSecondaryTimeframe,
+                    livePrice: secondaryStockData?.price,
+                    secondary: true,
+                    chartStatus: secondaryChartStatus,
+                    onStatusChange: setSecondaryChartStatus,
+                  })}
+                </Panel>
+              </>
+            )}
+          </PanelGroup>
 
           {(activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") && (
           <div
@@ -1793,12 +1893,17 @@ export default function App() {
           </div>
           )}
         </div>
+        </Panel>
 
-        <div
+        {showRightDock && (
+          <>
+            <PanelResizeHandle style={verticalResizeHandleStyle} />
+
+            <Panel defaultSize={20} minSize={15} maxSize={35}>
+              <div
           style={panelStyle({
             height: "100%",
             overflowY: "auto",
-            display: showRightDock ? "block" : "none",
           })}
         >
           {panelTitle("Broker + Paper Trade + Level 1/2")}
@@ -1911,7 +2016,193 @@ export default function App() {
             </>
           )}
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Paper Trading</h3>
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Professional Order Ticket</h3>
+
+          <div
+            style={{
+              background: theme.panel2,
+              border: `1px solid ${theme.border}`,
+              borderRadius: "8px",
+              padding: "9px",
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              <button
+                onClick={() => setOrderSide("BUY")}
+                style={{
+                  ...buttonStyle(orderSide === "BUY"),
+                  background: orderSide === "BUY" ? theme.green : theme.panel,
+                  border: orderSide === "BUY" ? "none" : `1px solid ${theme.border}`,
+                }}
+              >
+                BUY
+              </button>
+
+              <button
+                onClick={() => setOrderSide("SELL")}
+                style={{
+                  ...buttonStyle(orderSide === "SELL"),
+                  background: orderSide === "SELL" ? theme.red : theme.panel,
+                  border: orderSide === "SELL" ? "none" : `1px solid ${theme.border}`,
+                }}
+              >
+                SELL
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              <button
+                onClick={() => setOrderType("MARKET")}
+                style={buttonStyle(orderType === "MARKET")}
+              >
+                Market
+              </button>
+
+              <button
+                onClick={() => setOrderType("LIMIT")}
+                style={buttonStyle(orderType === "LIMIT")}
+              >
+                Limit
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              <label style={{ fontSize: "10px", color: theme.muted }}>
+                Quantity
+                <input
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    background: theme.panel,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    borderRadius: "5px",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                  }}
+                />
+              </label>
+
+              <label style={{ fontSize: "10px", color: theme.muted }}>
+                Limit Price
+                <input
+                  type="number"
+                  value={limitPrice}
+                  onChange={(e) => setLimitPrice(e.target.value)}
+                  disabled={orderType !== "LIMIT"}
+                  placeholder={String(selectedStockData?.price || "")}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    background: orderType === "LIMIT" ? theme.panel : "rgba(127,127,127,0.10)",
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    borderRadius: "5px",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                    opacity: orderType === "LIMIT" ? 1 : 0.55,
+                  }}
+                />
+              </label>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+              <label style={{ fontSize: "10px", color: theme.muted }}>
+                Stop Loss
+                <input
+                  type="number"
+                  value={stopLoss}
+                  onChange={(e) => setStopLoss(e.target.value)}
+                  placeholder="Optional"
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    background: theme.panel,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    borderRadius: "5px",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                  }}
+                />
+              </label>
+
+              <label style={{ fontSize: "10px", color: theme.muted }}>
+                Take Profit
+                <input
+                  type="number"
+                  value={takeProfit}
+                  onChange={(e) => setTakeProfit(e.target.value)}
+                  placeholder="Optional"
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    background: theme.panel,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.text,
+                    borderRadius: "5px",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                  }}
+                />
+              </label>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "6px",
+                fontSize: "10px",
+                lineHeight: "1.5",
+                color: theme.muted,
+              }}
+            >
+              <div>Symbol: <b style={{ color: theme.text }}>{selectedStock}</b></div>
+              <div>Entry: <b style={{ color: theme.text }}>${Number(orderEntryPrice || 0).toFixed(2)}</b></div>
+              <div>Est. Value: <b style={{ color: theme.text }}>${estimatedValue}</b></div>
+              <div>R:R: <b style={{ color: theme.blue }}>{riskReward}</b></div>
+              <div>Risk: <b style={{ color: orderRisk > 0 ? theme.red : theme.muted }}>${orderRisk.toFixed(2)}</b></div>
+              <div>Reward: <b style={{ color: orderReward > 0 ? theme.green : theme.muted }}>${orderReward.toFixed(2)}</b></div>
+            </div>
+
+            <button
+              onClick={submitOrderTicket}
+              style={{
+                ...buttonStyle(true),
+                width: "100%",
+                height: "34px",
+                background: orderSide === "BUY" ? theme.green : theme.red,
+                border: "none",
+                fontSize: "12px",
+              }}
+            >
+              Submit Paper {orderSide}
+            </button>
+
+            {orderMessage && (
+              <div
+                style={{
+                  fontSize: "10px",
+                  color: theme.blue,
+                  lineHeight: "1.4",
+                }}
+              >
+                {orderMessage}
+              </div>
+            )}
+
+            <div style={{ fontSize: "9px", color: theme.muted, lineHeight: "1.4" }}>
+              Paper execution only. Real broker routing can be connected later through the Questrade order API.
+            </div>
+          </div>
+
+          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Paper Account Summary</h3>
 
           <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
             <div>Buying Power: $100,000.00</div>
@@ -1930,37 +2221,6 @@ export default function App() {
                 ${Number(totalUnrealizedPnL).toFixed(2)}
               </span>
             </div>
-          </div>
-
-          <input
-            type="number"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              background: theme.panel2,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              borderRadius: "4px",
-              marginTop: "8px",
-              marginBottom: "6px",
-              fontSize: "11px",
-            }}
-          />
-
-          <div style={{ marginBottom: "6px", fontSize: "11px" }}>
-            Estimated: ${estimatedValue}
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-            <button onClick={() => placeOrder("BUY")} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
-              BUY
-            </button>
-
-            <button onClick={() => placeOrder("SELL")} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
-              SELL
-            </button>
           </div>
 
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Replay + Backtest</h3>
@@ -2232,7 +2492,10 @@ export default function App() {
             ))
           )}
         </div>
-      </div>
+            </Panel>
+          </>
+        )}
+      </PanelGroup>
 
       <div
         style={{

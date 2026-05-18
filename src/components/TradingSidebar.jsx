@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
-export default function TradingSidebar({
+export default function Tradingsidebar({
   activeWorkspace,
   setActiveWorkspace,
   brokerConnected,

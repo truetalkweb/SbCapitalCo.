@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import Chart from "./components/Chart";
-import TradingSidebar from "./components/TradingSidebar";
+import TradingSidebar from "./components/tradingsidebar";
 import { auth, db } from "./firebase";
 import {
   createUserWithEmailAndPassword,

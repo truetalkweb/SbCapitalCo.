@@ -1,7 +1,11 @@
+import ProfessionalScanner from "./components/ProfessionalScanner";
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import TickerTape from "./components/TickerTape";
 import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
+import WorkspaceGrid from "./components/WorkspaceGrid";
+import { marketDataService } from "./services/marketDataService";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { auth, db } from "./firebase";
 import {
@@ -63,6 +67,18 @@ function loadSetting(key, fallback) {
   }
 }
 
+
+function formatQuoteVolume(value, fallback = "—") {
+  const volume = Number(value || 0);
+
+  if (!volume) return fallback;
+  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
+  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
+  if (volume >= 1_000) return `${(volume / 1_000).toFixed(2)}K`;
+
+  return String(Math.round(volume));
+}
+
 function formatFmpStocks(data) {
   if (!Array.isArray(data)) return [];
 
@@ -97,6 +113,7 @@ export default function App() {
   const [liveStocks, setLiveStocks] = useState(() =>
     loadSetting("sb_watchlist", defaultStocks)
   );
+  const [liveQuotes, setLiveQuotes] = useState({});
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
   );
@@ -105,6 +122,9 @@ export default function App() {
   );
   const [layoutMode, setLayoutMode] = useState(() =>
     loadSetting("sb_layout_mode", "2")
+  );
+  const [gridMode, setGridMode] = useState(() =>
+    loadSetting("sb_grid_mode", "2")
   );
   const [quantity, setQuantity] = useState(10);
   const [orderSide, setOrderSide] = useState("BUY");
@@ -150,6 +170,7 @@ export default function App() {
 
   const [mainChartStatus, setMainChartStatus] = useState("LOADING");
   const [secondaryChartStatus, setSecondaryChartStatus] = useState("LOADING");
+  const [wsStatus, setWsStatus] = useState("DISCONNECTED");
 
   const [replayMode, setReplayMode] = useState(false);
   const [replayPlaying, setReplayPlaying] = useState(false);
@@ -175,8 +196,6 @@ export default function App() {
     { marketMaker: "IEX", bid: 211.3, ask: 211.7, size: 620 },
   ]);
 
-  const socketRef = useRef(null);
-  const subscribedSymbolsRef = useRef(new Set());
   const chartAreaRef = useRef(null);
 
   const isDark = themeMode === "dark";
@@ -213,6 +232,7 @@ export default function App() {
 
   const allSymbols = useMemo(
     () => [
+      ...Object.values(liveQuotes),
       ...liveStocks,
       ...fmpGainers,
       ...fmpLosers,
@@ -221,7 +241,7 @@ export default function App() {
       ...forexStocks,
       ...smallCapMovers,
     ],
-    [liveStocks, fmpGainers, fmpLosers, fmpActive]
+    [liveQuotes, liveStocks, fmpGainers, fmpLosers, fmpActive]
   );
 
   const selectedStockData =
@@ -339,6 +359,8 @@ export default function App() {
       timeframe,
       secondaryTimeframe,
       layoutMode,
+      gridMode,
+      gridMode,
       quantity,
       orders,
       positions,
@@ -390,6 +412,7 @@ export default function App() {
     if (data.timeframe) setTimeframe(data.timeframe);
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
     if (data.layoutMode) setLayoutMode(data.layoutMode);
+    if (data.gridMode) setGridMode(data.gridMode);
     if (data.quantity) setQuantity(data.quantity);
     if (Array.isArray(data.orders)) setOrders(data.orders);
     if (data.positions) setPositions(data.positions);
@@ -617,14 +640,6 @@ export default function App() {
     fontWeight: 900,
   });
 
-  function subscribeToSymbol(symbol) {
-    if (!socketRef.current) return;
-    if (subscribedSymbolsRef.current.has(symbol)) return;
-
-    socketRef.current.send(JSON.stringify({ type: "subscribe", symbol }));
-    subscribedSymbolsRef.current.add(symbol);
-  }
-
   function addSymbol() {
     const cleanSymbol = searchSymbol.trim().toUpperCase();
     if (!cleanSymbol) return;
@@ -640,7 +655,6 @@ export default function App() {
 
     setSelectedStock(cleanSymbol);
     if (syncCharts) setSecondarySymbol(cleanSymbol);
-    subscribeToSymbol(cleanSymbol);
     setSearchSymbol("");
   }
 
@@ -772,6 +786,7 @@ export default function App() {
     setTimeframe("15m");
     setSecondaryTimeframe("5m");
     setLayoutMode("2");
+    setGridMode("2");
     setThemeMode("dark");
     setShowEMA9(true);
     setShowEMA20(true);
@@ -913,6 +928,49 @@ export default function App() {
     link.click();
   }
 
+  function updateLiveQuote(symbol, price, extra = {}) {
+    const cleanSymbol = symbol?.trim?.().toUpperCase?.();
+    const numericPrice = Number(price);
+
+    if (!cleanSymbol || !numericPrice || Number.isNaN(numericPrice)) return;
+
+    setLiveQuotes((prev) => {
+      const previous = prev[cleanSymbol];
+      const oldPrice = Number(previous?.price || numericPrice);
+      const changePercent =
+        oldPrice > 0 ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2) : "0.00";
+
+      return {
+        ...prev,
+        [cleanSymbol]: {
+          symbol: cleanSymbol,
+          price: numericPrice.toFixed(2),
+          change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
+          volume: extra.volume || previous?.volume || "LIVE",
+          lastUpdated: Date.now(),
+          source: extra.source || previous?.source || "HYBRID",
+        },
+      };
+    });
+
+    setLiveStocks((prev) =>
+      prev.map((stock) => {
+        if (stock.symbol !== cleanSymbol) return stock;
+
+        const oldPrice = Number(stock.price || numericPrice);
+        const changePercent =
+          oldPrice > 0 ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2) : "0.00";
+
+        return {
+          ...stock,
+          price: numericPrice.toFixed(2),
+          change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
+          volume: extra.volume || stock.volume,
+        };
+      })
+    );
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -955,6 +1013,7 @@ export default function App() {
     localStorage.setItem("sb_timeframe", JSON.stringify(timeframe));
     localStorage.setItem("sb_secondary_timeframe", JSON.stringify(secondaryTimeframe));
     localStorage.setItem("sb_layout_mode", JSON.stringify(layoutMode));
+    localStorage.setItem("sb_grid_mode", JSON.stringify(gridMode));
     localStorage.setItem("sb_theme_mode", JSON.stringify(themeMode));
     localStorage.setItem("sb_show_ema9", JSON.stringify(showEMA9));
     localStorage.setItem("sb_show_ema20", JSON.stringify(showEMA20));
@@ -972,6 +1031,7 @@ export default function App() {
     timeframe,
     secondaryTimeframe,
     layoutMode,
+    gridMode,
     themeMode,
     showEMA9,
     showEMA20,
@@ -1008,6 +1068,7 @@ export default function App() {
       if (event.shiftKey && event.key === "2") {
         event.preventDefault();
         setLayoutMode("2");
+    setGridMode("2");
       }
 
       if (event.key === "Escape") {
@@ -1093,45 +1154,99 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const symbolsToTrack = [
+      selectedStock,
+      secondarySymbol,
+      ...liveStocks.map((stock) => stock.symbol),
+    ]
+      .filter(Boolean)
+      .map((symbol) => symbol.trim().toUpperCase());
+
+    const uniqueSymbols = [...new Set(symbolsToTrack)];
+
+    const unsubscribers = uniqueSymbols.map((symbol) =>
+      marketDataService.subscribe(symbol, (trade) => {
+        updateLiveQuote(trade.s, trade.p, {
+          volume: trade.v ? formatQuoteVolume(trade.v, "LIVE") : "LIVE",
+          source: "WS",
+        });
+      })
+    );
+
+    const removeStatusListener = marketDataService.onStatus((status) => {
+      setWsStatus(status);
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      removeStatusListener();
+    };
+  }, [selectedStock, secondarySymbol, liveStocks.map((stock) => stock.symbol).join("|")]);
+
+  useEffect(() => {
     if (!FINNHUB_API_KEY) return;
 
-    const socket = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_API_KEY}`);
-    socketRef.current = socket;
+    let cancelled = false;
 
-    socket.onopen = () => {
-      defaultStocks.forEach((stock) => subscribeToSymbol(stock.symbol));
-    };
+    const pollLiveQuotes = async () => {
+      const symbolsToTrack = [
+        selectedStock,
+        secondarySymbol,
+        ...liveStocks.map((stock) => stock.symbol),
+      ]
+        .filter(Boolean)
+        .map((symbol) => symbol.trim().toUpperCase());
 
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
+      const uniqueSymbols = [...new Set(symbolsToTrack)].slice(0, 12);
 
-      if (message.type === "trade" && message.data) {
-        message.data.forEach((trade) => {
-          setLiveStocks((prev) =>
-            prev.map((stock) => {
-              if (stock.symbol !== trade.s) return stock;
+      await Promise.allSettled(
+        uniqueSymbols.map(async (symbol) => {
+          try {
+            const response = await fetch(
+              `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`
+            );
 
-              const oldPrice = Number(stock.price);
-              const newPrice = Number(trade.p);
+            const quote = await response.json();
+            const price = Number(quote.c || 0);
 
+            if (!cancelled && price > 0) {
+              const previousClose = Number(quote.pc || price);
               const changePercent =
-                oldPrice > 0
-                  ? (((newPrice - oldPrice) / oldPrice) * 100).toFixed(2)
-                  : "0.00";
+                previousClose > 0 ? (((price - previousClose) / previousClose) * 100).toFixed(2) : "0.00";
 
-              return {
-                ...stock,
-                price: newPrice.toFixed(2),
-                change: `${changePercent >= 0 ? "+" : ""}${changePercent}%`,
-              };
-            })
-          );
-        });
-      }
+              updateLiveQuote(symbol, price, {
+                volume: "QUOTE",
+                source: "REST",
+              });
+
+              setLiveQuotes((prev) => ({
+                ...prev,
+                [symbol]: {
+                  ...(prev[symbol] || { symbol }),
+                  symbol,
+                  price: price.toFixed(2),
+                  change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
+                  volume: prev[symbol]?.volume || "QUOTE",
+                  lastUpdated: Date.now(),
+                  source: "REST",
+                },
+              }));
+            }
+          } catch {
+            // Keep websocket/simulated values if REST quote fails.
+          }
+        })
+      );
     };
 
-    return () => socket.close();
-  }, []);
+    pollLiveQuotes();
+    const interval = setInterval(pollLiveQuotes, 3000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [selectedStock, secondarySymbol, liveStocks.map((stock) => stock.symbol).join("|")]);
 
   useEffect(() => {
     async function fetchNews() {
@@ -1465,6 +1580,10 @@ export default function App() {
             symbol={symbol}
             timeframe={tf}
             livePrice={Number(livePrice || 100)}
+            livePulse={
+              allSymbols.find((item) => item.symbol === symbol)?.lastUpdated ||
+              Date.now()
+            }
             showEMA9={showEMA9}
             showEMA20={showEMA20}
             onStatusChange={onStatusChange}
@@ -1528,6 +1647,14 @@ export default function App() {
           2 Charts
         </button>
 
+        <button onClick={() => setGridMode("2")} style={buttonStyle(gridMode === "2")}>
+          Grid 2
+        </button>
+
+        <button onClick={() => setGridMode("4")} style={buttonStyle(gridMode === "4")}>
+          Grid 4
+        </button>
+
         <button onClick={() => setSyncCharts(!syncCharts)} style={buttonStyle(syncCharts)}>
           Sync {syncCharts ? "On" : "Off"}
         </button>
@@ -1542,7 +1669,21 @@ export default function App() {
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "7px" }}>
           <span style={{ fontSize: "11px" }}>
-            Data: <span style={{ color: theme.green, fontWeight: 800 }}>Finnhub + FMP</span>
+            Data: <span style={{ color: theme.green, fontWeight: 800 }}>Hybrid Live Feed</span>
+          </span>
+          <span
+            style={{
+              fontSize: "11px",
+              color:
+                wsStatus === "LIVE"
+                  ? theme.green
+                  : wsStatus === "CONNECTING" || wsStatus === "RECONNECTING"
+                  ? theme.blue
+                  : theme.red,
+              fontWeight: 900,
+            }}
+          >
+            WS: {wsStatus}
           </span>
           <span style={{ fontSize: "11px", color: theme.muted }}>
             Chart: {mainChartStatus}
@@ -1569,10 +1710,15 @@ export default function App() {
         </div>
       </div>
 
+<TickerTape
+  theme={theme}
+  stocks={allSymbols.slice(0, 20)}
+  onPick={selectMainSymbol}
+/>
       <PanelGroup
         direction="horizontal"
         style={{
-          height: "calc(100vh - 68px)",
+          height: "calc(100vh - 94px)",
           padding: "6px",
           gap: "6px",
           overflow: "hidden",
@@ -1786,19 +1932,13 @@ export default function App() {
             Scanner {scannerLoading ? "Loading..." : ""}
           </h3>
 
-          <div style={{ display: "flex", gap: "5px", marginBottom: "6px", flexWrap: "wrap" }}>
-            {["Gainers", "Losers", "Active", "Crypto", "Forex"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setScannerTab(tab)}
-                style={buttonStyle(scannerTab === tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          <ScannerTable rows={scannerStocks} />
+          <ProfessionalScanner
+  theme={theme}
+  scannerTab={scannerTab}
+  setScannerTab={setScannerTab}
+  scannerStocks={scannerStocks}
+  selectMainSymbol={selectMainSymbol}
+/>
 
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Small Cap Movers</h3>
           <ScannerTable rows={smallCapMovers} />
@@ -1820,40 +1960,24 @@ export default function App() {
             overflow: "hidden",
           }}
         >
-          <PanelGroup direction="horizontal" style={{ minHeight: 0 }}>
-            <Panel defaultSize={layoutMode === "2" ? 50 : 100} minSize={30}>
-              {renderChartPanel({
-                title: "Main Chart",
-                symbol: selectedStock,
-                setSymbol: selectMainSymbol,
-                tf: timeframe,
-                setTf: setMainTimeframe,
-                livePrice: selectedStockData?.price,
-                chartStatus: mainChartStatus,
-                onStatusChange: setMainChartStatus,
-              })}
-            </Panel>
-
-            {layoutMode === "2" && (
-              <>
-                <PanelResizeHandle style={verticalResizeHandleStyle} />
-
-                <Panel defaultSize={50} minSize={30}>
-                  {renderChartPanel({
-                    title: "Secondary Chart",
-                    symbol: secondarySymbol,
-                    setSymbol: setSecondarySymbol,
-                    tf: secondaryTimeframe,
-                    setTf: setSecondaryTimeframe,
-                    livePrice: secondaryStockData?.price,
-                    secondary: true,
-                    chartStatus: secondaryChartStatus,
-                    onStatusChange: setSecondaryChartStatus,
-                  })}
-                </Panel>
-              </>
-            )}
-          </PanelGroup>
+          <WorkspaceGrid
+            theme={theme}
+            gridMode={gridMode}
+            renderChartPanel={renderChartPanel}
+            selectedStock={selectedStock}
+            secondarySymbol={secondarySymbol}
+            setSecondarySymbol={setSecondarySymbol}
+            timeframe={timeframe}
+            secondaryTimeframe={secondaryTimeframe}
+            setSecondaryTimeframe={setSecondaryTimeframe}
+            selectedStockData={selectedStockData}
+            secondaryStockData={secondaryStockData}
+            mainChartStatus={mainChartStatus}
+            secondaryChartStatus={secondaryChartStatus}
+            setMainChartStatus={setMainChartStatus}
+            setSecondaryChartStatus={setSecondaryChartStatus}
+            syncCharts={syncCharts}
+          />
 
           {(activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") && (
           <div

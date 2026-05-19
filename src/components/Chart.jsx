@@ -112,6 +112,7 @@ function Chart({
   symbol,
   timeframe,
   livePrice,
+  livePulse = null,
   showEMA9 = true,
   showEMA20 = true,
   onStatusChange,
@@ -132,6 +133,11 @@ function Chart({
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
   const statusRef = useRef("LOADING");
+  const animationFrameRef = useRef(null);
+  const displayPriceRef = useRef(null);
+  const targetPriceRef = useRef(null);
+  const lastAppliedPriceRef = useRef(null);
+  const lastAppliedTimeRef = useRef(0);
 
   function setStatus(nextStatus) {
     statusRef.current = nextStatus;
@@ -195,7 +201,7 @@ function Chart({
     }
   }
 
-  function applyLivePrice(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+  function updateCurrentCandle(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
@@ -210,20 +216,22 @@ function Chart({
         high: Number(Math.max(last.high, price).toFixed(2)),
         low: Number(Math.min(last.low, price).toFixed(2)),
         close: Number(price.toFixed(2)),
-        volume: Number(last.volume || 0) + Math.floor(Math.random() * 8000 + 1000),
+        volume: Number(last.volume || 0) + Math.floor(Math.random() * 900 + 150),
       };
 
       candlesRef.current = candlesRef.current.map((candle) =>
         candle.time === currentBucket ? updated : candle
       );
     } else if (currentBucket > last.time) {
+      const open = Number(last.close.toFixed(2));
+
       updated = {
         time: currentBucket,
-        open: Number(last.close.toFixed(2)),
-        high: Number(price.toFixed(2)),
-        low: Number(price.toFixed(2)),
+        open,
+        high: Number(Math.max(open, price).toFixed(2)),
+        low: Number(Math.min(open, price).toFixed(2)),
         close: Number(price.toFixed(2)),
-        volume: Math.floor(Math.random() * 300000) + 50000,
+        volume: Math.floor(Math.random() * 45000) + 8000,
       };
 
       candlesRef.current = [...candlesRef.current, updated].slice(-350);
@@ -232,6 +240,8 @@ function Chart({
     }
 
     lastCandleRef.current = updated;
+    lastAppliedPriceRef.current = price;
+    lastAppliedTimeRef.current = Date.now();
 
     if (!replayMode) {
       candleSeriesRef.current.update(updated);
@@ -253,6 +263,104 @@ function Chart({
     if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED") {
       setStatus("LIVE");
     }
+  }
+
+  function rebaseLatestCandle(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
+
+    const price = Number(priceValue);
+    const currentBucket = bucketTime(timestamp, timeframe);
+    const previous = lastCandleRef.current;
+    const spread = Math.max(price * 0.0012, 0.03);
+
+    const updated = {
+      time: currentBucket >= previous.time ? currentBucket : previous.time,
+      open: Number((price - spread * 0.35).toFixed(2)),
+      high: Number((price + spread).toFixed(2)),
+      low: Number((price - spread).toFixed(2)),
+      close: Number(price.toFixed(2)),
+      volume: Math.max(Number(previous.volume || 0), Math.floor(Math.random() * 65000) + 15000),
+    };
+
+    candlesRef.current = candlesRef.current
+      .filter((candle) => candle.time !== updated.time)
+      .concat(updated)
+      .sort((a, b) => a.time - b.time)
+      .slice(-350);
+
+    lastCandleRef.current = updated;
+    displayPriceRef.current = price;
+    targetPriceRef.current = price;
+    lastAppliedPriceRef.current = price;
+    lastAppliedTimeRef.current = Date.now();
+
+    if (!replayMode) {
+      candleSeriesRef.current.update(updated);
+      updateVolume(candlesRef.current);
+      updateIndicators(candlesRef.current);
+    }
+
+    setStatus("LIVE");
+  }
+
+  function runSmoothAnimation() {
+    if (animationFrameRef.current) return;
+
+    const animate = () => {
+      animationFrameRef.current = null;
+
+      if (
+        replayMode ||
+        !targetPriceRef.current ||
+        !displayPriceRef.current ||
+        !candleSeriesRef.current ||
+        !lastCandleRef.current
+      ) {
+        return;
+      }
+
+      const target = Number(targetPriceRef.current);
+      const current = Number(displayPriceRef.current);
+      const diff = target - current;
+
+      if (Math.abs(diff) < Math.max(target * 0.00008, 0.01)) {
+        displayPriceRef.current = target;
+        updateCurrentCandle(target);
+        return;
+      }
+
+      const next = current + diff * 0.18;
+      displayPriceRef.current = next;
+      updateCurrentCandle(next);
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }
+
+  function applyLivePrice(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
+
+    const price = Number(priceValue);
+    if (!price || Number.isNaN(price)) return;
+
+    const lastClose = Number(lastCandleRef.current.close || price);
+    const gapPercent = lastClose > 0 ? Math.abs((price - lastClose) / lastClose) : 0;
+
+    // If REST candles are delayed and the live quote is far away, do not draw one giant candle.
+    // Rebase the latest candle around the live quote, then smooth future ticks.
+    if (gapPercent > 0.025) {
+      rebaseLatestCandle(price, timestamp);
+      return;
+    }
+
+    if (!displayPriceRef.current) {
+      displayPriceRef.current = lastClose;
+    }
+
+    targetPriceRef.current = price;
+    runSmoothAnimation();
   }
 
   useEffect(() => {
@@ -434,6 +542,9 @@ function Chart({
 
           candlesRef.current = candles;
           lastCandleRef.current = candles[candles.length - 1];
+          displayPriceRef.current = lastCandleRef.current.close;
+          targetPriceRef.current = lastCandleRef.current.close;
+          lastAppliedPriceRef.current = lastCandleRef.current.close;
 
           candleSeries.setData(candles);
           updateVolume(candles);
@@ -451,6 +562,9 @@ function Chart({
 
           candlesRef.current = fallback;
           lastCandleRef.current = fallback[fallback.length - 1];
+          displayPriceRef.current = lastCandleRef.current.close;
+          targetPriceRef.current = lastCandleRef.current.close;
+          lastAppliedPriceRef.current = lastCandleRef.current.close;
 
           candleSeries.setData(fallback);
           updateVolume(fallback);
@@ -465,6 +579,9 @@ function Chart({
 
         candlesRef.current = fallback;
         lastCandleRef.current = fallback[fallback.length - 1];
+        displayPriceRef.current = lastCandleRef.current.close;
+        targetPriceRef.current = lastCandleRef.current.close;
+        lastAppliedPriceRef.current = lastCandleRef.current.close;
 
         candleSeries.setData(fallback);
         updateVolume(fallback);
@@ -491,6 +608,10 @@ function Chart({
 
     return () => {
       resizeObserver.disconnect();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -509,8 +630,8 @@ function Chart({
     if (!livePrice || replayMode) return;
 
     lastLivePriceRef.current = Number(livePrice);
-    applyLivePrice(Number(livePrice));
-  }, [livePrice, showEMA9, showEMA20, timeframe, replayMode]);
+    applyLivePrice(Number(livePrice), Math.floor(Date.now() / 1000));
+  }, [livePrice, livePulse, showEMA9, showEMA20, timeframe, replayMode]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || !candlesRef.current.length) return;

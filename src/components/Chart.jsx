@@ -51,25 +51,6 @@ function calculateEMA(data, period) {
   });
 }
 
-function calculateVWAP(data) {
-  let cumulativePV = 0;
-  let cumulativeVolume = 0;
-
-  return data
-    .map((candle) => {
-      const typicalPrice = (candle.high + candle.low + candle.close) / 3;
-      const volume = Number(candle.volume || 1);
-
-      cumulativePV += typicalPrice * volume;
-      cumulativeVolume += volume;
-
-      return {
-        time: candle.time,
-        value: Number((cumulativePV / cumulativeVolume).toFixed(2)),
-      };
-    })
-    .filter((point) => Number.isFinite(point.value));
-}
 
 function formatVolume(volume) {
   const value = Number(volume || 0);
@@ -128,7 +109,6 @@ function Chart({
   const volumeSeriesRef = useRef(null);
   const ema9Ref = useRef(null);
   const ema20Ref = useRef(null);
-  const vwapRef = useRef(null);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
@@ -158,11 +138,10 @@ function Chart({
   }
 
   function updateIndicators(source = getVisibleCandles()) {
-    if (!ema9Ref.current || !ema20Ref.current || !vwapRef.current) return;
+    if (!ema9Ref.current || !ema20Ref.current) return;
 
     ema9Ref.current.setData(showEMA9 ? calculateEMA(source, 9) : []);
     ema20Ref.current.setData(showEMA20 ? calculateEMA(source, 20) : []);
-    vwapRef.current.setData(calculateVWAP(source));
   }
 
   function updateVolume(source = getVisibleCandles()) {
@@ -476,21 +455,12 @@ function Chart({
       title: "EMA 20",
     });
 
-    const vwapSeries = chart.addSeries(LineSeries, {
-      color: "#a855f7",
-      lineWidth: 2,
-      lineStyle: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: "VWAP",
-    });
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
     ema9Ref.current = ema9Series;
     ema20Ref.current = ema20Series;
-    vwapRef.current = vwapSeries;
 
     chart.subscribeCrosshairMove((param) => {
       if (!tooltipRef.current || !containerRef.current) return;
@@ -618,7 +588,6 @@ function Chart({
       volumeSeriesRef.current = null;
       ema9Ref.current = null;
       ema20Ref.current = null;
-      vwapRef.current = null;
     };
   }, [symbol, timeframe]);
 
@@ -687,7 +656,7 @@ function Chart({
         </div>
         <div>
           EMA9 <span style={{ color: "#2196f3" }}>━━</span> · EMA20{" "}
-          <span style={{ color: "#f59e0b" }}>━━</span> · VWAP{" "}
+          <span style={{ color: "#f59e0b" }}>━━</span> · {" "}
           <span style={{ color: "#a855f7" }}>---</span>
         </div>
       </div>

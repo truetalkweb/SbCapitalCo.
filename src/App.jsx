@@ -2,6 +2,7 @@ import ProfessionalScanner from "./components/ProfessionalScanner";
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import TickerTape from "./components/TickerTape";
+import TerminalTopBar from "./components/TerminalTopBar";
 import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
 import WorkspaceGrid from "./components/WorkspaceGrid";
@@ -360,7 +361,6 @@ export default function App() {
       secondaryTimeframe,
       layoutMode,
       gridMode,
-      gridMode,
       quantity,
       orders,
       positions,
@@ -385,6 +385,7 @@ export default function App() {
       timeframe,
       secondaryTimeframe,
       layoutMode,
+      gridMode,
       quantity,
       orders,
       positions,
@@ -1608,107 +1609,32 @@ export default function App() {
           "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
       }}
     >
-      <div
-        style={{
-          height: "42px",
-          background: theme.panel,
-          borderBottom: `1px solid ${theme.border}`,
-          display: "flex",
-          alignItems: "center",
-          padding: "0 10px",
-          gap: "8px",
-        }}
-      >
-        <div style={{ fontWeight: 900, fontSize: "16px" }}>
-          SbCapital<span style={{ color: theme.blue }}>Co.</span>
-        </div>
-
-        <span style={{ color: theme.muted, fontSize: "11px" }}>
-          Pro Dockable Trading Workspace
-        </span>
-
-        <div style={{ display: "flex", gap: "5px", marginLeft: "4px" }}>
-          {workspaceViews.slice(0, 4).map((view) => (
-            <button
-              key={view.id}
-              onClick={() => setActiveWorkspace(view.id)}
-              style={buttonStyle(activeWorkspace === view.id)}
-            >
-              {view.label}
-            </button>
-          ))}
-        </div>
-
-        <button onClick={() => setLayoutMode("1")} style={buttonStyle(layoutMode === "1")}>
-          1 Chart
-        </button>
-
-        <button onClick={() => setLayoutMode("2")} style={buttonStyle(layoutMode === "2")}>
-          2 Charts
-        </button>
-
-        <button onClick={() => setGridMode("2")} style={buttonStyle(gridMode === "2")}>
-          Grid 2
-        </button>
-
-        <button onClick={() => setGridMode("4")} style={buttonStyle(gridMode === "4")}>
-          Grid 4
-        </button>
-
-        <button onClick={() => setSyncCharts(!syncCharts)} style={buttonStyle(syncCharts)}>
-          Sync {syncCharts ? "On" : "Off"}
-        </button>
-
-        <button onClick={() => setReplayMode(!replayMode)} style={buttonStyle(replayMode)}>
-          Replay {replayMode ? "On" : "Off"}
-        </button>
-
-        <button onClick={resetReplay} style={buttonStyle(false)}>
-          Reset Replay
-        </button>
-
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "7px" }}>
-          <span style={{ fontSize: "11px" }}>
-            Data: <span style={{ color: theme.green, fontWeight: 800 }}>Hybrid Live Feed</span>
-          </span>
-          <span
-            style={{
-              fontSize: "11px",
-              color:
-                wsStatus === "LIVE"
-                  ? theme.green
-                  : wsStatus === "CONNECTING" || wsStatus === "RECONNECTING"
-                  ? theme.blue
-                  : theme.red,
-              fontWeight: 900,
-            }}
-          >
-            WS: {wsStatus}
-          </span>
-          <span style={{ fontSize: "11px", color: theme.muted }}>
-            Chart: {mainChartStatus}
-          </span>
-          <span style={{ fontSize: "11px", color: brokerConnected ? theme.green : theme.red, fontWeight: 800 }}>
-            Broker: {brokerStatus}
-          </span>
-
-          <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={buttonStyle(false)}>
-            {isDark ? "Light" : "Dark"}
-          </button>
-
-          <button onClick={saveWorkspaceToCloud} style={buttonStyle(Boolean(user))}>
-            Cloud Save
-          </button>
-
-          <button onClick={loadWorkspaceFromCloud} style={buttonStyle(false)}>
-            Cloud Load
-          </button>
-
-          <button onClick={resetWorkspace} style={buttonStyle(false)}>
-            Reset
-          </button>
-        </div>
-      </div>
+      <TerminalTopBar
+        theme={theme}
+        workspaceViews={workspaceViews}
+        activeWorkspace={activeWorkspace}
+        setActiveWorkspace={setActiveWorkspace}
+        layoutMode={layoutMode}
+        setLayoutMode={setLayoutMode}
+        gridMode={gridMode}
+        setGridMode={setGridMode}
+        syncCharts={syncCharts}
+        setSyncCharts={setSyncCharts}
+        replayMode={replayMode}
+        setReplayMode={setReplayMode}
+        resetReplay={resetReplay}
+        wsStatus={wsStatus}
+        mainChartStatus={mainChartStatus}
+        brokerStatus={brokerStatus}
+        brokerConnected={brokerConnected}
+        isDark={isDark}
+        setThemeMode={setThemeMode}
+        saveWorkspaceToCloud={saveWorkspaceToCloud}
+        loadWorkspaceFromCloud={loadWorkspaceFromCloud}
+        resetWorkspace={resetWorkspace}
+        buttonStyle={buttonStyle}
+        user={user}
+      />
 
 <TickerTape
   theme={theme}
@@ -1718,7 +1644,7 @@ export default function App() {
       <PanelGroup
         direction="horizontal"
         style={{
-          height: "calc(100vh - 94px)",
+          height: "calc(100vh - 72px)",
           padding: "6px",
           gap: "6px",
           overflow: "hidden",
@@ -1940,7 +1866,7 @@ export default function App() {
   selectMainSymbol={selectMainSymbol}
 />
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Small Cap Movers</h3>
+          <h3 style={{ marginTop: "4px", fontSize: "13px" }}>Small Cap Movers</h3>
           <ScannerTable rows={smallCapMovers} />
         </div>
             </Panel>
@@ -1962,12 +1888,14 @@ export default function App() {
         >
           <WorkspaceGrid
             theme={theme}
+            layoutMode={layoutMode}
             gridMode={gridMode}
             renderChartPanel={renderChartPanel}
             selectedStock={selectedStock}
             secondarySymbol={secondarySymbol}
             setSecondarySymbol={setSecondarySymbol}
             timeframe={timeframe}
+            setMainTimeframe={setMainTimeframe}
             secondaryTimeframe={secondaryTimeframe}
             setSecondaryTimeframe={setSecondaryTimeframe}
             selectedStockData={selectedStockData}

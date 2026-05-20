@@ -2,57 +2,42 @@ export default function ProfessionalScanner({
   theme,
   scannerTab,
   setScannerTab,
-  scannerStocks,
+  scannerStocks = [],
   selectMainSymbol,
 }) {
-  const tabs = [
-    "Gainers",
-    "Losers",
-    "Active",
-    "Momentum",
-    "Relative Volume",
-    "AI Movers",
-  ];
+  const tabs = ["Gainers", "Losers", "Active", "Momentum", "Relative Volume", "AI Movers"];
 
   function scoreStock(stock) {
     const change = parseFloat(String(stock.change).replace("%", "")) || 0;
-    const volume = parseFloat(String(stock.volume).replace(/[A-Z]/g, "")) || 0;
+    const volumeRaw = String(stock.volume || "0");
 
-    return (change * 1.7 + volume * 0.4).toFixed(1);
+    const volume = volumeRaw.includes("B")
+      ? parseFloat(volumeRaw) * 1000
+      : volumeRaw.includes("M")
+      ? parseFloat(volumeRaw)
+      : volumeRaw.includes("K")
+      ? parseFloat(volumeRaw) / 1000
+      : parseFloat(volumeRaw) || 0;
+
+    return Math.max(0, change * 2.2 + volume * 0.15).toFixed(1);
   }
 
   return (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          gap: "6px",
-          marginBottom: "10px",
-          flexWrap: "wrap",
-        }}
-      >
+    <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", gap: "5px", marginBottom: "6px", flexWrap: "wrap" }}>
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setScannerTab(tab)}
             style={{
-              height: "28px",
-              padding: "0 10px",
-              borderRadius: "6px",
+              height: "24px",
+              padding: "0 8px",
+              borderRadius: "5px",
               border: `1px solid ${theme.border}`,
-              background:
-                scannerTab === tab ? theme.blue : theme.panel2,
-              color:
-                scannerTab === tab ? "#fff" : theme.text,
+              background: scannerTab === tab ? theme.blue : theme.panel2,
+              color: scannerTab === tab ? "#fff" : theme.text,
               cursor: "pointer",
-              fontSize: "11px",
+              fontSize: "10px",
               fontWeight: 800,
             }}
           >
@@ -64,11 +49,11 @@ export default function ProfessionalScanner({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr",
-          padding: "8px 6px",
+          gridTemplateColumns: "1.15fr 1fr 1fr 1fr 0.8fr",
+          padding: "6px 4px",
           borderBottom: `1px solid ${theme.border}`,
           color: theme.muted,
-          fontSize: "10px",
+          fontSize: "9px",
           fontWeight: 900,
           letterSpacing: "0.3px",
         }}
@@ -77,66 +62,42 @@ export default function ProfessionalScanner({
         <div>PRICE</div>
         <div>CHANGE</div>
         <div>VOLUME</div>
-        <div>AI SCORE</div>
+        <div>AI</div>
       </div>
 
-      <div
-        style={{
-          overflowY: "auto",
-          flex: 1,
-        }}
-      >
+      <div style={{ maxHeight: "235px", overflowY: "auto" }}>
         {scannerStocks.map((stock, index) => {
-          const positive =
-            String(stock.change).includes("+");
+          const positive = String(stock.change).includes("+");
 
           return (
             <div
               key={`${stock.symbol}-${index}`}
               onClick={() => selectMainSymbol(stock.symbol)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.03)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr",
-                padding: "9px 6px",
+                gridTemplateColumns: "1.15fr 1fr 1fr 1fr 0.8fr",
+                padding: "6px 4px",
                 borderBottom: `1px solid ${theme.border}`,
                 cursor: "pointer",
-                fontSize: "11px",
+                fontSize: "10px",
                 alignItems: "center",
-                transition: "0.15s",
+                transition: "all 0.15s ease",
               }}
             >
-              <div
-                style={{
-                  fontWeight: 900,
-                  color: theme.text,
-                }}
-              >
-                {stock.symbol}
-              </div>
-
+              <div style={{ fontWeight: 900, color: theme.text }}>{stock.symbol}</div>
               <div>${stock.price}</div>
-
-              <div
-                style={{
-                  color: positive
-                    ? theme.green
-                    : theme.red,
-                  fontWeight: 800,
-                }}
-              >
+              <div style={{ color: positive ? theme.green : theme.red, fontWeight: 800 }}>
                 {stock.change}
               </div>
-
+              
               <div>{stock.volume}</div>
-
-              <div
-                style={{
-                  color: theme.blue,
-                  fontWeight: 900,
-                }}
-              >
-                {scoreStock(stock)}
-              </div>
+              <div style={{ color: theme.blue, fontWeight: 900 }}>{scoreStock(stock)}</div>
             </div>
           );
         })}

@@ -1,11 +1,13 @@
 export default function WorkspaceGrid({
   theme,
+  layoutMode,
   gridMode,
   renderChartPanel,
   selectedStock,
   secondarySymbol,
   setSecondarySymbol,
   timeframe,
+  setMainTimeframe,
   secondaryTimeframe,
   setSecondaryTimeframe,
   selectedStockData,
@@ -16,7 +18,8 @@ export default function WorkspaceGrid({
   setSecondaryChartStatus,
   syncCharts,
 }) {
-  const isFourChart = gridMode === "4";
+  const isOneChart = layoutMode === "1";
+  const isFourChart = !isOneChart && gridMode === "4";
   const thirdSymbol = syncCharts ? selectedStock : "SPY";
   const fourthSymbol = syncCharts ? selectedStock : "QQQ";
 
@@ -29,6 +32,21 @@ export default function WorkspaceGrid({
     background: "#050b14",
   };
 
+  const gridStyle = isOneChart
+    ? {
+        gridTemplateColumns: "1fr",
+        gridTemplateRows: "1fr",
+      }
+    : isFourChart
+    ? {
+        gridTemplateColumns: "1fr 1fr",
+        gridTemplateRows: "1fr 1fr",
+      }
+    : {
+        gridTemplateColumns: "1fr 1fr",
+        gridTemplateRows: "1fr",
+      };
+
   return (
     <div
       style={{
@@ -36,8 +54,7 @@ export default function WorkspaceGrid({
         minHeight: 0,
         width: "100%",
         display: "grid",
-        gridTemplateColumns: isFourChart ? "1fr 1fr" : "minmax(0, 1.45fr) minmax(320px, 0.75fr)",
-        gridTemplateRows: isFourChart ? "1fr 1fr" : "1fr",
+        ...gridStyle,
         gap: "6px",
         overflow: "hidden",
         background: theme.bg,
@@ -49,26 +66,28 @@ export default function WorkspaceGrid({
           symbol: selectedStock,
           setSymbol: () => {},
           tf: timeframe,
-          setTf: () => {},
+          setTf: setMainTimeframe,
           livePrice: selectedStockData?.price,
           chartStatus: mainChartStatus,
           onStatusChange: setMainChartStatus,
         })}
       </div>
 
-      <div style={shellStyle}>
-        {renderChartPanel({
-          title: "Secondary Chart",
-          symbol: secondarySymbol,
-          setSymbol: setSecondarySymbol,
-          tf: secondaryTimeframe,
-          setTf: setSecondaryTimeframe,
-          livePrice: secondaryStockData?.price,
-          secondary: true,
-          chartStatus: secondaryChartStatus,
-          onStatusChange: setSecondaryChartStatus,
-        })}
-      </div>
+      {!isOneChart && (
+        <div style={shellStyle}>
+          {renderChartPanel({
+            title: "Secondary Chart",
+            symbol: secondarySymbol,
+            setSymbol: setSecondarySymbol,
+            tf: secondaryTimeframe,
+            setTf: setSecondaryTimeframe,
+            livePrice: secondaryStockData?.price,
+            secondary: true,
+            chartStatus: secondaryChartStatus,
+            onStatusChange: setSecondaryChartStatus,
+          })}
+        </div>
+      )}
 
       {isFourChart && (
         <div style={shellStyle}>
@@ -77,7 +96,7 @@ export default function WorkspaceGrid({
             symbol: thirdSymbol,
             setSymbol: () => {},
             tf: timeframe,
-            setTf: () => {},
+            setTf: setMainTimeframe,
             livePrice: selectedStockData?.price,
             secondary: true,
             chartStatus: mainChartStatus,
@@ -93,7 +112,7 @@ export default function WorkspaceGrid({
             symbol: fourthSymbol,
             setSymbol: () => {},
             tf: secondaryTimeframe,
-            setTf: () => {},
+            setTf: setSecondaryTimeframe,
             livePrice: secondaryStockData?.price,
             secondary: true,
             chartStatus: secondaryChartStatus,

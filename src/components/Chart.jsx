@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -118,15 +118,30 @@ function Chart({
   const targetPriceRef = useRef(null);
   const lastAppliedPriceRef = useRef(null);
   const lastAppliedTimeRef = useRef(0);
+  const livePriceRef = useRef(livePrice);
+  const onReplayDataRef = useRef(onReplayData);
+  const onStatusChangeRef = useRef(onStatusChange);
 
-  function setStatus(nextStatus) {
+  const setStatus = useCallback((nextStatus) => {
     statusRef.current = nextStatus;
-    if (typeof onStatusChange === "function") {
-      onStatusChange(nextStatus);
+    if (typeof onStatusChangeRef.current === "function") {
+      onStatusChangeRef.current(nextStatus);
     }
-  }
+  }, []);
 
-  function getVisibleCandles() {
+  useEffect(() => {
+    livePriceRef.current = livePrice;
+  }, [livePrice]);
+
+  useEffect(() => {
+    onReplayDataRef.current = onReplayData;
+  }, [onReplayData]);
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
+
+  const getVisibleCandles = useCallback(() => {
     if (!replayMode) return candlesRef.current;
 
     const safeIndex =
@@ -135,16 +150,16 @@ function Chart({
         : candlesRef.current.length - 1;
 
     return candlesRef.current.slice(0, safeIndex + 1);
-  }
+  }, [replayIndex, replayMode]);
 
-  function updateIndicators(source = getVisibleCandles()) {
+  const updateIndicators = useCallback((source = getVisibleCandles()) => {
     if (!ema9Ref.current || !ema20Ref.current) return;
 
     ema9Ref.current.setData(showEMA9 ? calculateEMA(source, 9) : []);
     ema20Ref.current.setData(showEMA20 ? calculateEMA(source, 20) : []);
-  }
+  }, [getVisibleCandles, showEMA9, showEMA20]);
 
-  function updateVolume(source = getVisibleCandles()) {
+  const updateVolume = useCallback((source = getVisibleCandles()) => {
     if (!volumeSeriesRef.current) return;
 
     volumeSeriesRef.current.setData(
@@ -157,9 +172,9 @@ function Chart({
             : "rgba(239,83,80,0.35)",
       }))
     );
-  }
+  }, [getVisibleCandles]);
 
-  function updateMarkers() {
+  const updateMarkers = useCallback(() => {
     if (!candleSeriesRef.current) return;
 
     const markers = replayTrades
@@ -178,9 +193,9 @@ function Chart({
     if (typeof candleSeriesRef.current.setMarkers === "function") {
       candleSeriesRef.current.setMarkers(markers);
     }
-  }
+  }, [replayTrades]);
 
-  function updateCurrentCandle(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+  const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
@@ -242,9 +257,9 @@ function Chart({
     if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED") {
       setStatus("LIVE");
     }
-  }
+  }, [replayMode, setStatus, timeframe, updateIndicators]);
 
-  function rebaseLatestCandle(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+  const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
@@ -280,9 +295,9 @@ function Chart({
     }
 
     setStatus("LIVE");
-  }
+  }, [replayMode, setStatus, timeframe, updateIndicators, updateVolume]);
 
-  function runSmoothAnimation() {
+  const runSmoothAnimation = useCallback(() => {
     if (animationFrameRef.current) return;
 
     const animate = () => {
@@ -316,9 +331,9 @@ function Chart({
     };
 
     animationFrameRef.current = requestAnimationFrame(animate);
-  }
+  }, [replayMode, updateCurrentCandle]);
 
-  function applyLivePrice(priceValue, timestamp = Math.floor(Date.now() / 1000)) {
+  const applyLivePrice = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
@@ -340,7 +355,7 @@ function Chart({
 
     targetPriceRef.current = price;
     runSmoothAnimation();
-  }
+  }, [rebaseLatestCandle, runSmoothAnimation]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -350,7 +365,7 @@ function Chart({
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
-      autoSize: true,
+      autoSize: false,
       layout: {
         background: { color: "#050b14" },
         textColor: "#d1d4dc",
@@ -518,7 +533,7 @@ function Chart({
 
           candleSeries.setData(candles);
           updateVolume(candles);
-          if (typeof onReplayData === "function") onReplayData(candles);
+          if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(candles);
           updateIndicators(candles);
           updateMarkers();
           chart.timeScale().fitContent();
@@ -528,7 +543,7 @@ function Chart({
             applyLivePrice(lastLivePriceRef.current);
           }
         } else {
-          const fallback = generateFallbackCandles(livePrice, timeframe);
+          const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
 
           candlesRef.current = fallback;
           lastCandleRef.current = fallback[fallback.length - 1];
@@ -538,14 +553,14 @@ function Chart({
 
           candleSeries.setData(fallback);
           updateVolume(fallback);
-          if (typeof onReplayData === "function") onReplayData(fallback);
+          if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
           updateIndicators(fallback);
           updateMarkers();
           chart.timeScale().fitContent();
           setStatus("SIM");
         }
       } catch {
-        const fallback = generateFallbackCandles(livePrice, timeframe);
+        const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
 
         candlesRef.current = fallback;
         lastCandleRef.current = fallback[fallback.length - 1];
@@ -555,7 +570,7 @@ function Chart({
 
         candleSeries.setData(fallback);
         updateVolume(fallback);
-        if (typeof onReplayData === "function") onReplayData(fallback);
+        if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
         updateIndicators(fallback);
         updateMarkers();
         chart.timeScale().fitContent();
@@ -589,18 +604,18 @@ function Chart({
       ema9Ref.current = null;
       ema20Ref.current = null;
     };
-  }, [symbol, timeframe]);
+  }, [applyLivePrice, setStatus, symbol, timeframe, updateIndicators, updateMarkers, updateVolume]);
 
   useEffect(() => {
     updateIndicators();
-  }, [showEMA9, showEMA20]);
+  }, [updateIndicators]);
 
   useEffect(() => {
     if (!livePrice || replayMode) return;
 
     lastLivePriceRef.current = Number(livePrice);
     applyLivePrice(Number(livePrice), Math.floor(Date.now() / 1000));
-  }, [livePrice, livePulse, showEMA9, showEMA20, timeframe, replayMode]);
+  }, [applyLivePrice, livePrice, livePulse, replayMode]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || !candlesRef.current.length) return;
@@ -619,7 +634,17 @@ function Chart({
     updateVolume(visibleCandles);
     updateIndicators(visibleCandles);
     updateMarkers();
-  }, [replayMode, replayIndex, replayTrades, showEMA9, showEMA20]);
+  }, [
+    getVisibleCandles,
+    replayMode,
+    replayIndex,
+    replayTrades,
+    showEMA9,
+    showEMA20,
+    updateIndicators,
+    updateMarkers,
+    updateVolume,
+  ]);
 
   return (
     <div

@@ -1,7 +1,11 @@
 import ProfessionalScanner from "./components/ProfessionalScanner";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import TickerTape from "./components/TickerTape";
+import BrokerHeader from "./components/BrokerHeader";
+import BrokerPositions from "./components/BrokerPositions";
+import OrderTicket from "./components/OrderTicket";
+import RightTradingPanel from "./components/RightTradingPanel";
 import TerminalTopBar from "./components/TerminalTopBar";
 import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
@@ -91,6 +95,55 @@ function formatFmpStocks(data) {
       : "+0.00%",
     volume: item.volume ? String(item.volume) : "—",
   }));
+}
+
+function ScannerTable({ rows, onPick, theme }) {
+  return (
+    <>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          fontSize: "10px",
+          color: theme.muted,
+          paddingBottom: "6px",
+          borderBottom: `1px solid ${theme.border}`,
+          fontWeight: 700,
+        }}
+      >
+        <span>Symbol</span>
+        <span>Price</span>
+        <span style={{ textAlign: "right" }}>Change</span>
+      </div>
+
+      {rows.map((stock) => (
+        <div
+          key={stock.symbol}
+          onClick={() => onPick(stock.symbol)}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "6px",
+            padding: "4px 0",
+            borderBottom: `1px solid ${theme.border}`,
+            cursor: "pointer",
+            fontSize: "11px",
+          }}
+        >
+          <span style={{ fontWeight: 800 }}>{stock.symbol}</span>
+          <span>${stock.price}</span>
+          <span
+            style={{
+              color: stock.change.includes("+") ? theme.green : theme.red,
+              textAlign: "right",
+            }}
+          >
+            {stock.change}
+          </span>
+        </div>
+      ))}
+    </>
+  );
 }
 
 export default function App() {
@@ -189,6 +242,7 @@ export default function App() {
   const [brokerPositions, setBrokerPositions] = useState([]);
   const [brokerOrders, setBrokerOrders] = useState([]);
   const [brokerLoading, setBrokerLoading] = useState(false);
+  const [initialLivePulse] = useState(() => Date.now());
 
   const [level2, setLevel2] = useState([
     { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
@@ -225,12 +279,6 @@ export default function App() {
     ...resizeHandleStyle,
   };
 
-  const horizontalResizeHandleStyle = {
-    height: "5px",
-    cursor: "row-resize",
-    ...resizeHandleStyle,
-  };
-
   const allSymbols = useMemo(
     () => [
       ...Object.values(liveQuotes),
@@ -243,6 +291,18 @@ export default function App() {
       ...smallCapMovers,
     ],
     [liveQuotes, liveStocks, fmpGainers, fmpLosers, fmpActive]
+  );
+
+  const trackedSymbols = useMemo(
+    () =>
+      [
+        selectedStock,
+        secondarySymbol,
+        ...liveStocks.map((stock) => stock.symbol),
+      ]
+        .filter(Boolean)
+        .map((symbol) => symbol.trim().toUpperCase()),
+    [selectedStock, secondarySymbol, liveStocks]
   );
 
   const selectedStockData =
@@ -308,8 +368,9 @@ export default function App() {
     return Array.from({ length: 15 }, (_, index) => {
       const offset = 7 - index;
       const price = basePrice + offset * 0.05;
-      const bidSize = offset <= 0 ? Math.floor(Math.random() * 900) + 100 : 0;
-      const askSize = offset >= 0 ? Math.floor(Math.random() * 900) + 100 : 0;
+      const depthIndex = Math.min(Math.abs(offset), level2.length - 1);
+      const bidSize = offset <= 0 ? Number(level2[depthIndex]?.size || 0) : 0;
+      const askSize = offset >= 0 ? Number(level2[depthIndex]?.size || 0) : 0;
       const maxSize = 1000;
 
       return {
@@ -414,7 +475,7 @@ export default function App() {
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
     if (data.layoutMode) setLayoutMode(data.layoutMode);
     if (data.gridMode) setGridMode(data.gridMode);
-    if (data.quantity) setQuantity(data.quantity);
+    if (typeof data.quantity !== "undefined") setQuantity(data.quantity);
     if (Array.isArray(data.orders)) setOrders(data.orders);
     if (data.positions) setPositions(data.positions);
     if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
@@ -425,7 +486,7 @@ export default function App() {
     if (typeof data.showEMA20 === "boolean") setShowEMA20(data.showEMA20);
     if (data.scannerTab) setScannerTab(data.scannerTab);
     if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
-    if (data.replaySpeed) setReplaySpeed(data.replaySpeed);
+    if (typeof data.replaySpeed !== "undefined") setReplaySpeed(data.replaySpeed);
     if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
     if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
     if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
@@ -507,7 +568,7 @@ export default function App() {
     brokerBalances?.perCurrencyBalances?.[0] ||
     null;
 
-  async function checkBrokerStatus() {
+  const checkBrokerStatus = useCallback(async () => {
     setBrokerLoading(true);
 
     try {
@@ -521,32 +582,43 @@ export default function App() {
     }
 
     setBrokerLoading(false);
-  }
+  }, []);
 
-  async function loadBrokerAccounts() {
+  const loadBrokerAccounts = useCallback(async () => {
     setBrokerLoading(true);
 
     try {
       const response = await axios.get(`${BROKER_API_URL}/api/questrade/accounts`);
       const accounts = response.data?.accounts || [];
+      const nextAccount = accounts[0]?.number || "";
 
       setBrokerAccounts(accounts);
 
       if (accounts.length && !selectedBrokerAccount) {
-        setSelectedBrokerAccount(accounts[0].number);
+        setSelectedBrokerAccount(nextAccount);
       }
 
       setBrokerConnected(true);
       setBrokerStatus("Connected");
+      setBrokerLoading(false);
+
+      return {
+        accounts,
+        selectedAccount: selectedBrokerAccount || nextAccount,
+      };
     } catch {
       setBrokerConnected(false);
       setBrokerStatus("Accounts failed");
+      setBrokerLoading(false);
+
+      return {
+        accounts: [],
+        selectedAccount: "",
+      };
     }
+  }, [selectedBrokerAccount]);
 
-    setBrokerLoading(false);
-  }
-
-  async function loadBrokerAccountData(accountNumber = selectedBrokerAccount) {
+  const loadBrokerAccountData = useCallback(async (accountNumber = selectedBrokerAccount) => {
     if (!accountNumber) {
       setBrokerStatus("Select account first");
       return;
@@ -571,14 +643,15 @@ export default function App() {
     }
 
     setBrokerLoading(false);
-  }
+  }, [selectedBrokerAccount]);
 
   async function refreshBroker() {
     await checkBrokerStatus();
-    await loadBrokerAccounts();
+    const result = await loadBrokerAccounts();
+    const accountNumber = result.selectedAccount || selectedBrokerAccount;
 
-    if (selectedBrokerAccount) {
-      await loadBrokerAccountData(selectedBrokerAccount);
+    if (accountNumber) {
+      await loadBrokerAccountData(accountNumber);
     }
   }
 
@@ -769,6 +842,7 @@ export default function App() {
       "sb_timeframe",
       "sb_secondary_timeframe",
       "sb_layout_mode",
+      "sb_grid_mode",
       "sb_theme_mode",
       "sb_show_ema9",
       "sb_show_ema20",
@@ -796,14 +870,17 @@ export default function App() {
     setOrders([]);
     setPositions({});
     setRealizedPnL(0);
+    setAlerts([]);
+    setSyncCharts(false);
     setActiveWorkspace("charts");
   }
 
-  function placeOrder(side) {
+  const placeOrder = useCallback((side, options = {}) => {
     const currentPrice = Number(selectedStockData?.price || 0);
+    const executionPrice = Number(options.price || currentPrice);
     const qty = Number(quantity);
 
-    if (!qty || qty <= 0 || !currentPrice) return;
+    if (!qty || qty <= 0 || !executionPrice) return false;
 
     const existing = positions[selectedStock] || {
       quantity: 0,
@@ -814,7 +891,7 @@ export default function App() {
     let updatedRealized = Number(realizedPnL || 0);
 
     if (side === "BUY") {
-      const totalCost = existing.average * existing.quantity + currentPrice * qty;
+      const totalCost = existing.average * existing.quantity + executionPrice * qty;
       const newQty = existing.quantity + qty;
 
       updatedPositions[selectedStock] = {
@@ -828,7 +905,7 @@ export default function App() {
 
       if (sellQty <= 0) return;
 
-      const pnl = (currentPrice - existing.average) * sellQty;
+      const pnl = (executionPrice - existing.average) * sellQty;
       updatedRealized += pnl;
 
       const remaining = existing.quantity - sellQty;
@@ -851,17 +928,23 @@ export default function App() {
       side,
       symbol: selectedStock,
       quantity: qty,
-      price: currentPrice.toFixed(2),
-      value: (currentPrice * qty).toFixed(2),
+      price: executionPrice.toFixed(2),
+      value: (executionPrice * qty).toFixed(2),
+      orderType: options.orderType,
+      stopLoss: options.stopLoss,
+      takeProfit: options.takeProfit,
+      riskReward: options.riskReward,
+      status: options.status,
       realizedPnL:
         side === "SELL"
-          ? ((currentPrice - existing.average) * Math.min(qty, existing.quantity)).toFixed(2)
+          ? ((executionPrice - existing.average) * Math.min(qty, existing.quantity)).toFixed(2)
           : null,
       time: new Date().toLocaleTimeString(),
     };
 
     setOrders((prev) => [order, ...prev.slice(0, 20)]);
-  }
+    return true;
+  }, [positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
 
   function submitOrderTicket() {
     setOrderMessage("");
@@ -888,25 +971,18 @@ export default function App() {
       return;
     }
 
-    const simulatedOrder = {
-      id: Date.now(),
-      side: orderSide,
-      symbol: selectedStock,
-      quantity: qty,
-      price: entryPrice.toFixed(2),
-      value: (entryPrice * qty).toFixed(2),
+    const submitted = placeOrder(orderSide, {
+      price: entryPrice,
       orderType,
       stopLoss: Number(stopLoss) > 0 ? Number(stopLoss).toFixed(2) : null,
       takeProfit: Number(takeProfit) > 0 ? Number(takeProfit).toFixed(2) : null,
       riskReward,
-      time: new Date().toLocaleTimeString(),
       status: "Paper Filled",
-      realizedPnL: null,
-    };
+    });
 
-    placeOrder(orderSide);
-    setOrders((prev) => [simulatedOrder, ...prev.slice(0, 20)]);
-    setOrderMessage(`${orderSide} ${qty} ${selectedStock} submitted as paper ${orderType.toLowerCase()} order.`);
+    if (submitted) {
+      setOrderMessage(`${orderSide} ${qty} ${selectedStock} submitted as paper ${orderType.toLowerCase()} order.`);
+    }
   }
 
   function toggleFullscreen() {
@@ -999,14 +1075,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    checkBrokerStatus();
-  }, []);
+    Promise.resolve().then(checkBrokerStatus);
+  }, [checkBrokerStatus]);
 
   useEffect(() => {
     if (selectedBrokerAccount) {
-      loadBrokerAccountData(selectedBrokerAccount);
+      Promise.resolve().then(() => loadBrokerAccountData(selectedBrokerAccount));
     }
-  }, [selectedBrokerAccount]);
+  }, [loadBrokerAccountData, selectedBrokerAccount]);
 
   useEffect(() => {
     localStorage.setItem("sb_selected_stock", JSON.stringify(selectedStock));
@@ -1069,7 +1145,7 @@ export default function App() {
       if (event.shiftKey && event.key === "2") {
         event.preventDefault();
         setLayoutMode("2");
-    setGridMode("2");
+        setGridMode("2");
       }
 
       if (event.key === "Escape") {
@@ -1080,7 +1156,7 @@ export default function App() {
     window.addEventListener("keydown", handleHotkeys);
 
     return () => window.removeEventListener("keydown", handleHotkeys);
-  }, [quantity, selectedStock, selectedStockData, positions, realizedPnL]);
+  }, [placeOrder]);
 
   useEffect(() => {
     if (!replayMode || !replayPlaying) return;
@@ -1102,25 +1178,35 @@ export default function App() {
   }, [replayMode, replayPlaying, replaySpeed, mainReplayData.length]);
 
   useEffect(() => {
-    setAlerts((prev) =>
-      prev.map((alert) => {
-        if (!alert.active || alert.symbol !== selectedStock) return alert;
+    const price = Number(selectedStockData?.price || 0);
+    const now = new Date().toLocaleTimeString();
 
-        const price = Number(selectedStockData?.price || 0);
-        const triggered =
-          alert.direction === "above"
-            ? price >= alert.trigger
-            : price <= alert.trigger;
+    const timeout = setTimeout(() => {
+      setAlerts((prev) => {
+        let changed = false;
+        const nextAlerts = prev.map((alert) => {
+          if (!alert.active || alert.symbol !== selectedStock) return alert;
 
-        if (!triggered) return alert;
+          const triggered =
+            alert.direction === "above"
+              ? price >= alert.trigger
+              : price <= alert.trigger;
 
-        return {
-          ...alert,
-          active: false,
-          triggeredAt: new Date().toLocaleTimeString(),
-        };
-      })
-    );
+          if (!triggered) return alert;
+
+          changed = true;
+          return {
+            ...alert,
+            active: false,
+            triggeredAt: now,
+          };
+        });
+
+        return changed ? nextAlerts : prev;
+      });
+    }, 0);
+
+    return () => clearTimeout(timeout);
   }, [selectedStockData, selectedStock]);
 
   useEffect(() => {
@@ -1155,15 +1241,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const symbolsToTrack = [
-      selectedStock,
-      secondarySymbol,
-      ...liveStocks.map((stock) => stock.symbol),
-    ]
-      .filter(Boolean)
-      .map((symbol) => symbol.trim().toUpperCase());
-
-    const uniqueSymbols = [...new Set(symbolsToTrack)];
+    const uniqueSymbols = [...new Set(trackedSymbols)];
 
     const unsubscribers = uniqueSymbols.map((symbol) =>
       marketDataService.subscribe(symbol, (trade) => {
@@ -1182,7 +1260,7 @@ export default function App() {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
       removeStatusListener();
     };
-  }, [selectedStock, secondarySymbol, liveStocks.map((stock) => stock.symbol).join("|")]);
+  }, [trackedSymbols]);
 
   useEffect(() => {
     if (!FINNHUB_API_KEY) return;
@@ -1190,15 +1268,7 @@ export default function App() {
     let cancelled = false;
 
     const pollLiveQuotes = async () => {
-      const symbolsToTrack = [
-        selectedStock,
-        secondarySymbol,
-        ...liveStocks.map((stock) => stock.symbol),
-      ]
-        .filter(Boolean)
-        .map((symbol) => symbol.trim().toUpperCase());
-
-      const uniqueSymbols = [...new Set(symbolsToTrack)].slice(0, 12);
+      const uniqueSymbols = [...new Set(trackedSymbols)].slice(0, 12);
 
       await Promise.allSettled(
         uniqueSymbols.map(async (symbol) => {
@@ -1247,7 +1317,7 @@ export default function App() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [selectedStock, secondarySymbol, liveStocks.map((stock) => stock.symbol).join("|")]);
+  }, [trackedSymbols]);
 
   useEffect(() => {
     async function fetchNews() {
@@ -1342,56 +1412,7 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [selectedStockData]);
-
-  function ScannerTable({ rows, onPick = selectMainSymbol }) {
-    return (
-      <>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            fontSize: "10px",
-            color: theme.muted,
-            paddingBottom: "6px",
-            borderBottom: `1px solid ${theme.border}`,
-            fontWeight: 700,
-          }}
-        >
-          <span>Symbol</span>
-          <span>Price</span>
-          <span style={{ textAlign: "right" }}>Change</span>
-        </div>
-
-        {rows.map((stock) => (
-          <div
-            key={stock.symbol}
-            onClick={() => onPick(stock.symbol)}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "6px",
-              padding: "4px 0",
-              borderBottom: `1px solid ${theme.border}`,
-              cursor: "pointer",
-              fontSize: "11px",
-            }}
-          >
-            <span style={{ fontWeight: 800 }}>{stock.symbol}</span>
-            <span>${stock.price}</span>
-            <span
-              style={{
-                color: stock.change.includes("+") ? theme.green : theme.red,
-                textAlign: "right",
-              }}
-            >
-              {stock.change}
-            </span>
-          </div>
-        ))}
-      </>
-    );
-  }
-
+  
   const showLeftDock =
     activeWorkspace === "charts" ||
     activeWorkspace === "scanner" ||
@@ -1583,7 +1604,7 @@ export default function App() {
             livePrice={Number(livePrice || 100)}
             livePulse={
               allSymbols.find((item) => item.symbol === symbol)?.lastUpdated ||
-              Date.now()
+              initialLivePulse
             }
             showEMA9={showEMA9}
             showEMA20={showEMA20}
@@ -1636,11 +1657,12 @@ export default function App() {
         user={user}
       />
 
-<TickerTape
-  theme={theme}
-  stocks={allSymbols.slice(0, 20)}
-  onPick={selectMainSymbol}
-/>
+      <TickerTape
+        theme={theme}
+        stocks={allSymbols.slice(0, 20)}
+        onPick={selectMainSymbol}
+      />
+
       <PanelGroup
         direction="horizontal"
         style={{
@@ -1650,7 +1672,7 @@ export default function App() {
           overflow: "hidden",
         }}
       >
-        <Panel defaultSize={4} minSize={4} maxSize={6}>
+        <Panel id="sidebar-panel" order={1} defaultSize={4} minSize={4} maxSize={6}>
           <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
@@ -1659,11 +1681,11 @@ export default function App() {
         />
         </Panel>
 
-        <PanelResizeHandle style={verticalResizeHandleStyle} />
+        <PanelResizeHandle id="sidebar-resize-handle" style={verticalResizeHandleStyle} />
 
         {showLeftDock && (
           <>
-            <Panel defaultSize={18} minSize={12} maxSize={32}>
+            <Panel id="left-dock-panel" order={2} defaultSize={18} minSize={12} maxSize={32}>
               <div
           style={panelStyle({
             height: "100%",
@@ -1867,15 +1889,19 @@ export default function App() {
 />
 
           <h3 style={{ marginTop: "4px", fontSize: "13px" }}>Small Cap Movers</h3>
-          <ScannerTable rows={smallCapMovers} />
+          <ScannerTable
+            rows={smallCapMovers}
+            onPick={selectMainSymbol}
+            theme={theme}
+          />
         </div>
             </Panel>
 
-            <PanelResizeHandle style={verticalResizeHandleStyle} />
+            <PanelResizeHandle id="left-dock-resize-handle" style={verticalResizeHandleStyle} />
           </>
         )}
 
-        <Panel defaultSize={showRightDock ? 58 : 78} minSize={30}>
+        <Panel id="workspace-panel" order={3} defaultSize={showRightDock ? 58 : 78} minSize={30}>
           <div
           style={{
             display: "grid",
@@ -1947,312 +1973,63 @@ export default function App() {
         </div>
         </Panel>
 
-        {showRightDock && (
-          <>
-            <PanelResizeHandle style={verticalResizeHandleStyle} />
+        <RightTradingPanel showRightDock={showRightDock}>
+  <PanelResizeHandle id="right-dock-resize-handle" style={verticalResizeHandleStyle} />
+  <Panel id="right-dock-panel" order={4} defaultSize={20} minSize={15} maxSize={35}>
+    <div
+      style={panelStyle({
+        height: "100%",
+        overflowY: "auto",
+      })}
+    >
+      {panelTitle("Broker + Paper Trade + Level 1/2")}
 
-            <Panel defaultSize={20} minSize={15} maxSize={35}>
-              <div
-          style={panelStyle({
-            height: "100%",
-            overflowY: "auto",
-          })}
-        >
-          {panelTitle("Broker + Paper Trade + Level 1/2")}
+          <BrokerHeader
+            theme={theme}
+            brokerConnected={brokerConnected}
+            brokerStatus={brokerStatus}
+            brokerAccounts={brokerAccounts}
+            brokerLoading={brokerLoading}
+            selectedBrokerAccount={selectedBrokerAccount}
+            setSelectedBrokerAccount={setSelectedBrokerAccount}
+            refreshBroker={refreshBroker}
+            loadBrokerAccountData={loadBrokerAccountData}
+            primaryBrokerBalance={primaryBrokerBalance}
+            buttonStyle={buttonStyle}
+            brokerApiUrl={BROKER_API_URL}
+          />
 
-          <h3 style={{ marginTop: "0px", fontSize: "13px" }}>Questrade Live Broker</h3>
+          <BrokerPositions
+            theme={theme}
+            brokerPositions={brokerPositions}
+            brokerOrders={brokerOrders}
+          />
 
-          <div style={{ fontSize: "11px", lineHeight: "1.6" }}>
-            <div>
-              Status:{" "}
-              <span style={{ color: brokerConnected ? theme.green : theme.red, fontWeight: 900 }}>
-                {brokerStatus}
-              </span>
-            </div>
-            <div>Backend: {BROKER_API_URL}</div>
-            <div>Accounts: {brokerAccounts.length}</div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px" }}>
-            <button onClick={refreshBroker} style={buttonStyle(brokerConnected)}>
-              {brokerLoading ? "Loading..." : "Connect"}
-            </button>
-            <button onClick={() => loadBrokerAccountData()} style={buttonStyle(false)}>
-              Sync
-            </button>
-          </div>
-
-          {brokerAccounts.length > 0 && (
-            <select
-              value={selectedBrokerAccount}
-              onChange={(e) => setSelectedBrokerAccount(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "7px",
-                background: theme.panel2,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "4px",
-                marginTop: "6px",
-                fontSize: "11px",
-              }}
-            >
-              {brokerAccounts.map((account) => (
-                <option key={account.number} value={account.number}>
-                  {account.type} · {account.number} · {account.status}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {primaryBrokerBalance && (
-            <div style={{ marginTop: "6px", fontSize: "10px", lineHeight: "1.55" }}>
-              <div>Currency: {primaryBrokerBalance.currency || "—"}</div>
-              <div>Cash: ${Number(primaryBrokerBalance.cash || 0).toFixed(2)}</div>
-              <div>Market Value: ${Number(primaryBrokerBalance.marketValue || 0).toFixed(2)}</div>
-              <div>Total Equity: ${Number(primaryBrokerBalance.totalEquity || 0).toFixed(2)}</div>
-              <div>Buying Power: ${Number(primaryBrokerBalance.buyingPower || 0).toFixed(2)}</div>
-            </div>
-          )}
-
-          {brokerPositions.length > 0 && (
-            <>
-              <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Live Positions</h3>
-              {brokerPositions.slice(0, 6).map((position, index) => (
-                <div
-                  key={`${position.symbol}-${index}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: "5px",
-                    padding: "4px 0",
-                    borderBottom: `1px solid ${theme.border}`,
-                    fontSize: "10px",
-                  }}
-                >
-                  <span style={{ fontWeight: 900 }}>{position.symbol}</span>
-                  <span>Qty {position.openQuantity}</span>
-                  <span
-                    style={{
-                      color: Number(position.openPnl || 0) >= 0 ? theme.green : theme.red,
-                      textAlign: "right",
-                    }}
-                  >
-                    ${Number(position.openPnl || 0).toFixed(2)}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-
-          {brokerOrders.length > 0 && (
-            <>
-              <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Live Orders</h3>
-              {brokerOrders.slice(0, 5).map((order, index) => (
-                <div
-                  key={`${order.id || index}`}
-                  style={{
-                    padding: "4px 0",
-                    borderBottom: `1px solid ${theme.border}`,
-                    fontSize: "10px",
-                  }}
-                >
-                  <div style={{ fontWeight: 900 }}>
-                    {order.action} {order.symbol}
-                  </div>
-                  <div>
-                    Qty: {order.totalQuantity} · Status: {order.state}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Professional Order Ticket</h3>
-
-          <div
-            style={{
-              background: theme.panel2,
-              border: `1px solid ${theme.border}`,
-              borderRadius: "8px",
-              padding: "9px",
-              display: "grid",
-              gap: "8px",
-            }}
-          >
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              <button
-                onClick={() => setOrderSide("BUY")}
-                style={{
-                  ...buttonStyle(orderSide === "BUY"),
-                  background: orderSide === "BUY" ? theme.green : theme.panel,
-                  border: orderSide === "BUY" ? "none" : `1px solid ${theme.border}`,
-                }}
-              >
-                BUY
-              </button>
-
-              <button
-                onClick={() => setOrderSide("SELL")}
-                style={{
-                  ...buttonStyle(orderSide === "SELL"),
-                  background: orderSide === "SELL" ? theme.red : theme.panel,
-                  border: orderSide === "SELL" ? "none" : `1px solid ${theme.border}`,
-                }}
-              >
-                SELL
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              <button
-                onClick={() => setOrderType("MARKET")}
-                style={buttonStyle(orderType === "MARKET")}
-              >
-                Market
-              </button>
-
-              <button
-                onClick={() => setOrderType("LIMIT")}
-                style={buttonStyle(orderType === "LIMIT")}
-              >
-                Limit
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              <label style={{ fontSize: "10px", color: theme.muted }}>
-                Quantity
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    background: theme.panel,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    borderRadius: "5px",
-                    marginTop: "4px",
-                    fontSize: "11px",
-                  }}
-                />
-              </label>
-
-              <label style={{ fontSize: "10px", color: theme.muted }}>
-                Limit Price
-                <input
-                  type="number"
-                  value={limitPrice}
-                  onChange={(e) => setLimitPrice(e.target.value)}
-                  disabled={orderType !== "LIMIT"}
-                  placeholder={String(selectedStockData?.price || "")}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    background: orderType === "LIMIT" ? theme.panel : "rgba(127,127,127,0.10)",
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    borderRadius: "5px",
-                    marginTop: "4px",
-                    fontSize: "11px",
-                    opacity: orderType === "LIMIT" ? 1 : 0.55,
-                  }}
-                />
-              </label>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-              <label style={{ fontSize: "10px", color: theme.muted }}>
-                Stop Loss
-                <input
-                  type="number"
-                  value={stopLoss}
-                  onChange={(e) => setStopLoss(e.target.value)}
-                  placeholder="Optional"
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    background: theme.panel,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    borderRadius: "5px",
-                    marginTop: "4px",
-                    fontSize: "11px",
-                  }}
-                />
-              </label>
-
-              <label style={{ fontSize: "10px", color: theme.muted }}>
-                Take Profit
-                <input
-                  type="number"
-                  value={takeProfit}
-                  onChange={(e) => setTakeProfit(e.target.value)}
-                  placeholder="Optional"
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    background: theme.panel,
-                    border: `1px solid ${theme.border}`,
-                    color: theme.text,
-                    borderRadius: "5px",
-                    marginTop: "4px",
-                    fontSize: "11px",
-                  }}
-                />
-              </label>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "6px",
-                fontSize: "10px",
-                lineHeight: "1.5",
-                color: theme.muted,
-              }}
-            >
-              <div>Symbol: <b style={{ color: theme.text }}>{selectedStock}</b></div>
-              <div>Entry: <b style={{ color: theme.text }}>${Number(orderEntryPrice || 0).toFixed(2)}</b></div>
-              <div>Est. Value: <b style={{ color: theme.text }}>${estimatedValue}</b></div>
-              <div>R:R: <b style={{ color: theme.blue }}>{riskReward}</b></div>
-              <div>Risk: <b style={{ color: orderRisk > 0 ? theme.red : theme.muted }}>${orderRisk.toFixed(2)}</b></div>
-              <div>Reward: <b style={{ color: orderReward > 0 ? theme.green : theme.muted }}>${orderReward.toFixed(2)}</b></div>
-            </div>
-
-            <button
-              onClick={submitOrderTicket}
-              style={{
-                ...buttonStyle(true),
-                width: "100%",
-                height: "34px",
-                background: orderSide === "BUY" ? theme.green : theme.red,
-                border: "none",
-                fontSize: "12px",
-              }}
-            >
-              Submit Paper {orderSide}
-            </button>
-
-            {orderMessage && (
-              <div
-                style={{
-                  fontSize: "10px",
-                  color: theme.blue,
-                  lineHeight: "1.4",
-                }}
-              >
-                {orderMessage}
-              </div>
-            )}
-
-            <div style={{ fontSize: "9px", color: theme.muted, lineHeight: "1.4" }}>
-              Paper execution only. Real broker routing can be connected later through the Questrade order API.
-            </div>
-          </div>
+          <OrderTicket
+            theme={theme}
+            buttonStyle={buttonStyle}
+            orderSide={orderSide}
+            setOrderSide={setOrderSide}
+            orderType={orderType}
+            setOrderType={setOrderType}
+            quantity={quantity}
+            setQuantity={setQuantity}
+            limitPrice={limitPrice}
+            setLimitPrice={setLimitPrice}
+            stopLoss={stopLoss}
+            setStopLoss={setStopLoss}
+            takeProfit={takeProfit}
+            setTakeProfit={setTakeProfit}
+            selectedStock={selectedStock}
+            selectedStockData={selectedStockData}
+            orderEntryPrice={orderEntryPrice}
+            estimatedValue={estimatedValue}
+            riskReward={riskReward}
+            orderRisk={orderRisk}
+            orderReward={orderReward}
+            submitOrderTicket={submitOrderTicket}
+            orderMessage={orderMessage}
+          />
 
           <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Paper Account Summary</h3>
 
@@ -2544,9 +2321,8 @@ export default function App() {
             ))
           )}
         </div>
-            </Panel>
-          </>
-        )}
+  </Panel>
+</RightTradingPanel>
       </PanelGroup>
 
       <div
@@ -2561,7 +2337,7 @@ export default function App() {
           gap: "14px",
           padding: "0 10px",
         }}
-      >
+>
         <span>Connected: Finnhub + FMP</span>
         <span>Main: {selectedStock}</span>
         <span>Secondary: {secondarySymbol}</span>

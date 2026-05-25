@@ -50,7 +50,7 @@ const forexStocks = [
   { symbol: "USD/CAD", price: 1.3722, change: "-0.22%", volume: "-" },
 ];
 
-const smallCapMovers = [
+const defaultSmallCapMovers = [
   { symbol: "RNZA", price: 12.07, change: "+27.10%", volume: "44.84K" },
   { symbol: "REBN", price: 2.0, change: "+8.60%", volume: "84.17K" },
   { symbol: "DTI", price: 4.01, change: "+4.60%", volume: "333.03K" },
@@ -78,6 +78,53 @@ function loadSetting(key, fallback) {
   }
 }
 
+function parsePercent(value) {
+  return Number(String(value || "0").replace("%", "")) || 0;
+}
+
+function parseMarketVolume(value) {
+  const cleanValue = String(value || "0").replace(/,/g, "").trim();
+  const numericValue = parseFloat(cleanValue) || 0;
+
+  if (cleanValue.includes("B")) return numericValue * 1_000_000_000;
+  if (cleanValue.includes("M")) return numericValue * 1_000_000;
+  if (cleanValue.includes("K")) return numericValue * 1_000;
+
+  return numericValue;
+}
+
+function formatMarketVolume(value, fallback = "—") {
+  const volume = Number(value || 0);
+
+  if (!volume) return fallback;
+  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
+  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
+  if (volume >= 1_000) return `${(volume / 1_000).toFixed(2)}K`;
+
+  return String(Math.round(volume));
+}
+
+function applyLiveQuote(stock, liveQuotes) {
+  const quote = liveQuotes[stock.symbol];
+
+  if (!quote) return stock;
+
+  return {
+    ...stock,
+    price: quote.price,
+    change: quote.change,
+    volume: quote.volume || stock.volume,
+  };
+}
+
+function getMomentumScore(stock) {
+  return Math.abs(parsePercent(stock.change)) * 10 + parseMarketVolume(stock.volume) / 1_000_000;
+}
+
+function getRelativeVolumeScore(stock) {
+  return parseMarketVolume(stock.volume);
+}
+
 
 function formatFmpStocks(data) {
   if (!Array.isArray(data)) return [];
@@ -88,7 +135,7 @@ function formatFmpStocks(data) {
     change: item.changesPercentage
       ? `${Number(item.changesPercentage).toFixed(2)}%`
       : "+0.00%",
-    volume: item.volume ? String(item.volume) : "—",
+    volume: formatMarketVolume(item.volume),
   }));
 }
 
@@ -215,6 +262,10 @@ export default function App() {
   const [fmpGainers, setFmpGainers] = useState([]);
   const [fmpLosers, setFmpLosers] = useState([]);
   const [fmpActive, setFmpActive] = useState([]);
+  const [fmpMomentum, setFmpMomentum] = useState([]);
+  const [fmpRelativeVolume, setFmpRelativeVolume] = useState([]);
+  const [fmpAiMovers, setFmpAiMovers] = useState([]);
+  const [fmpSmallCaps, setFmpSmallCaps] = useState([]);
   const [scannerLoading, setScannerLoading] = useState(false);
 
   const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
@@ -285,18 +336,39 @@ export default function App() {
     ...resizeHandleStyle,
   };
 
+  const liveSmallCapMovers = useMemo(
+    () =>
+      (fmpSmallCaps.length ? fmpSmallCaps : defaultSmallCapMovers).map((stock) =>
+        applyLiveQuote(stock, liveQuotes)
+      ),
+    [fmpSmallCaps, liveQuotes]
+  );
+
   const allSymbols = useMemo(
     () => [
       ...Object.values(liveQuotes),
-      ...liveStocks,
-      ...fmpGainers,
-      ...fmpLosers,
-      ...fmpActive,
+      ...liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpGainers.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpLosers.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpActive.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpMomentum.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpRelativeVolume.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...fmpAiMovers.map((stock) => applyLiveQuote(stock, liveQuotes)),
       ...cryptoStocks,
       ...forexStocks,
-      ...smallCapMovers,
+      ...liveSmallCapMovers,
     ],
-    [liveQuotes, liveStocks, fmpGainers, fmpLosers, fmpActive]
+    [
+      liveQuotes,
+      liveStocks,
+      fmpGainers,
+      fmpLosers,
+      fmpActive,
+      fmpMomentum,
+      fmpRelativeVolume,
+      fmpAiMovers,
+      liveSmallCapMovers,
+    ]
   );
 
   const trackedSymbols = useMemo(
@@ -305,10 +377,11 @@ export default function App() {
         selectedStock,
         secondarySymbol,
         ...liveStocks.map((stock) => stock.symbol),
+        ...liveSmallCapMovers.map((stock) => stock.symbol),
       ]
         .filter(Boolean)
         .map((symbol) => symbol.trim().toUpperCase()),
-    [selectedStock, secondarySymbol, liveStocks]
+    [selectedStock, secondarySymbol, liveStocks, liveSmallCapMovers]
   );
 
   const selectedStockData =
@@ -319,22 +392,76 @@ export default function App() {
     allSymbols.find((s) => s.symbol === "TSLA") ||
     liveStocks[0];
 
-  let scannerStocks = [...liveStocks];
+  const scannerStocks = useMemo(() => {
+    const fallbackStocks = liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes));
+    const scannerUniverse = [
+      ...fmpGainers,
+      ...fmpLosers,
+      ...fmpActive,
+      ...fmpMomentum,
+      ...fmpRelativeVolume,
+      ...fmpAiMovers,
+      ...liveSmallCapMovers,
+      ...fallbackStocks,
+    ]
+      .map((stock) => applyLiveQuote(stock, liveQuotes))
+      .filter((stock, index, stocks) =>
+        stock.symbol && stocks.findIndex((item) => item.symbol === stock.symbol) === index
+      );
 
-  if (scannerTab === "Gainers") {
-    scannerStocks = fmpGainers.length ? fmpGainers : [...liveStocks];
-  }
+    if (scannerTab === "Gainers") {
+      return (fmpGainers.length ? fmpGainers : fallbackStocks)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .sort((a, b) => parsePercent(b.change) - parsePercent(a.change));
+    }
 
-  if (scannerTab === "Losers") {
-    scannerStocks = fmpLosers.length ? fmpLosers : [...liveStocks];
-  }
+    if (scannerTab === "Losers") {
+      return (fmpLosers.length ? fmpLosers : fallbackStocks)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .sort((a, b) => parsePercent(a.change) - parsePercent(b.change));
+    }
 
-  if (scannerTab === "Active") {
-    scannerStocks = fmpActive.length ? fmpActive : [...liveStocks];
-  }
+    if (scannerTab === "Active") {
+      return (fmpActive.length ? fmpActive : scannerUniverse)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .sort((a, b) => parseMarketVolume(b.volume) - parseMarketVolume(a.volume));
+    }
 
-  if (scannerTab === "Crypto") scannerStocks = cryptoStocks;
-  if (scannerTab === "Forex") scannerStocks = forexStocks;
+    if (scannerTab === "Momentum") {
+      return (fmpMomentum.length ? fmpMomentum : scannerUniverse)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
+        .slice(0, 20);
+    }
+
+    if (scannerTab === "Relative Volume") {
+      return (fmpRelativeVolume.length ? fmpRelativeVolume : scannerUniverse)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .sort((a, b) => getRelativeVolumeScore(b) - getRelativeVolumeScore(a))
+        .slice(0, 20);
+    }
+
+    if (scannerTab === "AI Movers") {
+      return (fmpAiMovers.length ? fmpAiMovers : scannerUniverse)
+        .map((stock) => applyLiveQuote(stock, liveQuotes))
+        .filter((stock) => parsePercent(stock.change) > 0)
+        .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
+        .slice(0, 20);
+    }
+
+    return fallbackStocks;
+  }, [
+    fmpActive,
+    fmpAiMovers,
+    fmpGainers,
+    fmpLosers,
+    fmpMomentum,
+    fmpRelativeVolume,
+    liveQuotes,
+    liveSmallCapMovers,
+    liveStocks,
+    scannerTab,
+  ]);
 
   const estimatedValue = (
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
@@ -1138,24 +1265,79 @@ export default function App() {
 
   useEffect(() => {
     async function fetchFmpScanners() {
-      if (!FMP_API_KEY) return;
-
       setScannerLoading(true);
 
       try {
-        const [gainersRes, losersRes, activeRes] = await Promise.all([
-          fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${FMP_API_KEY}`),
-          fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${FMP_API_KEY}`),
-          fetch(`https://financialmodelingprep.com/stable/actively-trading-list?apikey=${FMP_API_KEY}`),
-        ]);
+        const response = await fetch(`${BROKER_API_URL}/api/scanner`);
 
-        setFmpGainers(formatFmpStocks(await gainersRes.json()));
-        setFmpLosers(formatFmpStocks(await losersRes.json()));
-        setFmpActive(formatFmpStocks(await activeRes.json()));
+        if (!response.ok) {
+          throw new Error("Backend scanner unavailable");
+        }
+
+        const data = await response.json();
+
+        setFmpGainers(data.gainers || []);
+        setFmpLosers(data.losers || []);
+        setFmpActive(data.active || []);
+        setFmpMomentum(data.momentum || []);
+        setFmpRelativeVolume(data.relativeVolume || []);
+        setFmpAiMovers(data.aiMovers || []);
+        setFmpSmallCaps(data.smallCaps || []);
       } catch {
-        setFmpGainers([]);
-        setFmpLosers([]);
-        setFmpActive([]);
+        if (!FMP_API_KEY) {
+          setFmpGainers([]);
+          setFmpLosers([]);
+          setFmpActive([]);
+          setFmpMomentum([]);
+          setFmpRelativeVolume([]);
+          setFmpAiMovers([]);
+          setFmpSmallCaps([]);
+          setScannerLoading(false);
+          return;
+        }
+
+        try {
+          const [gainersRes, losersRes, activeRes] = await Promise.all([
+            fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${FMP_API_KEY}`),
+            fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${FMP_API_KEY}`),
+            fetch(`https://financialmodelingprep.com/stable/actively-trading-list?apikey=${FMP_API_KEY}`),
+          ]);
+
+          const [gainersData, losersData, activeData] = await Promise.all([
+            gainersRes.json(),
+            losersRes.json(),
+            activeRes.json(),
+          ]);
+          const nextGainers = formatFmpStocks(gainersData);
+          const nextLosers = formatFmpStocks(losersData);
+          const nextActive = formatFmpStocks(activeData);
+          const nextSmallCaps = [...nextGainers, ...nextActive]
+            .filter((stock) => {
+              const price = Number(stock.price || 0);
+              return price > 0 && price <= 20;
+            })
+            .filter((stock, index, stocks) =>
+              stocks.findIndex((item) => item.symbol === stock.symbol) === index
+            )
+            .sort((a, b) => parsePercent(b.change) - parsePercent(a.change))
+            .slice(0, 12);
+
+          setFmpGainers(nextGainers);
+          setFmpLosers(nextLosers);
+          setFmpActive(nextActive);
+          setFmpMomentum([]);
+          setFmpRelativeVolume([]);
+          setFmpAiMovers([]);
+          setFmpSmallCaps(nextSmallCaps);
+        } catch {
+          setFmpGainers([]);
+          setFmpLosers([]);
+          setFmpActive([]);
+          setFmpMomentum([]);
+          setFmpRelativeVolume([]);
+          setFmpAiMovers([]);
+          setFmpSmallCaps([]);
+        }
       }
 
       setScannerLoading(false);
@@ -1782,7 +1964,7 @@ export default function App() {
 
           <h3 style={{ marginTop: "4px", fontSize: "13px" }}>Small Cap Movers</h3>
           <ScannerTable
-            rows={smallCapMovers}
+            rows={liveSmallCapMovers}
             onPick={selectMainSymbol}
             theme={theme}
           />

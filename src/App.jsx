@@ -1,16 +1,22 @@
 import ProfessionalScanner from "./components/ProfessionalScanner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import TickerTape from "./components/TickerTape";
 import BrokerHeader from "./components/BrokerHeader";
 import BrokerPositions from "./components/BrokerPositions";
 import OrderTicket from "./components/OrderTicket";
+import ReplayPanel from "./components/ReplayPanel";
+import AlertsPanel from "./components/AlertsPanel";
+import DOMPanel from "./components/DOMPanel";
+import PaperAccountPanel from "./components/PaperAccountPanel";
+import OpenPositionsPanel from "./components/OpenPositionsPanel";
+import RecentOrdersPanel from "./components/RecentOrdersPanel";
 import RightTradingPanel from "./components/RightTradingPanel";
 import TerminalTopBar from "./components/TerminalTopBar";
 import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
 import WorkspaceGrid from "./components/WorkspaceGrid";
-import { marketDataService } from "./services/marketDataService";
+import { useMarketData } from "./hooks/useMarketData";
+import { useBrokerData } from "./hooks/useBrokerData";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { auth, db } from "./firebase";
 import {
@@ -72,17 +78,6 @@ function loadSetting(key, fallback) {
   }
 }
 
-
-function formatQuoteVolume(value, fallback = "—") {
-  const volume = Number(value || 0);
-
-  if (!volume) return fallback;
-  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
-  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
-  if (volume >= 1_000) return `${(volume / 1_000).toFixed(2)}K`;
-
-  return String(Math.round(volume));
-}
 
 function formatFmpStocks(data) {
   if (!Array.isArray(data)) return [];
@@ -147,6 +142,13 @@ function ScannerTable({ rows, onPick, theme }) {
 }
 
 export default function App() {
+  const {
+    liveQuotes,
+    wsStatus,
+    updateLiveQuote: updateContextLiveQuote,
+    subscribeToSymbols,
+  } = useMarketData();
+
   const [user, setUser] = useState(null);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -167,7 +169,6 @@ export default function App() {
   const [liveStocks, setLiveStocks] = useState(() =>
     loadSetting("sb_watchlist", defaultStocks)
   );
-  const [liveQuotes, setLiveQuotes] = useState({});
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
   );
@@ -224,7 +225,6 @@ export default function App() {
 
   const [mainChartStatus, setMainChartStatus] = useState("LOADING");
   const [secondaryChartStatus, setSecondaryChartStatus] = useState("LOADING");
-  const [wsStatus, setWsStatus] = useState("DISCONNECTED");
 
   const [replayMode, setReplayMode] = useState(false);
   const [replayPlaying, setReplayPlaying] = useState(false);
@@ -234,14 +234,20 @@ export default function App() {
   const [replayTrades, setReplayTrades] = useState([]);
   const [replayEquity, setReplayEquity] = useState([100000]);
 
-  const [brokerStatus, setBrokerStatus] = useState("Disconnected");
-  const [brokerConnected, setBrokerConnected] = useState(false);
-  const [brokerAccounts, setBrokerAccounts] = useState([]);
-  const [selectedBrokerAccount, setSelectedBrokerAccount] = useState("");
-  const [brokerBalances, setBrokerBalances] = useState(null);
-  const [brokerPositions, setBrokerPositions] = useState([]);
-  const [brokerOrders, setBrokerOrders] = useState([]);
-  const [brokerLoading, setBrokerLoading] = useState(false);
+  const {
+    brokerStatus,
+    brokerConnected,
+    brokerAccounts,
+    selectedBrokerAccount,
+    setSelectedBrokerAccount,
+    brokerPositions,
+    brokerOrders,
+    brokerLoading,
+    primaryBrokerBalance,
+    checkBrokerStatus,
+    loadBrokerAccountData,
+    refreshBroker,
+  } = useBrokerData(BROKER_API_URL);
   const [initialLivePulse] = useState(() => Date.now());
 
   const [level2, setLevel2] = useState([
@@ -562,99 +568,6 @@ export default function App() {
   }
 
   const replayCandle = mainReplayData[replayIndex] || null;
-
-  const primaryBrokerBalance =
-    brokerBalances?.combinedBalances?.[0] ||
-    brokerBalances?.perCurrencyBalances?.[0] ||
-    null;
-
-  const checkBrokerStatus = useCallback(async () => {
-    setBrokerLoading(true);
-
-    try {
-      const response = await axios.get(`${BROKER_API_URL}/api/questrade/status`);
-
-      setBrokerConnected(Boolean(response.data?.connected));
-      setBrokerStatus(response.data?.connected ? "Connected" : "Disconnected");
-    } catch {
-      setBrokerConnected(false);
-      setBrokerStatus("Backend offline");
-    }
-
-    setBrokerLoading(false);
-  }, []);
-
-  const loadBrokerAccounts = useCallback(async () => {
-    setBrokerLoading(true);
-
-    try {
-      const response = await axios.get(`${BROKER_API_URL}/api/questrade/accounts`);
-      const accounts = response.data?.accounts || [];
-      const nextAccount = accounts[0]?.number || "";
-
-      setBrokerAccounts(accounts);
-
-      if (accounts.length && !selectedBrokerAccount) {
-        setSelectedBrokerAccount(nextAccount);
-      }
-
-      setBrokerConnected(true);
-      setBrokerStatus("Connected");
-      setBrokerLoading(false);
-
-      return {
-        accounts,
-        selectedAccount: selectedBrokerAccount || nextAccount,
-      };
-    } catch {
-      setBrokerConnected(false);
-      setBrokerStatus("Accounts failed");
-      setBrokerLoading(false);
-
-      return {
-        accounts: [],
-        selectedAccount: "",
-      };
-    }
-  }, [selectedBrokerAccount]);
-
-  const loadBrokerAccountData = useCallback(async (accountNumber = selectedBrokerAccount) => {
-    if (!accountNumber) {
-      setBrokerStatus("Select account first");
-      return;
-    }
-
-    setBrokerLoading(true);
-
-    try {
-      const [balancesRes, positionsRes, ordersRes] = await Promise.all([
-        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/balances`),
-        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/positions`),
-        axios.get(`${BROKER_API_URL}/api/questrade/accounts/${accountNumber}/orders`),
-      ]);
-
-      setBrokerBalances(balancesRes.data);
-      setBrokerPositions(positionsRes.data?.positions || []);
-      setBrokerOrders(ordersRes.data?.orders || []);
-      setBrokerStatus(`Synced ${new Date().toLocaleTimeString()}`);
-      setBrokerConnected(true);
-    } catch {
-      setBrokerStatus("Sync failed");
-    }
-
-    setBrokerLoading(false);
-  }, [selectedBrokerAccount]);
-
-  async function refreshBroker() {
-    await checkBrokerStatus();
-    const result = await loadBrokerAccounts();
-    const accountNumber = result.selectedAccount || selectedBrokerAccount;
-
-    if (accountNumber) {
-      await loadBrokerAccountData(accountNumber);
-    }
-  }
-
   function panelStyle(extra = {}) {
     return {
       background: theme.panel,
@@ -796,27 +709,41 @@ export default function App() {
     if (!candle) return;
 
     const price = Number(candle.close);
-    const qty = Number(quantity) || 1;
+    const requestedQty = Number(quantity) || 1;
 
     const lastOpenBuy = [...replayTrades]
       .reverse()
       .find((trade) => trade.type === "BUY" && !trade.closed);
 
-    const pnl = lastOpenBuy ? (price - lastOpenBuy.price) * qty : 0;
+    if (!lastOpenBuy) return;
+
+    const sellQty = Math.min(requestedQty, Number(lastOpenBuy.qty || 0));
+
+    if (sellQty <= 0) return;
+
+    const remainingBuyQty = Number(lastOpenBuy.qty || 0) - sellQty;
+    const pnl = (price - lastOpenBuy.price) * sellQty;
     const nextEquity = (replayEquity[replayEquity.length - 1] || 100000) + pnl;
 
     setReplayTrades((prev) =>
       prev
         .map((trade) =>
-          trade.id === lastOpenBuy?.id ? { ...trade, closed: true } : trade
+          trade.id === lastOpenBuy.id
+            ? {
+                ...trade,
+                qty: remainingBuyQty,
+                closed: remainingBuyQty <= 0,
+              }
+            : trade
         )
         .concat({
           id: Date.now(),
           type: "SELL",
           symbol: selectedStock,
-          qty,
+          qty: sellQty,
           price,
           pnl,
+          matchedBuyId: lastOpenBuy.id,
           time: candle.time,
         })
     );
@@ -889,6 +816,8 @@ export default function App() {
 
     let updatedPositions = { ...positions };
     let updatedRealized = Number(realizedPnL || 0);
+    let filledQty = qty;
+    let orderRealizedPnL = null;
 
     if (side === "BUY") {
       const totalCost = existing.average * existing.quantity + executionPrice * qty;
@@ -903,10 +832,12 @@ export default function App() {
     if (side === "SELL") {
       const sellQty = Math.min(qty, existing.quantity);
 
-      if (sellQty <= 0) return;
+      if (sellQty <= 0) return false;
 
       const pnl = (executionPrice - existing.average) * sellQty;
       updatedRealized += pnl;
+      filledQty = sellQty;
+      orderRealizedPnL = pnl;
 
       const remaining = existing.quantity - sellQty;
 
@@ -927,23 +858,28 @@ export default function App() {
       id: Date.now(),
       side,
       symbol: selectedStock,
-      quantity: qty,
+      quantity: filledQty,
+      requestedQuantity: qty,
       price: executionPrice.toFixed(2),
-      value: (executionPrice * qty).toFixed(2),
+      value: (executionPrice * filledQty).toFixed(2),
       orderType: options.orderType,
       stopLoss: options.stopLoss,
       takeProfit: options.takeProfit,
       riskReward: options.riskReward,
-      status: options.status,
-      realizedPnL:
-        side === "SELL"
-          ? ((executionPrice - existing.average) * Math.min(qty, existing.quantity)).toFixed(2)
-          : null,
+      status:
+        side === "SELL" && filledQty < qty
+          ? "Paper Partially Filled"
+          : options.status,
+      realizedPnL: orderRealizedPnL !== null ? orderRealizedPnL.toFixed(2) : null,
       time: new Date().toLocaleTimeString(),
     };
 
     setOrders((prev) => [order, ...prev.slice(0, 20)]);
-    return true;
+    return {
+      filledQty,
+      requestedQty: qty,
+      partiallyFilled: filledQty < qty,
+    };
   }, [positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
 
   function submitOrderTicket() {
@@ -971,7 +907,7 @@ export default function App() {
       return;
     }
 
-    const submitted = placeOrder(orderSide, {
+    const result = placeOrder(orderSide, {
       price: entryPrice,
       orderType,
       stopLoss: Number(stopLoss) > 0 ? Number(stopLoss).toFixed(2) : null,
@@ -980,8 +916,14 @@ export default function App() {
       status: "Paper Filled",
     });
 
-    if (submitted) {
-      setOrderMessage(`${orderSide} ${qty} ${selectedStock} submitted as paper ${orderType.toLowerCase()} order.`);
+    if (result) {
+      const fillText = result.partiallyFilled
+        ? `${result.filledQty} of ${result.requestedQty}`
+        : result.filledQty;
+
+      setOrderMessage(`${orderSide} ${fillText} ${selectedStock} filled as paper ${orderType.toLowerCase()} order.`);
+    } else {
+      setOrderMessage(`No ${selectedStock} position available to sell.`);
     }
   }
 
@@ -1005,30 +947,13 @@ export default function App() {
     link.click();
   }
 
-  function updateLiveQuote(symbol, price, extra = {}) {
+  const updateLiveQuote = useCallback((symbol, price, extra = {}) => {
     const cleanSymbol = symbol?.trim?.().toUpperCase?.();
     const numericPrice = Number(price);
 
     if (!cleanSymbol || !numericPrice || Number.isNaN(numericPrice)) return;
 
-    setLiveQuotes((prev) => {
-      const previous = prev[cleanSymbol];
-      const oldPrice = Number(previous?.price || numericPrice);
-      const changePercent =
-        oldPrice > 0 ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2) : "0.00";
-
-      return {
-        ...prev,
-        [cleanSymbol]: {
-          symbol: cleanSymbol,
-          price: numericPrice.toFixed(2),
-          change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
-          volume: extra.volume || previous?.volume || "LIVE",
-          lastUpdated: Date.now(),
-          source: extra.source || previous?.source || "HYBRID",
-        },
-      };
-    });
+    updateContextLiveQuote(cleanSymbol, numericPrice, extra);
 
     setLiveStocks((prev) =>
       prev.map((stock) => {
@@ -1036,7 +961,9 @@ export default function App() {
 
         const oldPrice = Number(stock.price || numericPrice);
         const changePercent =
-          oldPrice > 0 ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2) : "0.00";
+          oldPrice > 0
+            ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2)
+            : "0.00";
 
         return {
           ...stock,
@@ -1046,7 +973,7 @@ export default function App() {
         };
       })
     );
-  }
+  }, [updateContextLiveQuote]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -1241,26 +1168,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const uniqueSymbols = [...new Set(trackedSymbols)];
-
-    const unsubscribers = uniqueSymbols.map((symbol) =>
-      marketDataService.subscribe(symbol, (trade) => {
-        updateLiveQuote(trade.s, trade.p, {
-          volume: trade.v ? formatQuoteVolume(trade.v, "LIVE") : "LIVE",
-          source: "WS",
-        });
-      })
-    );
-
-    const removeStatusListener = marketDataService.onStatus((status) => {
-      setWsStatus(status);
-    });
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-      removeStatusListener();
-    };
-  }, [trackedSymbols]);
+    return subscribeToSymbols(trackedSymbols);
+  }, [subscribeToSymbols, trackedSymbols]);
 
   useEffect(() => {
     if (!FINNHUB_API_KEY) return;
@@ -1281,27 +1190,10 @@ export default function App() {
             const price = Number(quote.c || 0);
 
             if (!cancelled && price > 0) {
-              const previousClose = Number(quote.pc || price);
-              const changePercent =
-                previousClose > 0 ? (((price - previousClose) / previousClose) * 100).toFixed(2) : "0.00";
-
               updateLiveQuote(symbol, price, {
                 volume: "QUOTE",
                 source: "REST",
               });
-
-              setLiveQuotes((prev) => ({
-                ...prev,
-                [symbol]: {
-                  ...(prev[symbol] || { symbol }),
-                  symbol,
-                  price: price.toFixed(2),
-                  change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
-                  volume: prev[symbol]?.volume || "QUOTE",
-                  lastUpdated: Date.now(),
-                  source: "REST",
-                },
-              }));
             }
           } catch {
             // Keep websocket/simulated values if REST quote fails.
@@ -1317,7 +1209,7 @@ export default function App() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [trackedSymbols]);
+  }, [trackedSymbols, updateLiveQuote]);
 
   useEffect(() => {
     async function fetchNews() {
@@ -2031,295 +1923,60 @@ export default function App() {
             orderMessage={orderMessage}
           />
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Paper Account Summary</h3>
+          <PaperAccountPanel
+            theme={theme}
+            selectedStock={selectedStock}
+            selectedStockData={selectedStockData}
+            orders={orders}
+            realizedPnL={realizedPnL}
+            totalUnrealizedPnL={totalUnrealizedPnL}
+          />
 
-          <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
-            <div>Buying Power: $100,000.00</div>
-            <div>Active Symbol: {selectedStock}</div>
-            <div>Current Price: ${selectedStockData?.price}</div>
-            <div>Total Orders: {orders.length}</div>
-            <div>
-              Realized P&L:{" "}
-              <span style={{ color: realizedPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
-                ${Number(realizedPnL).toFixed(2)}
-              </span>
-            </div>
-            <div>
-              Unrealized P&L:{" "}
-              <span style={{ color: totalUnrealizedPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
-                ${Number(totalUnrealizedPnL).toFixed(2)}
-              </span>
-            </div>
-          </div>
+          <ReplayPanel
+            theme={theme}
+            buttonStyle={buttonStyle}
+            replayPlaying={replayPlaying}
+            setReplayPlaying={setReplayPlaying}
+            stepReplay={stepReplay}
+            resetReplay={resetReplay}
+            replaySpeed={replaySpeed}
+            setReplaySpeed={setReplaySpeed}
+            replayBuy={replayBuy}
+            replaySell={replaySell}
+            replayIndex={replayIndex}
+            mainReplayData={mainReplayData}
+            replayCandle={replayCandle}
+            replayStats={replayStats}
+          />
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Replay + Backtest</h3>
+          <AlertsPanel
+            theme={theme}
+            buttonStyle={buttonStyle}
+            alertInput={alertInput}
+            setAlertInput={setAlertInput}
+            addPriceAlert={addPriceAlert}
+            alerts={alerts}
+            removeAlert={removeAlert}
+            selectedStockData={selectedStockData}
+          />
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
-            <button onClick={() => setReplayPlaying(!replayPlaying)} style={buttonStyle(replayPlaying)}>
-              {replayPlaying ? "Pause" : "Play"}
-            </button>
-            <button onClick={stepReplay} style={buttonStyle(false)}>
-              Step
-            </button>
-            <button onClick={resetReplay} style={buttonStyle(false)}>
-              Reset
-            </button>
-          </div>
+          <DOMPanel
+            theme={theme}
+            ladderRows={ladderRows}
+            selectedStockData={selectedStockData}
+            level2={level2}
+          />
 
-          <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
-            {[1, 2, 5].map((speed) => (
-              <button
-                key={speed}
-                onClick={() => setReplaySpeed(speed)}
-                style={buttonStyle(replaySpeed === speed)}
-              >
-                {speed}x
-              </button>
-            ))}
-            <button onClick={replayBuy} style={{ ...buttonStyle(true), background: theme.green, border: "none" }}>
-              Replay Buy
-            </button>
-            <button onClick={replaySell} style={{ ...buttonStyle(true), background: theme.red, border: "none" }}>
-              Replay Sell
-            </button>
-          </div>
+          <OpenPositionsPanel
+            theme={theme}
+            positions={positions}
+            allSymbols={allSymbols}
+          />
 
-          <div style={{ marginTop: "6px", fontSize: "10px", lineHeight: "1.55" }}>
-            <div>Replay Candle: {mainReplayData.length ? `${Math.min(replayIndex + 1, mainReplayData.length)} / ${mainReplayData.length}` : "Loading"}</div>
-            <div>Replay Price: ${replayCandle?.close ? Number(replayCandle.close).toFixed(2) : "—"}</div>
-            <div>Equity: ${Number(replayStats.equity).toFixed(2)}</div>
-            <div>Net P&L: <span style={{ color: replayStats.netPnL >= 0 ? theme.green : theme.red, fontWeight: 900 }}>${replayStats.netPnL.toFixed(2)}</span></div>
-            <div>Trades: {replayStats.totalTrades} · Win Rate: {replayStats.winRate}%</div>
-            <div>Winners: {replayStats.winners} · Losers: {replayStats.losers}</div>
-            <div>Avg Win: ${replayStats.avgWin.toFixed(2)} · Avg Loss: ${replayStats.avgLoss.toFixed(2)}</div>
-          </div>
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Price Alerts</h3>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 72px", gap: "6px" }}>
-            <input
-              type="number"
-              value={alertInput}
-              onChange={(e) => setAlertInput(e.target.value)}
-              placeholder={`Alert @ ${selectedStockData?.price || ""}`}
-              style={{
-                width: "100%",
-                padding: "7px",
-                background: theme.panel2,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "4px",
-                fontSize: "11px",
-              }}
-            />
-
-            <button onClick={addPriceAlert} style={buttonStyle(true)}>
-              Add
-            </button>
-          </div>
-
-          {alerts.length === 0 ? (
-            <div style={{ color: theme.muted, fontSize: "11px", marginTop: "6px" }}>
-              No alerts set.
-            </div>
-          ) : (
-            alerts.map((alert) => (
-              <div
-                key={alert.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto",
-                  gap: "6px",
-                  padding: "4px 0",
-                  borderBottom: `1px solid ${theme.border}`,
-                  fontSize: "10px",
-                  color: alert.active ? theme.text : theme.muted,
-                }}
-              >
-                <span>
-                  {alert.symbol} {alert.direction} ${alert.trigger.toFixed(2)}{" "}
-                  <b style={{ color: alert.active ? theme.green : theme.red }}>
-                    {alert.active ? "ACTIVE" : "TRIGGERED"}
-                  </b>
-                </span>
-                <button onClick={() => removeAlert(alert.id)} style={buttonStyle(false)}>
-                  X
-                </button>
-              </div>
-            ))
-          )}
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>DOM Ladder + Depth Heatmap</h3>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 70px 1fr",
-              gap: "2px",
-              fontSize: "10px",
-              color: theme.muted,
-              paddingBottom: "4px",
-              borderBottom: `1px solid ${theme.border}`,
-            }}
-          >
-            <span>Bid</span>
-            <span style={{ textAlign: "center" }}>Price</span>
-            <span style={{ textAlign: "right" }}>Ask</span>
-          </div>
-
-          {ladderRows.map((row) => (
-            <div
-              key={row.price}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 70px 1fr",
-                gap: "2px",
-                alignItems: "center",
-                minHeight: "20px",
-                fontSize: "10px",
-                background: row.isLast ? "rgba(33,150,243,0.12)" : "transparent",
-                borderBottom: `1px solid ${theme.border}`,
-              }}
-            >
-              <div style={{ position: "relative", textAlign: "left", overflow: "hidden" }}>
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: 2,
-                    bottom: 2,
-                    width: row.bidWidth,
-                    background: "rgba(0,200,150,0.22)",
-                  }}
-                />
-                <span style={{ position: "relative", color: theme.green }}>
-                  {row.bidSize || ""}
-                </span>
-              </div>
-
-              <div style={{ textAlign: "center", fontWeight: 900, color: row.isLast ? theme.blue : theme.text }}>
-                {row.price}
-              </div>
-
-              <div style={{ position: "relative", textAlign: "right", overflow: "hidden" }}>
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 2,
-                    bottom: 2,
-                    width: row.askWidth,
-                    background: "rgba(239,83,80,0.22)",
-                  }}
-                />
-                <span style={{ position: "relative", color: theme.red }}>
-                  {row.askSize || ""}
-                </span>
-              </div>
-            </div>
-          ))}
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Open Positions</h3>
-
-          {Object.keys(positions).length === 0 ? (
-            <div style={{ color: theme.muted, fontSize: "11px" }}>
-              No open positions
-            </div>
-          ) : (
-            Object.entries(positions).map(([symbol, pos]) => {
-              const live = Number(allSymbols.find((s) => s.symbol === symbol)?.price || 0);
-              const unrealized = (live - pos.average) * pos.quantity;
-
-              return (
-                <div
-                  key={symbol}
-                  style={{
-                    padding: "4px 0",
-                    borderBottom: `1px solid ${theme.border}`,
-                    fontSize: "11px",
-                  }}
-                >
-                  <div style={{ fontWeight: 900 }}>{symbol}</div>
-                  <div>Qty: {pos.quantity}</div>
-                  <div>Avg: ${pos.average.toFixed(2)}</div>
-                  <div>
-                    Unrealized:{" "}
-                    <span style={{ color: unrealized >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
-                      ${unrealized.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
-          )}
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Level 1</h3>
-
-          <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
-            <div>Last: ${selectedStockData?.price}</div>
-            <div>
-              Change:{" "}
-              <span style={{ color: selectedStockData?.change.includes("+") ? theme.green : theme.red }}>
-                {selectedStockData?.change}
-              </span>
-            </div>
-            <div>Volume: {selectedStockData?.volume || "2.89M"}</div>
-            <div>Bid: ${(Number(selectedStockData?.price) - 0.05).toFixed(2)}</div>
-            <div>Ask: ${(Number(selectedStockData?.price) + 0.05).toFixed(2)}</div>
-          </div>
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Level 2</h3>
-
-          {level2.map((row, index) => (
-            <div
-              key={index}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                padding: "4px 0",
-                borderBottom: `1px solid ${theme.border}`,
-                fontSize: "11px",
-              }}
-            >
-              <span>{row.marketMaker}</span>
-              <span style={{ color: theme.green }}>{row.bid}</span>
-              <span style={{ color: theme.red }}>{row.ask}</span>
-              <span>{row.size}</span>
-            </div>
-          ))}
-
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Recent Paper Orders</h3>
-
-          {orders.length === 0 ? (
-            <p style={{ color: theme.muted, fontSize: "11px" }}>No paper trades yet.</p>
-          ) : (
-            orders.map((order) => (
-              <div
-                key={order.id}
-                style={{
-                  borderBottom: `1px solid ${theme.border}`,
-                  padding: "4px 0",
-                  fontSize: "11px",
-                }}
-              >
-                <div style={{ color: order.side === "BUY" ? theme.green : theme.red, fontWeight: 900 }}>
-                  {order.side} {order.symbol}
-                </div>
-                <div>Qty: {order.quantity}</div>
-                <div>Price: ${order.price}</div>
-                <div>Value: ${order.value}</div>
-                {order.realizedPnL !== null && (
-                  <div>
-                    P&L:{" "}
-                    <span style={{ color: Number(order.realizedPnL) >= 0 ? theme.green : theme.red, fontWeight: 900 }}>
-                      ${order.realizedPnL}
-                    </span>
-                  </div>
-                )}
-                <div style={{ color: theme.muted }}>{order.time}</div>
-              </div>
-            ))
-          )}
+          <RecentOrdersPanel
+            theme={theme}
+            orders={orders}
+          />
         </div>
   </Panel>
 </RightTradingPanel>

@@ -37,8 +37,12 @@ import {
 } from "./config/terminalConfig";
 import { useMarketData } from "./hooks/useMarketData";
 import { useBrokerData } from "./hooks/useBrokerData";
+import { useCloudWorkspace } from "./hooks/useCloudWorkspace";
 import { useMarketNews } from "./hooks/useMarketNews";
+import { useOrderRisk } from "./hooks/useOrderRisk";
+import { useReplayEngine } from "./hooks/useReplayEngine";
 import { useScannerData } from "./hooks/useScannerData";
+import { useTerminalAlerts } from "./hooks/useTerminalAlerts";
 import { useTerminalWorkspace } from "./hooks/useTerminalWorkspace";
 import { useTerminalSymbols } from "./hooks/useTerminalSymbols";
 import {
@@ -49,14 +53,6 @@ import {
 } from "./utils/marketUtils";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import { auth, db } from "./firebase";
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const ProfessionalScanner = lazy(() => import("./components/ProfessionalScanner"));
 const BrokerHeader = lazy(() => import("./components/BrokerHeader"));
@@ -109,12 +105,6 @@ export default function App() {
     subscribeToSymbols,
   } = useMarketData();
 
-  const [user, setUser] = useState(null);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authMode, setAuthMode] = useState("login");
-  const [authMessage, setAuthMessage] = useState("");
-  const [cloudStatus, setCloudStatus] = useState("Local workspace");
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
   );
@@ -176,22 +166,36 @@ export default function App() {
     loadSetting("sb_activity_log", [])
   );
 
-  const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
-  const [alertInput, setAlertInput] = useState("");
-  const [alertDirection, setAlertDirection] = useState("above");
-  const [alertNotifications, setAlertNotifications] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const [mainChartStatus, setMainChartStatus] = useState("LOADING");
   const [secondaryChartStatus, setSecondaryChartStatus] = useState("LOADING");
 
-  const [replayMode, setReplayMode] = useState(requestedPreset?.replayMode || false);
-  const [replayPlaying, setReplayPlaying] = useState(false);
-  const [replaySpeed, setReplaySpeed] = useState(1);
-  const [replayIndex, setReplayIndex] = useState(80);
-  const [mainReplayData, setMainReplayData] = useState([]);
-  const [replayTrades, setReplayTrades] = useState([]);
-  const [replayEquity, setReplayEquity] = useState([100000]);
+  const {
+    mainReplayData,
+    replayCandle,
+    replayEquity,
+    replayIndex,
+    replayMode,
+    replayPlaying,
+    replaySell: replaySellState,
+    replaySpeed,
+    replayStats,
+    replayTrades,
+    replayBuy: replayBuyState,
+    resetReplay: resetReplayState,
+    setMainReplayData,
+    setReplayEquity,
+    setReplayIndex,
+    setReplayMode,
+    setReplayPlaying,
+    setReplaySpeed,
+    setReplayTrades,
+    stepReplay,
+  } = useReplayEngine({
+    initialReplayMode: requestedPreset?.replayMode || false,
+    quantity,
+  });
   const {
     activeWorkspace,
     setActiveWorkspace,
@@ -262,7 +266,6 @@ export default function App() {
   const activitySequenceRef = useRef(0);
   const lastBrokerSyncLoggedRef = useRef(null);
   const lastBrokerErrorLoggedRef = useRef("");
-  const cloudWorkspaceReadyRef = useRef(false);
 
   const isDark = themeMode === "dark";
   const isCompactTerminal = viewportWidth <= 1180;
@@ -393,50 +396,69 @@ export default function App() {
     brokerApiUrl: BROKER_API_URL,
   });
 
-  const estimatedValue = (
-    Number(selectedStockData?.price || 0) * Number(quantity || 0)
-  ).toFixed(2);
+  const {
+    alertDirection,
+    alertInput,
+    alertNotifications,
+    alerts,
+    addPriceAlert,
+    enableAlertNotifications,
+    removeAlert,
+    setAlertDirection,
+    setAlertInput,
+    setAlerts,
+  } = useTerminalAlerts({
+    selectedStock,
+    selectedStockData,
+  });
 
-  const orderEntryPrice =
-    orderType === "LIMIT" && Number(limitPrice) > 0
-      ? Number(limitPrice)
-      : Number(selectedStockData?.price || 0);
+  const replayBuy = useCallback(() => {
+    replayBuyState(selectedStock);
+  }, [replayBuyState, selectedStock]);
 
-  const orderRisk =
-    Number(stopLoss) > 0 && orderEntryPrice > 0
-      ? Math.abs(orderEntryPrice - Number(stopLoss)) * Number(quantity || 0)
-      : 0;
+  const replaySell = useCallback(() => {
+    replaySellState(selectedStock);
+  }, [replaySellState, selectedStock]);
 
-  const orderReward =
-    Number(takeProfit) > 0 && orderEntryPrice > 0
-      ? Math.abs(Number(takeProfit) - orderEntryPrice) * Number(quantity || 0)
-      : 0;
+  const resetReplay = useCallback(() => {
+    resetReplayState();
+    setOrders([]);
+    setPositions({});
+    setRealizedPnL(0);
+    setAlerts([]);
+  }, [resetReplayState, setAlerts]);
 
-  const riskReward =
-    orderRisk > 0 && orderReward > 0
-      ? (orderReward / orderRisk).toFixed(2)
-      : "N/A";
-
-  const orderValue = Number(orderEntryPrice || 0) * Number(quantity || 0);
-  const dailyRealizedLoss = Math.max(0, -Number(realizedPnL || 0));
-  const positionQuantity = Number(positions[selectedStock]?.quantity || 0);
-  const positionAverage = Number(positions[selectedStock]?.average || 0);
-  const orderPreview = {
-    mode: tradingMode,
-    side: orderSide,
-    symbol: selectedStock,
-    quantity: Number(quantity || 0),
-    entryPrice: Number(orderEntryPrice || 0),
-    value: orderValue,
-    stopLoss: Number(stopLoss || 0),
-    takeProfit: Number(takeProfit || 0),
-    maxOrderValue: Number(maxOrderValue || 0),
-    dailyLossLimit: Number(dailyLossLimit || 0),
+  const {
     dailyRealizedLoss,
-    riskPerTrade: Number(riskPerTrade || 0),
-    positionQuantity,
-    positionAverage,
-  };
+    estimatedValue,
+    orderConfirmationKey,
+    orderEntryPrice,
+    orderPreview,
+    orderReward,
+    orderRisk,
+    orderValue,
+    riskReward,
+    safetyIssues,
+  } = useOrderRisk({
+    brokerConnected,
+    dailyLossLimit,
+    limitPrice,
+    liveReadiness,
+    maxOrderValue,
+    orderConfirmed,
+    orderSide,
+    orderType,
+    positions,
+    quantity,
+    realizedPnL,
+    riskPerTrade,
+    selectedBrokerAccount,
+    selectedStock,
+    selectedStockData,
+    stopLoss,
+    takeProfit,
+    tradingMode,
+  });
 
   useEffect(() => {
     function handleResize() {
@@ -446,113 +468,6 @@ export default function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [setGridMode, setLayoutMode]);
-  const orderConfirmationKey = [
-    tradingMode,
-    orderSide,
-    orderType,
-    selectedStock,
-    quantity,
-    orderEntryPrice,
-    stopLoss,
-    takeProfit,
-    maxOrderValue,
-    dailyLossLimit,
-    riskPerTrade,
-  ].join("|");
-
-  const safetyIssues = useMemo(() => {
-    const issues = [];
-    const maxValue = Number(maxOrderValue || 0);
-    const lossLimit = Number(dailyLossLimit || 0);
-    const riskCap = Number(riskPerTrade || 0);
-    const entry = Number(orderEntryPrice || 0);
-    const stop = Number(stopLoss || 0);
-    const target = Number(takeProfit || 0);
-
-    if (tradingMode !== "paper") {
-      if (!brokerConnected || !selectedBrokerAccount) {
-        issues.push("Live routing requires a connected Questrade account.");
-      }
-
-      if (!liveReadiness) {
-        issues.push("Live readiness has not loaded yet.");
-      } else {
-        issues.push(...(Array.isArray(liveReadiness.blockingReasons) ? liveReadiness.blockingReasons : []));
-      }
-    }
-
-    if (orderConfirmed !== orderConfirmationKey) {
-      issues.push("Confirm the order preview before submitting.");
-    }
-
-    if (!stop || stop <= 0) {
-      issues.push("Stop loss is required before submitting.");
-    }
-
-    if (!target || target <= 0) {
-      issues.push("Take profit is required before submitting.");
-    }
-
-    if (entry > 0 && stop > 0 && orderSide === "BUY" && stop >= entry) {
-      issues.push("BUY stop loss must be below entry.");
-    }
-
-    if (entry > 0 && stop > 0 && orderSide === "SELL" && stop <= entry) {
-      issues.push("SELL stop loss must be above entry.");
-    }
-
-    if (entry > 0 && target > 0 && orderSide === "BUY" && target <= entry) {
-      issues.push("BUY take profit must be above entry.");
-    }
-
-    if (entry > 0 && target > 0 && orderSide === "SELL" && target >= entry) {
-      issues.push("SELL take profit must be below entry.");
-    }
-
-    if (maxValue > 0 && orderValue > maxValue) {
-      issues.push(`Order value exceeds max order limit of $${maxValue.toFixed(2)}.`);
-    }
-
-    if (riskCap > 0 && orderRisk > riskCap) {
-      issues.push(`Order risk exceeds risk/trade cap of $${riskCap.toFixed(2)}.`);
-    }
-
-    if (lossLimit > 0 && dailyRealizedLoss >= lossLimit) {
-      issues.push(`Daily loss lockout is active at $${lossLimit.toFixed(2)}.`);
-    }
-
-    if (tradingMode === "paper" && orderSide === "SELL" && positionQuantity <= 0) {
-      issues.push(`No ${selectedStock} paper position available to sell.`);
-    }
-
-    if (orderRisk > 0 && orderReward > 0 && Number(riskReward) < 1.5) {
-      issues.push("R:R is below 1.5. Adjust stop, target, or size before submitting.");
-    }
-
-    return issues;
-  }, [
-    brokerConnected,
-    dailyLossLimit,
-    dailyRealizedLoss,
-    liveReadiness,
-    maxOrderValue,
-    orderConfirmationKey,
-    orderConfirmed,
-    orderEntryPrice,
-    orderSide,
-    orderRisk,
-    orderReward,
-    orderValue,
-    positionQuantity,
-    riskReward,
-    riskPerTrade,
-    selectedBrokerAccount,
-    selectedStock,
-    stopLoss,
-    takeProfit,
-    tradingMode,
-  ]);
-
   const totalUnrealizedPnL = Object.entries(positions).reduce(
     (total, [symbol, pos]) => {
       const live = Number(allSymbols.find((s) => s.symbol === symbol)?.price || 0);
@@ -582,35 +497,6 @@ export default function App() {
       };
     });
   }, [basePrice, level2]);
-
-  const replayStats = useMemo(() => {
-    const closedTrades = replayTrades.filter((trade) => trade.type === "SELL");
-    const winners = closedTrades.filter((trade) => Number(trade.pnl) > 0);
-    const losers = closedTrades.filter((trade) => Number(trade.pnl) < 0);
-    const netPnL = closedTrades.reduce((total, trade) => total + Number(trade.pnl || 0), 0);
-    const winRate = closedTrades.length
-      ? ((winners.length / closedTrades.length) * 100).toFixed(1)
-      : "0.0";
-
-    const avgWin = winners.length
-      ? winners.reduce((total, trade) => total + Number(trade.pnl), 0) / winners.length
-      : 0;
-
-    const avgLoss = losers.length
-      ? losers.reduce((total, trade) => total + Number(trade.pnl), 0) / losers.length
-      : 0;
-
-    return {
-      totalTrades: closedTrades.length,
-      winners: winners.length,
-      losers: losers.length,
-      netPnL,
-      winRate,
-      avgWin,
-      avgLoss,
-      equity: replayEquity[replayEquity.length - 1] || 100000,
-    };
-  }, [replayTrades, replayEquity]);
 
   const workspacePayload = useMemo(
     () => ({
@@ -717,119 +603,38 @@ export default function App() {
     if (Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
     if (data.journalDraft) setJournalDraft(data.journalDraft);
     if (data.selectedScannerStock) setSelectedScannerStock(data.selectedScannerStock);
-  }, [applySymbolWorkspace, applyWorkspaceLayout, setSelectedScannerStock]);
+  }, [
+    applySymbolWorkspace,
+    applyWorkspaceLayout,
+    setAlerts,
+    setReplayEquity,
+    setReplayIndex,
+    setReplayMode,
+    setReplaySpeed,
+    setReplayTrades,
+    setSelectedScannerStock,
+  ]);
 
-  async function handleAuthSubmit(mode = authMode) {
-    setAuthMessage("");
+  const {
+    authEmail,
+    authMessage,
+    authMode,
+    authPassword,
+    cloudStatus,
+    handleAuthSubmit,
+    handleLogout,
+    loadWorkspaceFromCloud,
+    saveWorkspaceToCloud,
+    setAuthEmail,
+    setAuthMode,
+    setAuthPassword,
+    user,
+  } = useCloudWorkspace({
+    applyWorkspace,
+    pushActivity,
+    workspacePayload,
+  });
 
-    try {
-      if (!authEmail || !authPassword) {
-        setAuthMessage("Enter email and password.");
-        return;
-      }
-
-      if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-        setAuthMessage("Account created.");
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPassword);
-        setAuthMessage("Signed in.");
-      }
-
-      setAuthPassword("");
-    } catch (error) {
-      setAuthMessage(error.message || "Authentication failed.");
-    }
-  }
-
-  async function saveWorkspaceToCloud() {
-    if (!user) {
-      setCloudStatus("Sign in to save cloud workspace");
-      pushActivity({
-        type: "cloud",
-        status: "blocked",
-        title: "Cloud Save Blocked",
-        detail: "User must be signed in before saving the workspace to cloud storage.",
-      });
-      return;
-    }
-
-    try {
-      await setDoc(doc(db, "workspaces", user.uid), {
-        ...workspacePayload,
-        updatedAt: serverTimestamp(),
-        owner: user.uid,
-      });
-
-      setCloudStatus(`Cloud saved ${new Date().toLocaleTimeString()}`);
-      pushActivity({
-        type: "cloud",
-        status: "saved",
-        title: "Cloud Workspace Saved",
-        detail: "Workspace state saved to Firebase.",
-      });
-    } catch {
-      setCloudStatus("Cloud save failed");
-      pushActivity({
-        type: "cloud",
-        status: "failed",
-        title: "Cloud Save Failed",
-        detail: "Firebase workspace save did not complete.",
-      });
-    }
-  }
-
-  async function loadWorkspaceFromCloud() {
-    if (!user) {
-      setCloudStatus("Sign in to load cloud workspace");
-      pushActivity({
-        type: "cloud",
-        status: "blocked",
-        title: "Cloud Load Blocked",
-        detail: "User must be signed in before loading a cloud workspace.",
-      });
-      return;
-    }
-
-    try {
-      const snapshot = await getDoc(doc(db, "workspaces", user.uid));
-
-      if (!snapshot.exists()) {
-        setCloudStatus("No cloud workspace found");
-        pushActivity({
-          type: "cloud",
-          status: "warning",
-          title: "Cloud Workspace Missing",
-          detail: "No saved Firebase workspace exists for the signed-in user.",
-        });
-        return;
-      }
-
-      applyWorkspace(snapshot.data());
-      setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
-      pushActivity({
-        type: "cloud",
-        status: "loaded",
-        title: "Cloud Workspace Loaded",
-        detail: "Workspace state loaded from Firebase.",
-      });
-    } catch {
-      setCloudStatus("Cloud load failed");
-      pushActivity({
-        type: "cloud",
-        status: "failed",
-        title: "Cloud Load Failed",
-        detail: "Firebase workspace load did not complete.",
-      });
-    }
-  }
-
-  async function handleLogout() {
-    await signOut(auth);
-    setCloudStatus("Local workspace");
-  }
-
-  const replayCandle = mainReplayData[replayIndex] || null;
   function panelStyle(extra = {}) {
     return createPanelStyle(theme, isDark, extra);
   }
@@ -949,38 +754,6 @@ export default function App() {
   function setMainTimeframe(value) {
     setTimeframe(value);
     if (syncCharts) setSecondaryTimeframe(value);
-  }
-
-  function addPriceAlert() {
-    const trigger = Number(alertInput);
-
-    if (!trigger || trigger <= 0) return;
-
-    const nextAlert = {
-      id: Date.now(),
-      symbol: selectedStock,
-      trigger,
-      direction: alertDirection,
-      active: true,
-      createdAt: new Date().toLocaleTimeString(),
-    };
-
-    setAlerts((prev) => [nextAlert, ...prev.slice(0, 8)]);
-    setAlertInput("");
-  }
-
-  async function enableAlertNotifications() {
-    if (!("Notification" in window)) {
-      setAlertNotifications(false);
-      return;
-    }
-
-    const permission = await Notification.requestPermission();
-    setAlertNotifications(permission === "granted");
-  }
-
-  function removeAlert(id) {
-    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
   }
 
   function addJournalEntry() {
@@ -1144,94 +917,10 @@ export default function App() {
     selectMainSymbol,
     selectedStock,
     setActiveWorkspace,
+    setReplayMode,
     setRightTab,
     showIndicators,
   ]);
-
-  function stepReplay() {
-    setReplayIndex((prev) => {
-      if (!mainReplayData.length) return prev;
-      return Math.min(prev + 1, mainReplayData.length - 1);
-    });
-  }
-
-  function replayBuy() {
-    const candle = mainReplayData[replayIndex];
-    if (!candle) return;
-
-    const price = Number(candle.close);
-    const qty = Number(quantity) || 1;
-
-    setReplayTrades((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        type: "BUY",
-        symbol: selectedStock,
-        qty,
-        price,
-        time: candle.time,
-      },
-    ]);
-  }
-
-  function replaySell() {
-    const candle = mainReplayData[replayIndex];
-    if (!candle) return;
-
-    const price = Number(candle.close);
-    const requestedQty = Number(quantity) || 1;
-
-    const lastOpenBuy = [...replayTrades]
-      .reverse()
-      .find((trade) => trade.type === "BUY" && !trade.closed);
-
-    if (!lastOpenBuy) return;
-
-    const sellQty = Math.min(requestedQty, Number(lastOpenBuy.qty || 0));
-
-    if (sellQty <= 0) return;
-
-    const remainingBuyQty = Number(lastOpenBuy.qty || 0) - sellQty;
-    const pnl = (price - lastOpenBuy.price) * sellQty;
-    const nextEquity = (replayEquity[replayEquity.length - 1] || 100000) + pnl;
-
-    setReplayTrades((prev) =>
-      prev
-        .map((trade) =>
-          trade.id === lastOpenBuy.id
-            ? {
-                ...trade,
-                qty: remainingBuyQty,
-                closed: remainingBuyQty <= 0,
-              }
-            : trade
-        )
-        .concat({
-          id: Date.now(),
-          type: "SELL",
-          symbol: selectedStock,
-          qty: sellQty,
-          price,
-          pnl,
-          matchedBuyId: lastOpenBuy.id,
-          time: candle.time,
-        })
-    );
-
-    setReplayEquity((prev) => [...prev, nextEquity]);
-  }
-
-  function resetReplay() {
-    setReplayPlaying(false);
-    setReplayIndex(80);
-    setReplayTrades([]);
-    setReplayEquity([100000]);
-    setOrders([]);
-    setPositions({});
-    setRealizedPnL(0);
-    setAlerts([]);
-  }
 
   function resetWorkspace() {
     const keysToReset = [
@@ -1881,56 +1570,6 @@ export default function App() {
     );
   }
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      cloudWorkspaceReadyRef.current = false;
-      setUser(currentUser);
-
-      if (!currentUser) {
-        setCloudStatus("Local workspace");
-        return;
-      }
-
-      setCloudStatus(`Signed in: ${currentUser.email}`);
-
-      try {
-        const snapshot = await getDoc(doc(db, "workspaces", currentUser.uid));
-
-        if (snapshot.exists()) {
-          applyWorkspace(snapshot.data());
-          setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
-        } else {
-          setCloudStatus("Signed in - local workspace active");
-        }
-        cloudWorkspaceReadyRef.current = true;
-      } catch {
-        cloudWorkspaceReadyRef.current = true;
-        setCloudStatus("Signed in · cloud load skipped");
-      }
-    });
-
-    return () => unsubscribe();
-  }, [applyWorkspace]);
-
-  useEffect(() => {
-    if (!user || !cloudWorkspaceReadyRef.current) return undefined;
-
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        await setDoc(doc(db, "workspaces", user.uid), {
-          ...workspacePayload,
-          updatedAt: serverTimestamp(),
-          owner: user.uid,
-        });
-
-        setCloudStatus(`Cloud autosaved ${new Date().toLocaleTimeString()}`);
-      } catch {
-        setCloudStatus("Cloud autosave failed");
-      }
-    }, 1500);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [user, workspacePayload]);
 
   useEffect(() => {
     if (brokerBootstrappedRef.current) return;
@@ -2060,66 +1699,6 @@ export default function App() {
 
     return () => window.removeEventListener("keydown", handleHotkeys);
   }, [setGridMode, setLayoutMode]);
-
-  useEffect(() => {
-    if (!replayMode || !replayPlaying) return;
-
-    const interval = setInterval(() => {
-      setReplayIndex((prev) => {
-        if (!mainReplayData.length) return prev;
-
-        if (prev >= mainReplayData.length - 1) {
-          setReplayPlaying(false);
-          return prev;
-        }
-
-        return prev + 1;
-      });
-    }, Math.max(120, 900 / replaySpeed));
-
-    return () => clearInterval(interval);
-  }, [replayMode, replayPlaying, replaySpeed, mainReplayData.length]);
-
-  useEffect(() => {
-    const price = Number(selectedStockData?.price || 0);
-    const now = new Date().toLocaleTimeString();
-
-    const timeout = setTimeout(() => {
-      setAlerts((prev) => {
-        let changed = false;
-        const nextAlerts = prev.map((alert) => {
-          if (!alert.active || alert.symbol !== selectedStock) return alert;
-
-          const triggered =
-            alert.direction === "above"
-              ? price >= alert.trigger
-              : price <= alert.trigger;
-
-          if (!triggered) return alert;
-
-          changed = true;
-          if (
-            alertNotifications &&
-            "Notification" in window &&
-            Notification.permission === "granted"
-          ) {
-            new Notification(`${alert.symbol} alert triggered`, {
-              body: `${alert.direction} $${Number(alert.trigger).toFixed(2)}`,
-            });
-          }
-          return {
-            ...alert,
-            active: false,
-            triggeredAt: now,
-          };
-        });
-
-        return changed ? nextAlerts : prev;
-      });
-    }, 0);
-
-    return () => clearTimeout(timeout);
-  }, [alertNotifications, selectedStockData, selectedStock]);
 
   useEffect(() => {
     return subscribeToSymbols(trackedSymbols);

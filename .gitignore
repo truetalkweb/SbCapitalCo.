@@ -144,3 +144,10 @@ vite.config.ts.timestamp-*
 .vercel
 .env*
 !.env.example
+
+# Local QA and smoke-test artifacts
+.qa-artifacts/
+qa-*.png
+*-verify.png
+*-smoke.log
+*-smoke.err.log

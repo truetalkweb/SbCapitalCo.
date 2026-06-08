@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -6,8 +6,9 @@ import {
   LineSeries,
   CrosshairMode,
 } from "lightweight-charts";
+import { marketDataService } from "../services/marketDataService";
 
-const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
+const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
 
 function getTimeframeSeconds(timeframe) {
   if (timeframe === "1m") return 60;
@@ -16,18 +17,6 @@ function getTimeframeSeconds(timeframe) {
   if (timeframe === "1H") return 60 * 60;
   if (timeframe === "1D") return 60 * 60 * 24;
   return 60 * 15;
-}
-
-function getTimeframeSettings(timeframe) {
-  const now = Math.floor(Date.now() / 1000);
-
-  if (timeframe === "1m") return { resolution: "1", from: now - 60 * 60 * 6 };
-  if (timeframe === "5m") return { resolution: "5", from: now - 60 * 60 * 24 };
-  if (timeframe === "15m") return { resolution: "15", from: now - 60 * 60 * 24 * 5 };
-  if (timeframe === "1H") return { resolution: "60", from: now - 60 * 60 * 24 * 30 };
-  if (timeframe === "1D") return { resolution: "D", from: now - 60 * 60 * 24 * 180 };
-
-  return { resolution: "15", from: now - 60 * 60 * 24 * 5 };
 }
 
 function bucketTime(timestamp, timeframe) {
@@ -60,6 +49,15 @@ function formatVolume(volume) {
   return String(Math.round(value));
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function generateFallbackCandles(livePrice, timeframe) {
   const seconds = getTimeframeSeconds(timeframe);
   const now = bucketTime(Math.floor(Date.now() / 1000), timeframe);
@@ -89,6 +87,42 @@ function generateFallbackCandles(livePrice, timeframe) {
   return data;
 }
 
+async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function normalizeBackendCandles(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((candle) => ({
+      time: Number(candle.time),
+      open: Number(Number(candle.open).toFixed(4)),
+      high: Number(Number(candle.high).toFixed(4)),
+      low: Number(Number(candle.low).toFixed(4)),
+      close: Number(Number(candle.close).toFixed(4)),
+      volume: Number(candle.volume || 1),
+    }))
+    .filter((candle) =>
+      Number.isFinite(candle.time) &&
+      Number.isFinite(candle.open) &&
+      Number.isFinite(candle.high) &&
+      Number.isFinite(candle.low) &&
+      Number.isFinite(candle.close)
+    );
+}
+
 function Chart({
   symbol,
   timeframe,
@@ -101,7 +135,9 @@ function Chart({
   replayIndex = null,
   onReplayData,
   replayTrades = [],
+  brokerApiUrl = DEFAULT_BROKER_API_URL,
 }) {
+  const chartSymbol = String(symbol || "").trim().toUpperCase() || "SPY";
   const containerRef = useRef(null);
   const tooltipRef = useRef(null);
   const chartRef = useRef(null);
@@ -116,13 +152,21 @@ function Chart({
   const animationFrameRef = useRef(null);
   const displayPriceRef = useRef(null);
   const targetPriceRef = useRef(null);
+  const targetTickMetaRef = useRef(null);
   const lastAppliedPriceRef = useRef(null);
   const lastAppliedTimeRef = useRef(0);
   const livePriceRef = useRef(livePrice);
   const onReplayDataRef = useRef(onReplayData);
   const onStatusChangeRef = useRef(onStatusChange);
+  const lastIndicatorUpdateRef = useRef(0);
+  const pendingStreamTickRef = useRef(null);
+  const streamFrameRef = useRef(null);
+  const lastStreamTickAtRef = useRef(null);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
 
   const setStatus = useCallback((nextStatus) => {
+    if (statusRef.current === nextStatus) return;
+
     statusRef.current = nextStatus;
     if (typeof onStatusChangeRef.current === "function") {
       onStatusChangeRef.current(nextStatus);
@@ -195,12 +239,14 @@ function Chart({
     }
   }, [replayTrades]);
 
-  const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
+  const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
     const currentBucket = bucketTime(timestamp, timeframe);
     const last = lastCandleRef.current;
+    const volumeIncrement = Math.max(Number(options.volumeIncrement || 1), 1);
+    let createdNewBucket = false;
 
     let updated;
 
@@ -210,7 +256,7 @@ function Chart({
         high: Number(Math.max(last.high, price).toFixed(2)),
         low: Number(Math.min(last.low, price).toFixed(2)),
         close: Number(price.toFixed(2)),
-        volume: Number(last.volume || 0) + Math.floor(Math.random() * 900 + 150),
+        volume: Number(last.volume || 0) + volumeIncrement,
       };
 
       candlesRef.current = candlesRef.current.map((candle) =>
@@ -218,6 +264,7 @@ function Chart({
       );
     } else if (currentBucket > last.time) {
       const open = Number(last.close.toFixed(2));
+      createdNewBucket = true;
 
       updated = {
         time: currentBucket,
@@ -225,7 +272,7 @@ function Chart({
         high: Number(Math.max(open, price).toFixed(2)),
         low: Number(Math.min(open, price).toFixed(2)),
         close: Number(price.toFixed(2)),
-        volume: Math.floor(Math.random() * 45000) + 8000,
+        volume: volumeIncrement,
       };
 
       candlesRef.current = [...candlesRef.current, updated].slice(-350);
@@ -251,21 +298,33 @@ function Chart({
         });
       }
 
-      updateIndicators(candlesRef.current);
+      const now = Date.now();
+      const shouldUpdateIndicators =
+        options.forceIndicators ||
+        createdNewBucket ||
+        now - lastIndicatorUpdateRef.current > 1000;
+
+      if (shouldUpdateIndicators) {
+        updateIndicators(candlesRef.current);
+        lastIndicatorUpdateRef.current = now;
+      }
     }
 
-    if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED") {
+    if (options.status) {
+      setStatus(options.status);
+    } else if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED" && statusRef.current !== "QTRD" && statusRef.current !== "SIM") {
       setStatus("LIVE");
     }
   }, [replayMode, setStatus, timeframe, updateIndicators]);
 
-  const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
+  const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
     const currentBucket = bucketTime(timestamp, timeframe);
     const previous = lastCandleRef.current;
     const spread = Math.max(price * 0.0012, 0.03);
+    const volumeIncrement = Math.max(Number(options.volumeIncrement || 1), 1);
 
     const updated = {
       time: currentBucket >= previous.time ? currentBucket : previous.time,
@@ -273,7 +332,7 @@ function Chart({
       high: Number((price + spread).toFixed(2)),
       low: Number((price - spread).toFixed(2)),
       close: Number(price.toFixed(2)),
-      volume: Math.max(Number(previous.volume || 0), Math.floor(Math.random() * 65000) + 15000),
+      volume: Math.max(Number(previous.volume || 0) + volumeIncrement, Number(previous.volume || 0)),
     };
 
     candlesRef.current = candlesRef.current
@@ -294,7 +353,7 @@ function Chart({
       updateIndicators(candlesRef.current);
     }
 
-    setStatus("LIVE");
+    setStatus(options.status || "LIVE");
   }, [replayMode, setStatus, timeframe, updateIndicators, updateVolume]);
 
   const runSmoothAnimation = useCallback(() => {
@@ -316,16 +375,19 @@ function Chart({
       const target = Number(targetPriceRef.current);
       const current = Number(displayPriceRef.current);
       const diff = target - current;
+      const tickMeta = targetTickMetaRef.current || {};
+      const tickTimestamp = tickMeta.timestamp || Math.floor(Date.now() / 1000);
+      const tickOptions = tickMeta.options || {};
 
       if (Math.abs(diff) < Math.max(target * 0.00008, 0.01)) {
         displayPriceRef.current = target;
-        updateCurrentCandle(target);
+        updateCurrentCandle(target, tickTimestamp, tickOptions);
         return;
       }
 
       const next = current + diff * 0.18;
       displayPriceRef.current = next;
-      updateCurrentCandle(next);
+      updateCurrentCandle(next, tickTimestamp, tickOptions);
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };
@@ -333,7 +395,7 @@ function Chart({
     animationFrameRef.current = requestAnimationFrame(animate);
   }, [replayMode, updateCurrentCandle]);
 
-  const applyLivePrice = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000)) => {
+  const applyLivePrice = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
     const price = Number(priceValue);
@@ -345,7 +407,7 @@ function Chart({
     // If REST candles are delayed and the live quote is far away, do not draw one giant candle.
     // Rebase the latest candle around the live quote, then smooth future ticks.
     if (gapPercent > 0.025) {
-      rebaseLatestCandle(price, timestamp);
+      rebaseLatestCandle(price, timestamp, options);
       return;
     }
 
@@ -353,14 +415,49 @@ function Chart({
       displayPriceRef.current = lastClose;
     }
 
+    targetTickMetaRef.current = {
+      timestamp,
+      options,
+    };
     targetPriceRef.current = price;
     runSmoothAnimation();
   }, [rebaseLatestCandle, runSmoothAnimation]);
 
+  const queueStreamTick = useCallback((trade) => {
+    const price = Number(trade?.p || trade?.price || 0);
+
+    if (!price || Number.isNaN(price) || replayMode) return;
+
+    pendingStreamTickRef.current = {
+      price,
+      timestamp: Number(trade.t || trade.timestamp || Math.floor(Date.now() / 1000)),
+      options: {
+        status: trade.delayed ? "DELAYED" : "QTRD",
+        volumeIncrement: Number(trade.lastTradeSize || 1) || 1,
+      },
+    };
+    lastStreamTickAtRef.current = Date.now();
+
+    if (streamFrameRef.current) return;
+
+    streamFrameRef.current = requestAnimationFrame(() => {
+      streamFrameRef.current = null;
+      const tick = pendingStreamTickRef.current;
+      pendingStreamTickRef.current = null;
+
+      if (!tick) return;
+
+      lastLivePriceRef.current = tick.price;
+      applyLivePrice(tick.price, tick.timestamp, tick.options);
+    });
+  }, [applyLivePrice, replayMode]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
+    setIsHistoryLoading(true);
     setStatus("LOADING");
+    let disposed = false;
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -478,6 +575,7 @@ function Chart({
     ema20Ref.current = ema20Series;
 
     chart.subscribeCrosshairMove((param) => {
+      if (disposed) return;
       if (!tooltipRef.current || !containerRef.current) return;
 
       if (!param.time || !param.point) {
@@ -495,7 +593,7 @@ function Chart({
       tooltipRef.current.style.left = `${Math.min(param.point.x + 14, containerRef.current.clientWidth - 170)}px`;
       tooltipRef.current.style.top = `${Math.max(param.point.y - 84, 8)}px`;
       tooltipRef.current.innerHTML = `
-        <div style="font-weight:900;color:#fff;margin-bottom:4px">${symbol} · ${timeframe}</div>
+        <div style="font-weight:900;color:#fff;margin-bottom:4px">${escapeHtml(chartSymbol)} - ${escapeHtml(timeframe)}</div>
         <div>O: <b>${candle.open.toFixed(2)}</b></div>
         <div>H: <b style="color:#00c896">${candle.high.toFixed(2)}</b></div>
         <div>L: <b style="color:#ef5350">${candle.low.toFixed(2)}</b></div>
@@ -506,61 +604,42 @@ function Chart({
 
     async function loadCandles() {
       try {
-        const now = Math.floor(Date.now() / 1000);
-        const { resolution, from } = getTimeframeSettings(timeframe);
+        const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
 
-        const res = await fetch(
-          `https://finnhub.io/api/v1/stock/candle?symbol=${symbol}&resolution=${resolution}&from=${from}&to=${now}&token=${FINNHUB_API_KEY}`
-        );
+        if (cleanBrokerApiUrl) {
+          const backendData = await fetchJsonWithTimeout(
+            `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?timeframe=${encodeURIComponent(timeframe)}`,
+            9000
+          );
+          const backendCandles = normalizeBackendCandles(backendData.candles);
 
-        const data = await res.json();
+          if (backendCandles.length) {
+            if (disposed) return;
 
-        if (data.s === "ok" && Array.isArray(data.t) && data.t.length > 0) {
-          const candles = data.t.map((time, i) => ({
-            time,
-            open: Number(data.o[i].toFixed(2)),
-            high: Number(data.h[i].toFixed(2)),
-            low: Number(data.l[i].toFixed(2)),
-            close: Number(data.c[i].toFixed(2)),
-            volume: Number(data.v?.[i] || 1),
-          }));
+            candlesRef.current = backendCandles;
+            lastCandleRef.current = backendCandles[backendCandles.length - 1];
+            displayPriceRef.current = lastCandleRef.current.close;
+            targetPriceRef.current = lastCandleRef.current.close;
+            lastAppliedPriceRef.current = lastCandleRef.current.close;
 
-          candlesRef.current = candles;
-          lastCandleRef.current = candles[candles.length - 1];
-          displayPriceRef.current = lastCandleRef.current.close;
-          targetPriceRef.current = lastCandleRef.current.close;
-          lastAppliedPriceRef.current = lastCandleRef.current.close;
+            candleSeries.setData(backendCandles);
+            updateVolume(backendCandles);
+            if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(backendCandles);
+            updateIndicators(backendCandles);
+            updateMarkers();
+            chart.timeScale().fitContent();
+            setStatus("QTRD");
+            setIsHistoryLoading(false);
 
-          candleSeries.setData(candles);
-          updateVolume(candles);
-          if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(candles);
-          updateIndicators(candles);
-          updateMarkers();
-          chart.timeScale().fitContent();
-          setStatus("LIVE");
-
-          if (lastLivePriceRef.current) {
-            applyLivePrice(lastLivePriceRef.current);
+            if (lastLivePriceRef.current) {
+              applyLivePrice(lastLivePriceRef.current);
+            }
+            return;
           }
-        } else {
-          const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
-
-          candlesRef.current = fallback;
-          lastCandleRef.current = fallback[fallback.length - 1];
-          displayPriceRef.current = lastCandleRef.current.close;
-          targetPriceRef.current = lastCandleRef.current.close;
-          lastAppliedPriceRef.current = lastCandleRef.current.close;
-
-          candleSeries.setData(fallback);
-          updateVolume(fallback);
-          if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
-          updateIndicators(fallback);
-          updateMarkers();
-          chart.timeScale().fitContent();
-          setStatus("SIM");
         }
-      } catch {
+
         const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
+        if (disposed) return;
 
         candlesRef.current = fallback;
         lastCandleRef.current = fallback[fallback.length - 1];
@@ -575,12 +654,32 @@ function Chart({
         updateMarkers();
         chart.timeScale().fitContent();
         setStatus("SIM");
+        setIsHistoryLoading(false);
+      } catch {
+        const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
+        if (disposed) return;
+
+        candlesRef.current = fallback;
+        lastCandleRef.current = fallback[fallback.length - 1];
+        displayPriceRef.current = lastCandleRef.current.close;
+        targetPriceRef.current = lastCandleRef.current.close;
+        lastAppliedPriceRef.current = lastCandleRef.current.close;
+
+        candleSeries.setData(fallback);
+        updateVolume(fallback);
+        if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
+        updateIndicators(fallback);
+        updateMarkers();
+        chart.timeScale().fitContent();
+        setStatus("SIM");
+        setIsHistoryLoading(false);
       }
     }
 
     loadCandles();
 
     const resizeObserver = new ResizeObserver(() => {
+      if (disposed) return;
       if (!containerRef.current || !chartRef.current) return;
 
       chartRef.current.applyOptions({
@@ -592,19 +691,30 @@ function Chart({
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
-      chart.remove();
+      if (streamFrameRef.current) {
+        cancelAnimationFrame(streamFrameRef.current);
+        streamFrameRef.current = null;
+      }
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       ema9Ref.current = null;
       ema20Ref.current = null;
+      requestAnimationFrame(() => {
+        try {
+          chart.remove();
+        } catch {
+          // Lightweight Charts can already be disposed during rapid layout switches.
+        }
+      });
     };
-  }, [applyLivePrice, setStatus, symbol, timeframe, updateIndicators, updateMarkers, updateVolume]);
+  }, [applyLivePrice, brokerApiUrl, chartSymbol, setStatus, timeframe, updateIndicators, updateMarkers, updateVolume]);
 
   useEffect(() => {
     updateIndicators();
@@ -616,6 +726,30 @@ function Chart({
     lastLivePriceRef.current = Number(livePrice);
     applyLivePrice(Number(livePrice), Math.floor(Date.now() / 1000));
   }, [applyLivePrice, livePrice, livePulse, replayMode]);
+
+  useEffect(() => {
+    if (!chartSymbol || replayMode) return undefined;
+
+    const unsubscribe = marketDataService.subscribe(chartSymbol, queueStreamTick);
+    const staleTimer = window.setInterval(() => {
+      if (!lastStreamTickAtRef.current) return;
+
+      const isStale = Date.now() - lastStreamTickAtRef.current > 15000;
+      if (isStale && statusRef.current === "QTRD") {
+        setStatus("STALE");
+      }
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      window.clearInterval(staleTimer);
+
+      if (streamFrameRef.current) {
+        cancelAnimationFrame(streamFrameRef.current);
+        streamFrameRef.current = null;
+      }
+    };
+  }, [chartSymbol, queueStreamTick, replayMode, setStatus]);
 
   useEffect(() => {
     if (!candleSeriesRef.current || !candlesRef.current.length) return;
@@ -677,14 +811,36 @@ function Chart({
         }}
       >
         <div style={{ fontWeight: 900, color: "#ffffff" }}>
-          {symbol} · {timeframe}
+          {chartSymbol} - {timeframe}
         </div>
         <div>
-          EMA9 <span style={{ color: "#2196f3" }}>━━</span> · EMA20{" "}
-          <span style={{ color: "#f59e0b" }}>━━</span> · {" "}
+          EMA9 <span style={{ color: "#2196f3" }}>--</span> / EMA20{" "}
+          <span style={{ color: "#f59e0b" }}>--</span> / {" "}
           <span style={{ color: "#a855f7" }}>---</span>
         </div>
       </div>
+
+      {isHistoryLoading && (
+        <div
+          style={{
+            position: "absolute",
+            top: "52px",
+            right: "12px",
+            zIndex: 7,
+            padding: "6px 8px",
+            borderRadius: "6px",
+            background: "rgba(5,11,20,0.78)",
+            border: "1px solid rgba(35,48,68,0.9)",
+            color: "#8fb7ff",
+            fontSize: "10px",
+            fontWeight: 850,
+            pointerEvents: "none",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          Loading {chartSymbol}
+        </div>
+      )}
 
       <div
         ref={tooltipRef}

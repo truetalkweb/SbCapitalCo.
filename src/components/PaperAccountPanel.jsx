@@ -6,40 +6,79 @@ export default function PaperAccountPanel({
   realizedPnL,
   totalUnrealizedPnL,
 }) {
+  const stats = [
+    ["Buying Power", "$100,000.00"],
+    ["Active Symbol", selectedStock],
+    ["Current Price", selectedStockData?.price ? `$${selectedStockData.price}` : "-"],
+    ["Total Orders", orders.length],
+  ];
+
   return (
     <>
       <h3 style={{ marginTop: "12px", fontSize: "13px" }}>
         Paper Account Summary
       </h3>
 
-      <div style={{ fontSize: "11px", lineHeight: "1.65" }}>
-        <div>Buying Power: $100,000.00</div>
-        <div>Active Symbol: {selectedStock}</div>
-        <div>Current Price: ${selectedStockData?.price}</div>
-        <div>Total Orders: {orders.length}</div>
-
-        <div>
-          Realized P&L:{" "}
-          <span
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", fontSize: "10px" }}>
+        {stats.map(([label, value]) => (
+          <div
+            key={label}
             style={{
-              color: realizedPnL >= 0 ? theme.green : theme.red,
-              fontWeight: 900,
+              background: theme.panel2,
+              border: `1px solid ${theme.border}`,
+              borderRadius: "6px",
+              padding: "7px",
+              minWidth: 0,
             }}
           >
-            ${Number(realizedPnL).toFixed(2)}
-          </span>
-        </div>
+            <div style={{ color: theme.muted, fontWeight: 900 }}>{label}</div>
+            <div
+              style={{
+                color: theme.text,
+                fontWeight: 900,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
 
-        <div>
-          Unrealized P&L:{" "}
-          <span
-            style={{
-              color: totalUnrealizedPnL >= 0 ? theme.green : theme.red,
-              fontWeight: 900,
-            }}
-          >
-            ${Number(totalUnrealizedPnL).toFixed(2)}
-          </span>
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            background: theme.panel2,
+            border: `1px solid ${theme.border}`,
+            borderRadius: "6px",
+            padding: "7px",
+            lineHeight: "1.55",
+          }}
+        >
+          <div>
+            Realized P&L{" "}
+            <span
+              style={{
+                color: realizedPnL >= 0 ? theme.green : theme.red,
+                fontWeight: 900,
+              }}
+            >
+              ${Number(realizedPnL).toFixed(2)}
+            </span>
+          </div>
+
+          <div>
+            Unrealized P&L{" "}
+            <span
+              style={{
+                color: totalUnrealizedPnL >= 0 ? theme.green : theme.red,
+                fontWeight: 900,
+              }}
+            >
+              ${Number(totalUnrealizedPnL).toFixed(2)}
+            </span>
+          </div>
         </div>
       </div>
     </>

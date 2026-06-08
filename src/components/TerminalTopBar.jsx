@@ -111,15 +111,26 @@ export default function TerminalTopBar({
   resetReplay,
   wsStatus,
   mainChartStatus,
-  brokerStatus,
+  marketDataStatusLabel,
+  chartStatusLabel,
+  brokerStateLabel,
+  modeStatusLabel,
   brokerConnected,
   isDark,
   setThemeMode,
   saveWorkspaceToCloud,
   loadWorkspaceFromCloud,
   resetWorkspace,
+  layoutPresets = {},
+  activePreset,
+  applyLayoutPreset,
+  marketRegions = {},
+  marketRegion,
+  setMarketRegion,
+  activeMarket,
   buttonStyle,
   user,
+  compact = false,
 }) {
   const now = new Date();
 
@@ -152,43 +163,66 @@ export default function TerminalTopBar({
     marketColor = theme.blue;
   }
 
-  const dataColor =
-    wsStatus === "LIVE"
-      ? theme.green
-      : wsStatus === "CONNECTING" || wsStatus === "RECONNECTING"
-      ? theme.blue
-      : theme.red;
-
   const compactButton = (active = false) => ({
     ...buttonStyle(active),
     height: "26px",
     padding: "0 8px",
     fontSize: "10px",
+    flexShrink: 0,
   });
+  const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
+  const isIntelligenceWorkspace = activeWorkspace === "intelligence";
+  const showAdvancedControls = !compact && !isIntelligenceWorkspace;
+  const showChartControls = !isIntelligenceWorkspace;
+  const showUtilityControls = !isIntelligenceWorkspace;
+  const resolvedMarketDataLabel =
+    marketDataStatusLabel ||
+    (wsStatus === "LIVE" ? "QTRD LIVE" : wsStatus === "BACKEND" ? "QTRD PENDING" : `QTRD ${wsStatus || "PENDING"}`);
+  const resolvedChartLabel =
+    chartStatusLabel ||
+    (mainChartStatus === "QTRD" || mainChartStatus === "LIVE" ? "CHART QTRD" : mainChartStatus === "SIM" ? "CHART SIM" : `CHART ${mainChartStatus || "PENDING"}`);
+  const resolvedBrokerLabel = brokerStateLabel || (brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED");
+  const resolvedModeLabel = modeStatusLabel || "PAPER MODE";
+
+  function statusColor(label) {
+    const value = String(label || "").toUpperCase();
+
+    if (value.includes("DISCONNECTED") || value.includes("ERROR")) return theme.red;
+    if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING")) {
+      return theme.amber || "#f5b84b";
+    }
+    if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("PAPER")) {
+      return theme.green;
+    }
+
+    return theme.muted;
+  }
 
   return (
     <div
       style={{
-        height: "46px",
-        background: theme.panel,
+        minHeight: compact ? "52px" : "46px",
+        background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
         borderBottom: `1px solid ${theme.border}`,
         display: "flex",
         alignItems: "center",
         padding: "0 10px",
         gap: "8px",
-        boxShadow: "0 1px 0 rgba(255,255,255,0.03)",
-        overflow: "hidden",
+        flexWrap: compact ? "wrap" : "nowrap",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035), 0 1px 0 rgba(0,0,0,0.45)",
+        overflow: compact ? "visible" : "hidden",
       }}
     >
       <div
-        style={{
+          style={{
           fontWeight: 900,
           fontSize: "16px",
-          letterSpacing: "0.3px",
           whiteSpace: "nowrap",
+          flexShrink: 0,
+          color: theme.text,
         }}
       >
-        SbCapital<span style={{ color: theme.blue }}>Co.</span>
+        SbCapital<span style={{ color: theme.cyan || theme.blue }}>Co.</span>
       </div>
 
       <div
@@ -198,9 +232,10 @@ export default function TerminalTopBar({
           gap: "6px",
           padding: "4px 8px",
           borderRadius: "999px",
-          background: "rgba(255,255,255,0.03)",
+          background: theme.panel3 || "rgba(255,255,255,0.03)",
           border: `1px solid ${theme.border}`,
           whiteSpace: "nowrap",
+          flexShrink: 0,
         }}
       >
         <span
@@ -209,18 +244,18 @@ export default function TerminalTopBar({
             height: "7px",
             borderRadius: "999px",
             background: marketColor,
-            boxShadow: `0 0 10px ${marketColor}`,
+          boxShadow: `0 0 10px ${marketColor}`,
           }}
         />
         <span style={{ fontSize: "10px", color: marketColor, fontWeight: 900 }}>
           NYSE {marketStatus}
         </span>
-        <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 800 }}>
+        <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 700, fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>
           {nyTime} ET
         </span>
       </div>
 
-      <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
         {workspaceViews.slice(0, 4).map((view) => (
           <button
             key={view.id}
@@ -232,6 +267,7 @@ export default function TerminalTopBar({
         ))}
       </div>
 
+      {showAdvancedControls && (
       <div
         style={{
           width: "1px",
@@ -240,8 +276,99 @@ export default function TerminalTopBar({
           flexShrink: 0,
         }}
       />
+      )}
 
-      <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+      {showAdvancedControls && (
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "5px",
+          color: theme.muted,
+          fontSize: "10px",
+          fontWeight: 900,
+          flexShrink: 0,
+        }}
+      >
+        Preset
+        <select
+          value={activePreset}
+          onChange={(event) => applyLayoutPreset(event.target.value)}
+          style={{
+            height: "26px",
+            maxWidth: "128px",
+            minWidth: 0,
+            background: theme.panel2,
+            border: `1px solid ${theme.border}`,
+            color: theme.text,
+            borderRadius: "4px",
+            padding: "0 6px",
+            fontSize: "10px",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          {Object.entries(layoutPresets).map(([id, preset]) => (
+            <option key={id} value={id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      )}
+
+      {showAdvancedControls && (
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "5px",
+          color: theme.muted,
+          fontSize: "10px",
+          fontWeight: 900,
+          flexShrink: 0,
+        }}
+      >
+        Market
+        <select
+          value={marketRegion}
+          onChange={(event) => setMarketRegion(event.target.value)}
+          style={{
+            height: "26px",
+            maxWidth: "112px",
+            minWidth: 0,
+            background: theme.panel2,
+            border: `1px solid ${theme.border}`,
+            color: theme.text,
+            borderRadius: "4px",
+            padding: "0 6px",
+            fontSize: "10px",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          {Object.entries(marketRegions).map(([id, region]) => (
+            <option key={id} value={id}>
+              {region.label}
+            </option>
+          ))}
+        </select>
+        <span style={{ color: theme.faint }}>{activeMarket?.currency}</span>
+      </label>
+      )}
+
+      {showChartControls && (
+      <div
+        style={{
+          display: "flex",
+          gap: "5px",
+          alignItems: "center",
+          minWidth: 0,
+          width: compact ? "100%" : "auto",
+          flexWrap: compact ? "wrap" : "nowrap",
+          overflow: compact ? "visible" : "hidden",
+        }}
+      >
         <button onClick={() => setLayoutMode("1")} style={compactButton(layoutMode === "1")}>
           1 Chart
         </button>
@@ -270,18 +397,25 @@ export default function TerminalTopBar({
           Grid 4
         </button>
 
-        <button onClick={() => setSyncCharts(!syncCharts)} style={compactButton(syncCharts)}>
-          Sync {syncCharts ? "On" : "Off"}
-        </button>
+        {!compact && (
+          <button onClick={() => setSyncCharts(!syncCharts)} style={compactButton(syncCharts)}>
+            Sync {syncCharts ? "On" : "Off"}
+          </button>
+        )}
 
-        <button onClick={() => setReplayMode(!replayMode)} style={compactButton(replayMode)}>
-          Replay {replayMode ? "On" : "Off"}
-        </button>
+        {!compact && (
+          <button onClick={() => setReplayMode(!replayMode)} style={compactButton(replayMode)}>
+            Replay {replayMode ? "On" : "Off"}
+          </button>
+        )}
 
+        {!compact && (
         <button onClick={resetReplay} style={compactButton(false)}>
           Reset Replay
         </button>
+        )}
       </div>
+      )}
 
       <div
         style={{
@@ -290,6 +424,8 @@ export default function TerminalTopBar({
           alignItems: "center",
           gap: "8px",
           whiteSpace: "nowrap",
+          minWidth: 0,
+          overflow: "hidden",
         }}
       >
         <span
@@ -299,7 +435,10 @@ export default function TerminalTopBar({
             gap: "5px",
             fontSize: "10px",
             color: theme.muted,
-            fontWeight: 800,
+            fontWeight: 700,
+            flexShrink: 0,
+            fontFamily: monoFont,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           <span
@@ -307,17 +446,28 @@ export default function TerminalTopBar({
               width: "6px",
               height: "6px",
               borderRadius: "999px",
-              background: dataColor,
-              boxShadow: `0 0 8px ${dataColor}`,
+              background: statusColor(resolvedMarketDataLabel),
+              boxShadow: `0 0 8px ${statusColor(resolvedMarketDataLabel)}`,
             }}
           />
-          DATA {wsStatus}
+          {resolvedMarketDataLabel}
         </span>
 
-        <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 800 }}>
-          CHART {mainChartStatus}
+        {showAdvancedControls && (
+        <span
+          style={{
+            fontSize: "10px",
+            color: statusColor(resolvedChartLabel),
+            fontWeight: 700,
+            fontFamily: monoFont,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {resolvedChartLabel}
         </span>
+        )}
 
+        {showUtilityControls && (
         <span
           style={{
             display: "inline-flex",
@@ -325,7 +475,9 @@ export default function TerminalTopBar({
             gap: "5px",
             fontSize: "10px",
             color: theme.muted,
-            fontWeight: 800,
+            fontWeight: 700,
+            fontFamily: monoFont,
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           <span
@@ -333,28 +485,54 @@ export default function TerminalTopBar({
               width: "6px",
               height: "6px",
               borderRadius: "999px",
-              background: brokerConnected ? theme.green : theme.red,
-              boxShadow: `0 0 8px ${brokerConnected ? theme.green : theme.red}`,
+              background: statusColor(resolvedBrokerLabel),
+              boxShadow: `0 0 8px ${statusColor(resolvedBrokerLabel)}`,
             }}
           />
-          BROKER {brokerStatus}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "132px" }}>
+            {resolvedBrokerLabel}
+          </span>
         </span>
+        )}
 
+        {showUtilityControls && (
+        <span
+          style={{
+            fontSize: "10px",
+            color: statusColor(resolvedModeLabel),
+            fontWeight: 700,
+            fontFamily: monoFont,
+            fontVariantNumeric: "tabular-nums",
+            flexShrink: 0,
+          }}
+        >
+          {resolvedModeLabel}
+        </span>
+        )}
+
+        {showUtilityControls && (
         <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={compactButton(false)}>
           {isDark ? "Light" : "Dark"}
         </button>
+        )}
 
+        {showUtilityControls && (
         <button onClick={saveWorkspaceToCloud} style={compactButton(Boolean(user))}>
           Save
         </button>
+        )}
 
+        {showAdvancedControls && (
         <button onClick={loadWorkspaceFromCloud} style={compactButton(false)}>
           Load
         </button>
+        )}
 
+        {showAdvancedControls && (
         <button onClick={resetWorkspace} style={compactButton(false)}>
           Reset
         </button>
+        )}
       </div>
     </div>
   );

@@ -13,10 +13,18 @@ export default function OpenPositionsPanel({
         <div
           style={{
             color: theme.muted,
+            border: `1px dashed ${theme.border}`,
+            borderRadius: "6px",
+            background: theme.panel2,
+            padding: "10px",
             fontSize: "11px",
+            lineHeight: "1.45",
           }}
         >
-          No open positions
+          <div style={{ color: theme.text, fontWeight: 900, marginBottom: "3px" }}>
+            No open paper positions
+          </div>
+          <div>New paper fills will appear here with quantity, average cost, and unrealized P&L.</div>
         </div>
       ) : (
         Object.entries(positions).map(([symbol, pos]) => {
@@ -35,20 +43,16 @@ export default function OpenPositionsPanel({
                 padding: "4px 0",
                 borderBottom: `1px solid ${theme.border}`,
                 fontSize: "11px",
+                lineHeight: "1.45",
               }}
             >
-              <div style={{ fontWeight: 900 }}>
-                {symbol}
-              </div>
-
-              <div>Qty: {pos.quantity}</div>
-
-              <div>
-                Avg: ${pos.average.toFixed(2)}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                <span style={{ fontWeight: 900 }}>{symbol}</span>
+                <span style={{ color: theme.muted }}>Qty {pos.quantity}</span>
               </div>
 
               <div>
-                Unrealized:{" "}
+                Avg ${pos.average.toFixed(2)} / Unrealized{" "}
                 <span
                   style={{
                     color:

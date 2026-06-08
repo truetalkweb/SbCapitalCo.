@@ -1,22 +1,53 @@
-import ProfessionalScanner from "./components/ProfessionalScanner";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import TickerTape from "./components/TickerTape";
-import BrokerHeader from "./components/BrokerHeader";
-import BrokerPositions from "./components/BrokerPositions";
-import OrderTicket from "./components/OrderTicket";
-import ReplayPanel from "./components/ReplayPanel";
-import AlertsPanel from "./components/AlertsPanel";
-import DOMPanel from "./components/DOMPanel";
-import PaperAccountPanel from "./components/PaperAccountPanel";
-import OpenPositionsPanel from "./components/OpenPositionsPanel";
-import RecentOrdersPanel from "./components/RecentOrdersPanel";
-import RightTradingPanel from "./components/RightTradingPanel";
 import TerminalTopBar from "./components/TerminalTopBar";
-import Chart from "./components/Chart";
 import TradingSidebar from "./components/TradingSidebar";
 import WorkspaceGrid from "./components/WorkspaceGrid";
+import RightTradingPanel from "./components/RightTradingPanel";
+import LoadingPanel from "./components/LoadingPanel";
+import ScannerTable from "./components/ScannerTable";
+import ChartPanel from "./components/ChartPanel";
+import MarketNewsPanel from "./components/MarketNewsPanel";
+import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
+import {
+  BROKER_API_URL,
+  defaultJournalDraft,
+  defaultSmallCapMovers,
+  layoutPresets,
+  marketRegions,
+  popularSymbols,
+  rightPanelTabs,
+  terminalMonoFont,
+  workspaceViews,
+} from "./config/terminalConfig";
 import { useMarketData } from "./hooks/useMarketData";
 import { useBrokerData } from "./hooks/useBrokerData";
+import { useMarketNews } from "./hooks/useMarketNews";
+import { useScannerData } from "./hooks/useScannerData";
+import { useTerminalWorkspace } from "./hooks/useTerminalWorkspace";
+import { useTerminalSymbols } from "./hooks/useTerminalSymbols";
+import {
+  applyLiveQuote,
+  buildTerminalSourceLabels,
+  fetchWithTimeout,
+  getStatusColor,
+} from "./utils/marketUtils";
+import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { auth, db } from "./firebase";
 import {
@@ -27,168 +58,50 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
-const FINNHUB_API_KEY = import.meta.env.VITE_FINNHUB_API_KEY;
-const FMP_API_KEY = import.meta.env.VITE_FMP_API_KEY;
-const BROKER_API_URL = import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000";
+const ProfessionalScanner = lazy(() => import("./components/ProfessionalScanner"));
+const BrokerHeader = lazy(() => import("./components/BrokerHeader"));
+const BrokerPositions = lazy(() => import("./components/BrokerPositions"));
+const OrderTicket = lazy(() => import("./components/OrderTicket"));
+const ReplayPanel = lazy(() => import("./components/ReplayPanel"));
+const AlertsPanel = lazy(() => import("./components/AlertsPanel"));
+const DOMPanel = lazy(() => import("./components/DOMPanel"));
+const PaperAccountPanel = lazy(() => import("./components/PaperAccountPanel"));
+const OpenPositionsPanel = lazy(() => import("./components/OpenPositionsPanel"));
+const RecentOrdersPanel = lazy(() => import("./components/RecentOrdersPanel"));
+const JournalPanel = lazy(() => import("./components/JournalPanel"));
+const CommandPalette = lazy(() => import("./components/CommandPalette"));
+const RiskDashboard = lazy(() => import("./components/RiskDashboard"));
+const ShortcutsPanel = lazy(() => import("./components/ShortcutsPanel"));
+const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
+const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
+const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
 
-const defaultStocks = [
-  { symbol: "NVDA", price: 211.5, change: "+0.00%", volume: "6.25M" },
-  { symbol: "AMD", price: 168.22, change: "+0.00%", volume: "2.46M" },
-  { symbol: "TSLA", price: 251.44, change: "+0.00%", volume: "8.94M" },
-  { symbol: "PLTR", price: 42.7, change: "+0.00%", volume: "4.33M" },
-];
+function getRequestedPresetId() {
+  if (typeof window === "undefined") return null;
 
-const cryptoStocks = [
-  { symbol: "BTC-USD", price: 80739.85, change: "+0.69%", volume: "12.4B" },
-  { symbol: "ETH-USD", price: 2331.05, change: "+1.03%", volume: "8.1B" },
-  { symbol: "SOL-USD", price: 182.44, change: "+2.51%", volume: "2.8B" },
-];
-
-const forexStocks = [
-  { symbol: "EUR/USD", price: 1.1785, change: "+0.52%", volume: "-" },
-  { symbol: "GBP/USD", price: 1.3632, change: "+0.61%", volume: "-" },
-  { symbol: "USD/CAD", price: 1.3722, change: "-0.22%", volume: "-" },
-];
-
-const defaultSmallCapMovers = [
-  { symbol: "RNZA", price: 12.07, change: "+27.10%", volume: "44.84K" },
-  { symbol: "REBN", price: 2.0, change: "+8.60%", volume: "84.17K" },
-  { symbol: "DTI", price: 4.01, change: "+4.60%", volume: "333.03K" },
-  { symbol: "PTL", price: 4.0, change: "+2.45%", volume: "314.15K" },
-];
-
-const workspaceViews = [
-  { id: "charts", label: "Charts", icon: "📈" },
-  { id: "scanner", label: "Scanner", icon: "🔎" },
-  { id: "watchlist", label: "Watchlist", icon: "⭐" },
-  { id: "replay", label: "Replay", icon: "▶" },
-  { id: "portfolio", label: "Portfolio", icon: "💼" },
-  { id: "alerts", label: "Alerts", icon: "🔔" },
-  { id: "journal", label: "Journal", icon: "📝" },
-  { id: "broker", label: "Broker", icon: "🏦" },
-  { id: "settings", label: "Settings", icon: "⚙" },
-];
-
-function loadSetting(key, fallback) {
   try {
-    const saved = localStorage.getItem(key);
-    return saved ? JSON.parse(saved) : fallback;
+    const presetId = new URLSearchParams(window.location.search).get("preset");
+    return layoutPresets[presetId] ? presetId : null;
   } catch {
-    return fallback;
+    return null;
   }
 }
 
-function parsePercent(value) {
-  return Number(String(value || "0").replace("%", "")) || 0;
-}
+function getRequestedMobileDockTab() {
+  if (typeof window === "undefined") return null;
 
-function parseMarketVolume(value) {
-  const cleanValue = String(value || "0").replace(/,/g, "").trim();
-  const numericValue = parseFloat(cleanValue) || 0;
-
-  if (cleanValue.includes("B")) return numericValue * 1_000_000_000;
-  if (cleanValue.includes("M")) return numericValue * 1_000_000;
-  if (cleanValue.includes("K")) return numericValue * 1_000;
-
-  return numericValue;
-}
-
-function formatMarketVolume(value, fallback = "—") {
-  const volume = Number(value || 0);
-
-  if (!volume) return fallback;
-  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(2)}B`;
-  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(2)}M`;
-  if (volume >= 1_000) return `${(volume / 1_000).toFixed(2)}K`;
-
-  return String(Math.round(volume));
-}
-
-function applyLiveQuote(stock, liveQuotes) {
-  const quote = liveQuotes[stock.symbol];
-
-  if (!quote) return stock;
-
-  return {
-    ...stock,
-    price: quote.price,
-    change: quote.change,
-    volume: quote.volume || stock.volume,
-  };
-}
-
-function getMomentumScore(stock) {
-  return Math.abs(parsePercent(stock.change)) * 10 + parseMarketVolume(stock.volume) / 1_000_000;
-}
-
-function getRelativeVolumeScore(stock) {
-  return parseMarketVolume(stock.volume);
-}
-
-
-function formatFmpStocks(data) {
-  if (!Array.isArray(data)) return [];
-
-  return data.slice(0, 20).map((item) => ({
-    symbol: item.symbol,
-    price: Number(item.price || 0).toFixed(2),
-    change: item.changesPercentage
-      ? `${Number(item.changesPercentage).toFixed(2)}%`
-      : "+0.00%",
-    volume: formatMarketVolume(item.volume),
-  }));
-}
-
-function ScannerTable({ rows, onPick, theme }) {
-  return (
-    <>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          fontSize: "10px",
-          color: theme.muted,
-          paddingBottom: "6px",
-          borderBottom: `1px solid ${theme.border}`,
-          fontWeight: 700,
-        }}
-      >
-        <span>Symbol</span>
-        <span>Price</span>
-        <span style={{ textAlign: "right" }}>Change</span>
-      </div>
-
-      {rows.map((stock) => (
-        <div
-          key={stock.symbol}
-          onClick={() => onPick(stock.symbol)}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: "6px",
-            padding: "4px 0",
-            borderBottom: `1px solid ${theme.border}`,
-            cursor: "pointer",
-            fontSize: "11px",
-          }}
-        >
-          <span style={{ fontWeight: 800 }}>{stock.symbol}</span>
-          <span>${stock.price}</span>
-          <span
-            style={{
-              color: stock.change.includes("+") ? theme.green : theme.red,
-              textAlign: "right",
-            }}
-          >
-            {stock.change}
-          </span>
-        </div>
-      ))}
-    </>
-  );
+  try {
+    const tabId = new URLSearchParams(window.location.search).get("mobileDock");
+    return ["order", "broker", "risk", "replay", "activity", "health", "alerts"].includes(tabId) ? tabId : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function App() {
+  const requestedPresetId = useMemo(() => getRequestedPresetId(), []);
+  const requestedMobileDockTab = useMemo(() => getRequestedMobileDockTab(), []);
+  const requestedPreset = requestedPresetId ? layoutPresets[requestedPresetId] : null;
   const {
     liveQuotes,
     wsStatus,
@@ -202,31 +115,11 @@ export default function App() {
   const [authMode, setAuthMode] = useState("login");
   const [authMessage, setAuthMessage] = useState("");
   const [cloudStatus, setCloudStatus] = useState("Local workspace");
-  const [activeWorkspace, setActiveWorkspace] = useState(() =>
-    loadSetting("sb_active_workspace", "charts")
-  );
-
-  const [selectedStock, setSelectedStock] = useState(() =>
-    loadSetting("sb_selected_stock", "NVDA")
-  );
-  const [secondarySymbol, setSecondarySymbol] = useState(() =>
-    loadSetting("sb_secondary_symbol", "TSLA")
-  );
-  const [searchSymbol, setSearchSymbol] = useState("");
-  const [liveStocks, setLiveStocks] = useState(() =>
-    loadSetting("sb_watchlist", defaultStocks)
-  );
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
   );
   const [secondaryTimeframe, setSecondaryTimeframe] = useState(() =>
     loadSetting("sb_secondary_timeframe", "5m")
-  );
-  const [layoutMode, setLayoutMode] = useState(() =>
-    loadSetting("sb_layout_mode", "2")
-  );
-  const [gridMode, setGridMode] = useState(() =>
-    loadSetting("sb_grid_mode", "2")
   );
   const [quantity, setQuantity] = useState(10);
   const [orderSide, setOrderSide] = useState("BUY");
@@ -235,6 +128,19 @@ export default function App() {
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [orderMessage, setOrderMessage] = useState("");
+  const [tradingMode, setTradingMode] = useState(() =>
+    loadSetting("sb_trading_mode", "paper")
+  );
+  const [orderConfirmed, setOrderConfirmed] = useState(false);
+  const [maxOrderValue, setMaxOrderValue] = useState(() =>
+    loadSetting("sb_max_order_value", 25000)
+  );
+  const [dailyLossLimit, setDailyLossLimit] = useState(() =>
+    loadSetting("sb_daily_loss_limit", 500)
+  );
+  const [riskPerTrade, setRiskPerTrade] = useState(() =>
+    loadSetting("sb_risk_per_trade", 250)
+  );
   const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
   const [positions, setPositions] = useState(() =>
     loadSetting("sb_positions", {})
@@ -243,8 +149,6 @@ export default function App() {
     loadSetting("sb_realized_pnl", 0)
   );
 
-  const [news, setNews] = useState([]);
-  const [newsLoading, setNewsLoading] = useState(false);
   const [showIndicators, setShowIndicators] = useState(false);
   const [showEMA9, setShowEMA9] = useState(() =>
     loadSetting("sb_show_ema9", true)
@@ -258,48 +162,93 @@ export default function App() {
   const [themeMode, setThemeMode] = useState(() =>
     loadSetting("sb_theme_mode", "dark")
   );
+  const [marketRegion, setMarketRegion] = useState(() =>
+    loadSetting("sb_market_region", "us")
+  );
 
-  const [fmpGainers, setFmpGainers] = useState([]);
-  const [fmpLosers, setFmpLosers] = useState([]);
-  const [fmpActive, setFmpActive] = useState([]);
-  const [fmpMomentum, setFmpMomentum] = useState([]);
-  const [fmpRelativeVolume, setFmpRelativeVolume] = useState([]);
-  const [fmpAiMovers, setFmpAiMovers] = useState([]);
-  const [fmpSmallCaps, setFmpSmallCaps] = useState([]);
-  const [scannerLoading, setScannerLoading] = useState(false);
+  const [journalEntries, setJournalEntries] = useState(() =>
+    loadSetting("sb_journal_entries", [])
+  );
+  const [journalDraft, setJournalDraft] = useState(() =>
+    loadSetting("sb_journal_draft", defaultJournalDraft)
+  );
+  const [activityLog, setActivityLog] = useState(() =>
+    loadSetting("sb_activity_log", [])
+  );
 
   const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
   const [alertInput, setAlertInput] = useState("");
-  const [syncCharts, setSyncCharts] = useState(() =>
-    loadSetting("sb_sync_charts", false)
-  );
+  const [alertDirection, setAlertDirection] = useState("above");
+  const [alertNotifications, setAlertNotifications] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const [mainChartStatus, setMainChartStatus] = useState("LOADING");
   const [secondaryChartStatus, setSecondaryChartStatus] = useState("LOADING");
 
-  const [replayMode, setReplayMode] = useState(false);
+  const [replayMode, setReplayMode] = useState(requestedPreset?.replayMode || false);
   const [replayPlaying, setReplayPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(1);
   const [replayIndex, setReplayIndex] = useState(80);
   const [mainReplayData, setMainReplayData] = useState([]);
   const [replayTrades, setReplayTrades] = useState([]);
   const [replayEquity, setReplayEquity] = useState([100000]);
+  const {
+    activeWorkspace,
+    setActiveWorkspace,
+    layoutMode,
+    setLayoutMode,
+    gridMode,
+    setGridMode,
+    syncCharts,
+    setSyncCharts,
+    leftSectionsOpen,
+    rightTab,
+    setRightTab,
+    activePreset,
+    setActivePreset,
+    mobileDockOpen,
+    setMobileDockOpen,
+    applyLayoutPreset,
+    applyWorkspaceLayout,
+    resetWorkspaceLayout,
+    toggleLeftSection,
+    openMobileDockTab,
+  } = useTerminalWorkspace({
+    layoutPresets,
+    requestedPreset,
+    requestedPresetId,
+    requestedMobileDockTab,
+    setReplayMode,
+    setReplayPlaying,
+  });
 
   const {
     brokerStatus,
     brokerConnected,
+    brokerDetails,
+    brokerError,
     brokerAccounts,
     selectedBrokerAccount,
     setSelectedBrokerAccount,
     brokerPositions,
     brokerOrders,
     brokerLoading,
+    liveOrderLoading,
+    platformHealth,
+    liveReadiness,
+    liveOrderPreview,
+    brokerSyncMeta,
     primaryBrokerBalance,
-    checkBrokerStatus,
     loadBrokerAccountData,
+    loadLiveReadiness,
+    previewLiveOrder,
+    submitLiveOrder,
     refreshBroker,
   } = useBrokerData(BROKER_API_URL);
   const [initialLivePulse] = useState(() => Date.now());
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? 1440 : window.innerWidth
+  );
 
   const [level2, setLevel2] = useState([
     { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
@@ -309,20 +258,72 @@ export default function App() {
   ]);
 
   const chartAreaRef = useRef(null);
+  const brokerBootstrappedRef = useRef(false);
+  const activitySequenceRef = useRef(0);
+  const lastBrokerSyncLoggedRef = useRef(null);
+  const lastBrokerErrorLoggedRef = useRef("");
+  const cloudWorkspaceReadyRef = useRef(false);
 
   const isDark = themeMode === "dark";
+  const isCompactTerminal = viewportWidth <= 1180;
+  const isPhoneTerminal = viewportWidth <= 700;
 
   const theme = {
-    bg: isDark ? "#07111f" : "#eef3f8",
-    panel: isDark ? "#111827" : "#ffffff",
-    panel2: isDark ? "#0b1220" : "#f7f9fc",
-    border: isDark ? "#233044" : "#d7dde8",
-    text: isDark ? "#d1d4dc" : "#1d2733",
-    muted: isDark ? "#7a8599" : "#697386",
-    blue: "#2196f3",
+    bg: isDark ? "#05070d" : "#eef3f8",
+    panel: isDark ? "#0d121c" : "#ffffff",
+    panel2: isDark ? "#111827" : "#f7f9fc",
+    panel3: isDark ? "#151d2a" : "#eef3f8",
+    border: isDark ? "#263142" : "#d7dde8",
+    borderSoft: isDark ? "#1a2433" : "#e4e9f1",
+    text: isDark ? "#e7ecf3" : "#1d2733",
+    muted: isDark ? "#8a95a8" : "#697386",
+    faint: isDark ? "#5f6b7e" : "#8a93a3",
+    blue: "#2d8cff",
+    cyan: "#19c6d8",
     green: "#00c896",
     red: "#ef5350",
+    amber: "#f5b84b",
   };
+
+  const pushActivity = useCallback((entry) => {
+    const createdAt = new Date().toISOString();
+
+    activitySequenceRef.current += 1;
+
+    const nextEntry = {
+      id: entry.id || `ACT-${Date.now()}-${activitySequenceRef.current}`,
+      createdAt,
+      type: entry.type || "system",
+      status: entry.status || "info",
+      title: entry.title || "Activity",
+      detail: entry.detail || "Structured terminal activity recorded.",
+      symbol: entry.symbol || null,
+      meta: entry.meta || {},
+    };
+
+    setActivityLog((prev) => [nextEntry, ...prev].slice(0, 120));
+  }, []);
+
+  const clearActivityLog = useCallback(() => {
+    setActivityLog([]);
+  }, []);
+
+  const {
+    fmpGainers,
+    fmpLosers,
+    fmpActive,
+    fmpMomentum,
+    fmpRelativeVolume,
+    fmpAiMovers,
+    fmpSmallCaps,
+    scannerLoading,
+    scannerMeta,
+    selectedScannerStock,
+    setSelectedScannerStock,
+  } = useScannerData({
+    brokerApiUrl: BROKER_API_URL,
+    onActivity: pushActivity,
+  });
 
   const resizeHandleStyle = {
     background: theme.border,
@@ -344,113 +345,30 @@ export default function App() {
     [fmpSmallCaps, liveQuotes]
   );
 
-  const allSymbols = useMemo(
-    () => [
-      ...Object.values(liveQuotes),
-      ...liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpGainers.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpLosers.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpActive.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpMomentum.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpRelativeVolume.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...fmpAiMovers.map((stock) => applyLiveQuote(stock, liveQuotes)),
-      ...cryptoStocks,
-      ...forexStocks,
-      ...liveSmallCapMovers,
-    ],
-    [
-      liveQuotes,
-      liveStocks,
-      fmpGainers,
-      fmpLosers,
-      fmpActive,
-      fmpMomentum,
-      fmpRelativeVolume,
-      fmpAiMovers,
-      liveSmallCapMovers,
-    ]
-  );
-
-  const trackedSymbols = useMemo(
-    () =>
-      [
-        selectedStock,
-        secondarySymbol,
-        ...liveStocks.map((stock) => stock.symbol),
-        ...liveSmallCapMovers.map((stock) => stock.symbol),
-      ]
-        .filter(Boolean)
-        .map((symbol) => symbol.trim().toUpperCase()),
-    [selectedStock, secondarySymbol, liveStocks, liveSmallCapMovers]
-  );
-
-  const selectedStockData =
-    allSymbols.find((s) => s.symbol === selectedStock) || liveStocks[0];
-
-  const secondaryStockData =
-    allSymbols.find((s) => s.symbol === secondarySymbol) ||
-    allSymbols.find((s) => s.symbol === "TSLA") ||
-    liveStocks[0];
-
-  const scannerStocks = useMemo(() => {
-    const fallbackStocks = liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes));
-    const scannerUniverse = [
-      ...fmpGainers,
-      ...fmpLosers,
-      ...fmpActive,
-      ...fmpMomentum,
-      ...fmpRelativeVolume,
-      ...fmpAiMovers,
-      ...liveSmallCapMovers,
-      ...fallbackStocks,
-    ]
-      .map((stock) => applyLiveQuote(stock, liveQuotes))
-      .filter((stock, index, stocks) =>
-        stock.symbol && stocks.findIndex((item) => item.symbol === stock.symbol) === index
-      );
-
-    if (scannerTab === "Gainers") {
-      return (fmpGainers.length ? fmpGainers : fallbackStocks)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .sort((a, b) => parsePercent(b.change) - parsePercent(a.change));
-    }
-
-    if (scannerTab === "Losers") {
-      return (fmpLosers.length ? fmpLosers : fallbackStocks)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .sort((a, b) => parsePercent(a.change) - parsePercent(b.change));
-    }
-
-    if (scannerTab === "Active") {
-      return (fmpActive.length ? fmpActive : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .sort((a, b) => parseMarketVolume(b.volume) - parseMarketVolume(a.volume));
-    }
-
-    if (scannerTab === "Momentum") {
-      return (fmpMomentum.length ? fmpMomentum : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
-        .slice(0, 20);
-    }
-
-    if (scannerTab === "Relative Volume") {
-      return (fmpRelativeVolume.length ? fmpRelativeVolume : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .sort((a, b) => getRelativeVolumeScore(b) - getRelativeVolumeScore(a))
-        .slice(0, 20);
-    }
-
-    if (scannerTab === "AI Movers") {
-      return (fmpAiMovers.length ? fmpAiMovers : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
-        .filter((stock) => parsePercent(stock.change) > 0)
-        .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
-        .slice(0, 20);
-    }
-
-    return fallbackStocks;
-  }, [
+  const {
+    activeMarket,
+    addSymbol,
+    addSymbolToWatchlist,
+    allSymbols,
+    applySymbolWorkspace,
+    liveStocks,
+    removeWatchlistSymbol,
+    resetTerminalSymbols,
+    scannerStocks,
+    searchSymbol,
+    secondaryStockData,
+    secondarySymbol,
+    selectMainSymbol,
+    selectedStock,
+    selectedStockData,
+    setSearchSymbol,
+    setSecondarySymbol,
+    symbolSuggestions,
+    tickerTapeSymbols,
+    trackedSymbols,
+    updateLiveQuote,
+  } = useTerminalSymbols({
+    activeWorkspace,
     fmpActive,
     fmpAiMovers,
     fmpGainers,
@@ -459,9 +377,21 @@ export default function App() {
     fmpRelativeVolume,
     liveQuotes,
     liveSmallCapMovers,
-    liveStocks,
+    marketRegion,
     scannerTab,
-  ]);
+    setSelectedScannerStock,
+    syncCharts,
+    updateContextLiveQuote,
+  });
+
+  const {
+    news,
+    newsLoading,
+    newsMeta,
+  } = useMarketNews({
+    selectedStock,
+    brokerApiUrl: BROKER_API_URL,
+  });
 
   const estimatedValue = (
     Number(selectedStockData?.price || 0) * Number(quantity || 0)
@@ -485,7 +415,143 @@ export default function App() {
   const riskReward =
     orderRisk > 0 && orderReward > 0
       ? (orderReward / orderRisk).toFixed(2)
-      : "—";
+      : "N/A";
+
+  const orderValue = Number(orderEntryPrice || 0) * Number(quantity || 0);
+  const dailyRealizedLoss = Math.max(0, -Number(realizedPnL || 0));
+  const positionQuantity = Number(positions[selectedStock]?.quantity || 0);
+  const positionAverage = Number(positions[selectedStock]?.average || 0);
+  const orderPreview = {
+    mode: tradingMode,
+    side: orderSide,
+    symbol: selectedStock,
+    quantity: Number(quantity || 0),
+    entryPrice: Number(orderEntryPrice || 0),
+    value: orderValue,
+    stopLoss: Number(stopLoss || 0),
+    takeProfit: Number(takeProfit || 0),
+    maxOrderValue: Number(maxOrderValue || 0),
+    dailyLossLimit: Number(dailyLossLimit || 0),
+    dailyRealizedLoss,
+    riskPerTrade: Number(riskPerTrade || 0),
+    positionQuantity,
+    positionAverage,
+  };
+
+  useEffect(() => {
+    function handleResize() {
+      setViewportWidth(window.innerWidth);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [setGridMode, setLayoutMode]);
+  const orderConfirmationKey = [
+    tradingMode,
+    orderSide,
+    orderType,
+    selectedStock,
+    quantity,
+    orderEntryPrice,
+    stopLoss,
+    takeProfit,
+    maxOrderValue,
+    dailyLossLimit,
+    riskPerTrade,
+  ].join("|");
+
+  const safetyIssues = useMemo(() => {
+    const issues = [];
+    const maxValue = Number(maxOrderValue || 0);
+    const lossLimit = Number(dailyLossLimit || 0);
+    const riskCap = Number(riskPerTrade || 0);
+    const entry = Number(orderEntryPrice || 0);
+    const stop = Number(stopLoss || 0);
+    const target = Number(takeProfit || 0);
+
+    if (tradingMode !== "paper") {
+      if (!brokerConnected || !selectedBrokerAccount) {
+        issues.push("Live routing requires a connected Questrade account.");
+      }
+
+      if (!liveReadiness) {
+        issues.push("Live readiness has not loaded yet.");
+      } else {
+        issues.push(...(Array.isArray(liveReadiness.blockingReasons) ? liveReadiness.blockingReasons : []));
+      }
+    }
+
+    if (orderConfirmed !== orderConfirmationKey) {
+      issues.push("Confirm the order preview before submitting.");
+    }
+
+    if (!stop || stop <= 0) {
+      issues.push("Stop loss is required before submitting.");
+    }
+
+    if (!target || target <= 0) {
+      issues.push("Take profit is required before submitting.");
+    }
+
+    if (entry > 0 && stop > 0 && orderSide === "BUY" && stop >= entry) {
+      issues.push("BUY stop loss must be below entry.");
+    }
+
+    if (entry > 0 && stop > 0 && orderSide === "SELL" && stop <= entry) {
+      issues.push("SELL stop loss must be above entry.");
+    }
+
+    if (entry > 0 && target > 0 && orderSide === "BUY" && target <= entry) {
+      issues.push("BUY take profit must be above entry.");
+    }
+
+    if (entry > 0 && target > 0 && orderSide === "SELL" && target >= entry) {
+      issues.push("SELL take profit must be below entry.");
+    }
+
+    if (maxValue > 0 && orderValue > maxValue) {
+      issues.push(`Order value exceeds max order limit of $${maxValue.toFixed(2)}.`);
+    }
+
+    if (riskCap > 0 && orderRisk > riskCap) {
+      issues.push(`Order risk exceeds risk/trade cap of $${riskCap.toFixed(2)}.`);
+    }
+
+    if (lossLimit > 0 && dailyRealizedLoss >= lossLimit) {
+      issues.push(`Daily loss lockout is active at $${lossLimit.toFixed(2)}.`);
+    }
+
+    if (tradingMode === "paper" && orderSide === "SELL" && positionQuantity <= 0) {
+      issues.push(`No ${selectedStock} paper position available to sell.`);
+    }
+
+    if (orderRisk > 0 && orderReward > 0 && Number(riskReward) < 1.5) {
+      issues.push("R:R is below 1.5. Adjust stop, target, or size before submitting.");
+    }
+
+    return issues;
+  }, [
+    brokerConnected,
+    dailyLossLimit,
+    dailyRealizedLoss,
+    liveReadiness,
+    maxOrderValue,
+    orderConfirmationKey,
+    orderConfirmed,
+    orderEntryPrice,
+    orderSide,
+    orderRisk,
+    orderReward,
+    orderValue,
+    positionQuantity,
+    riskReward,
+    riskPerTrade,
+    selectedBrokerAccount,
+    selectedStock,
+    stopLoss,
+    takeProfit,
+    tradingMode,
+  ]);
 
   const totalUnrealizedPnL = Object.entries(positions).reduce(
     (total, [symbol, pos]) => {
@@ -561,6 +627,11 @@ export default function App() {
       realizedPnL,
       alerts,
       syncCharts,
+      tradingMode,
+      maxOrderValue,
+      dailyLossLimit,
+      riskPerTrade,
+      marketRegion,
       themeMode,
       showEMA9,
       showEMA20,
@@ -570,7 +641,13 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      journalEntries,
+      journalDraft,
+      activePreset,
       activeWorkspace,
+      rightTab,
+      leftSectionsOpen,
+      selectedScannerStock,
     }),
     [
       selectedStock,
@@ -586,6 +663,11 @@ export default function App() {
       realizedPnL,
       alerts,
       syncCharts,
+      tradingMode,
+      maxOrderValue,
+      dailyLossLimit,
+      riskPerTrade,
+      marketRegion,
       themeMode,
       showEMA9,
       showEMA20,
@@ -595,25 +677,34 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      journalEntries,
+      journalDraft,
+      activePreset,
       activeWorkspace,
+      rightTab,
+      leftSectionsOpen,
+      selectedScannerStock,
     ]
   );
 
-  function applyWorkspace(data) {
+  const applyWorkspace = useCallback((data) => {
     if (!data) return;
-    if (data.selectedStock) setSelectedStock(data.selectedStock);
-    if (data.secondarySymbol) setSecondarySymbol(data.secondarySymbol);
-    if (Array.isArray(data.liveStocks)) setLiveStocks(data.liveStocks);
+
+    applySymbolWorkspace(data);
+    applyWorkspaceLayout(data);
+
     if (data.timeframe) setTimeframe(data.timeframe);
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
-    if (data.layoutMode) setLayoutMode(data.layoutMode);
-    if (data.gridMode) setGridMode(data.gridMode);
     if (typeof data.quantity !== "undefined") setQuantity(data.quantity);
     if (Array.isArray(data.orders)) setOrders(data.orders);
     if (data.positions) setPositions(data.positions);
     if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
     if (Array.isArray(data.alerts)) setAlerts(data.alerts);
-    if (typeof data.syncCharts === "boolean") setSyncCharts(data.syncCharts);
+    if (data.tradingMode) setTradingMode(data.tradingMode);
+    if (typeof data.maxOrderValue !== "undefined") setMaxOrderValue(data.maxOrderValue);
+    if (typeof data.dailyLossLimit !== "undefined") setDailyLossLimit(data.dailyLossLimit);
+    if (typeof data.riskPerTrade !== "undefined") setRiskPerTrade(data.riskPerTrade);
+    if (data.marketRegion) setMarketRegion(data.marketRegion);
     if (data.themeMode) setThemeMode(data.themeMode);
     if (typeof data.showEMA9 === "boolean") setShowEMA9(data.showEMA9);
     if (typeof data.showEMA20 === "boolean") setShowEMA20(data.showEMA20);
@@ -623,8 +714,10 @@ export default function App() {
     if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
     if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
     if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
-    if (data.activeWorkspace) setActiveWorkspace(data.activeWorkspace);
-  }
+    if (Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
+    if (data.journalDraft) setJournalDraft(data.journalDraft);
+    if (data.selectedScannerStock) setSelectedScannerStock(data.selectedScannerStock);
+  }, [applySymbolWorkspace, applyWorkspaceLayout, setSelectedScannerStock]);
 
   async function handleAuthSubmit(mode = authMode) {
     setAuthMessage("");
@@ -652,6 +745,12 @@ export default function App() {
   async function saveWorkspaceToCloud() {
     if (!user) {
       setCloudStatus("Sign in to save cloud workspace");
+      pushActivity({
+        type: "cloud",
+        status: "blocked",
+        title: "Cloud Save Blocked",
+        detail: "User must be signed in before saving the workspace to cloud storage.",
+      });
       return;
     }
 
@@ -663,14 +762,32 @@ export default function App() {
       });
 
       setCloudStatus(`Cloud saved ${new Date().toLocaleTimeString()}`);
+      pushActivity({
+        type: "cloud",
+        status: "saved",
+        title: "Cloud Workspace Saved",
+        detail: "Workspace state saved to Firebase.",
+      });
     } catch {
       setCloudStatus("Cloud save failed");
+      pushActivity({
+        type: "cloud",
+        status: "failed",
+        title: "Cloud Save Failed",
+        detail: "Firebase workspace save did not complete.",
+      });
     }
   }
 
   async function loadWorkspaceFromCloud() {
     if (!user) {
       setCloudStatus("Sign in to load cloud workspace");
+      pushActivity({
+        type: "cloud",
+        status: "blocked",
+        title: "Cloud Load Blocked",
+        detail: "User must be signed in before loading a cloud workspace.",
+      });
       return;
     }
 
@@ -679,13 +796,31 @@ export default function App() {
 
       if (!snapshot.exists()) {
         setCloudStatus("No cloud workspace found");
+        pushActivity({
+          type: "cloud",
+          status: "warning",
+          title: "Cloud Workspace Missing",
+          detail: "No saved Firebase workspace exists for the signed-in user.",
+        });
         return;
       }
 
       applyWorkspace(snapshot.data());
       setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
+      pushActivity({
+        type: "cloud",
+        status: "loaded",
+        title: "Cloud Workspace Loaded",
+        detail: "Workspace state loaded from Firebase.",
+      });
     } catch {
       setCloudStatus("Cloud load failed");
+      pushActivity({
+        type: "cloud",
+        status: "failed",
+        title: "Cloud Load Failed",
+        detail: "Firebase workspace load did not complete.",
+      });
     }
   }
 
@@ -696,31 +831,21 @@ export default function App() {
 
   const replayCandle = mainReplayData[replayIndex] || null;
   function panelStyle(extra = {}) {
-    return {
-      background: theme.panel,
-      border: `1px solid ${theme.border}`,
-      color: theme.text,
-      borderRadius: "6px",
-      padding: "6px",
-      overflow: "hidden",
-      minHeight: 0,
-      boxShadow: isDark
-        ? "0 0 0 1px rgba(255,255,255,0.02)"
-        : "0 1px 8px rgba(0,0,0,0.04)",
-      ...extra,
-    };
+    return createPanelStyle(theme, isDark, extra);
   }
 
   function panelTitle(title) {
     return (
       <div
         style={{
-          fontSize: "12px",
-          fontWeight: 900,
-          borderBottom: `1px solid ${theme.border}`,
-          paddingBottom: "6px",
-          marginBottom: "6px",
-          letterSpacing: "0.2px",
+          fontSize: "11px",
+          fontWeight: 950,
+          letterSpacing: "0.02em",
+          textTransform: "uppercase",
+          borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+          paddingBottom: "7px",
+          marginBottom: "8px",
+          color: theme.text,
         }}
       >
         {title}
@@ -728,54 +853,98 @@ export default function App() {
     );
   }
 
-  const buttonStyle = (active = false) => ({
-    height: "28px",
-    padding: "0 9px",
-    background: active ? theme.blue : theme.panel2,
-    border: `1px solid ${theme.border}`,
-    color: active ? "#ffffff" : theme.text,
-    borderRadius: "4px",
-    cursor: "pointer",
-    fontSize: "11px",
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-  });
+  function sectionHeader(id, title, meta = "") {
+    const open = leftSectionsOpen[id];
+    const Icon = open ? ChevronDown : ChevronRight;
+
+    return (
+      <button
+        onClick={() => toggleLeftSection(id)}
+        style={{
+          width: "100%",
+          height: "30px",
+          marginTop: "10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px",
+          background: "transparent",
+          border: "none",
+          borderTop: `1px solid ${theme.border}`,
+          color: theme.text,
+          cursor: "pointer",
+          padding: "8px 0 0",
+          fontSize: "12px",
+          fontWeight: 900,
+          textAlign: "left",
+        }}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+          <Icon size={14} />
+          {title}
+        </span>
+        {meta && <span style={{ color: theme.muted, fontSize: "10px" }}>{meta}</span>}
+      </button>
+    );
+  }
+
+  function emptyState(title, detail) {
+    return (
+      <div
+        style={{
+          color: theme.muted,
+          border: `1px dashed ${theme.border}`,
+          borderRadius: "6px",
+          padding: "10px",
+          fontSize: "11px",
+          lineHeight: "1.45",
+          background: theme.panel2,
+        }}
+      >
+        <div style={{ color: theme.text, fontWeight: 900, marginBottom: "3px" }}>
+          {title}
+        </div>
+        <div>{detail}</div>
+      </div>
+    );
+  }
+
+  const buttonStyle = (active = false) => createButtonStyle(theme, active);
 
   const timeframeButtonStyle = (active = false) => ({
     width: "40px",
     height: "28px",
     padding: 0,
-    background: active ? theme.blue : theme.panel2,
-    border: `1px solid ${theme.border}`,
+    background: active ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : theme.panel2,
+    border: `1px solid ${active ? "rgba(45,140,255,0.72)" : theme.borderSoft || theme.border}`,
     color: active ? "#ffffff" : theme.text,
-    borderRadius: "4px",
+    borderRadius: "6px",
     cursor: "pointer",
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: 900,
   });
 
-  function addSymbol() {
-    const cleanSymbol = searchSymbol.trim().toUpperCase();
-    if (!cleanSymbol) return;
+  const handleRefreshBroker = useCallback(async () => {
+    pushActivity({
+      type: "broker",
+      status: "info",
+      title: "Broker Refresh Requested",
+      detail: "Refreshing Questrade status, accounts, balances, positions, and orders.",
+    });
 
-    const exists = liveStocks.some((stock) => stock.symbol === cleanSymbol);
+    await refreshBroker();
+  }, [pushActivity, refreshBroker]);
 
-    if (!exists) {
-      setLiveStocks((prev) => [
-        ...prev,
-        { symbol: cleanSymbol, price: 100, change: "+0.00%", volume: "1.00M" },
-      ]);
-    }
+  const handleLoadBrokerAccountData = useCallback(async (accountNumber) => {
+    pushActivity({
+      type: "broker",
+      status: "info",
+      title: "Broker Account Sync Requested",
+      detail: "Syncing selected account balances, positions, and orders.",
+    });
 
-    setSelectedStock(cleanSymbol);
-    if (syncCharts) setSecondarySymbol(cleanSymbol);
-    setSearchSymbol("");
-  }
-
-  function selectMainSymbol(symbol) {
-    setSelectedStock(symbol);
-    if (syncCharts) setSecondarySymbol(symbol);
-  }
+    await loadBrokerAccountData(accountNumber);
+  }, [loadBrokerAccountData, pushActivity]);
 
   function setMainTimeframe(value) {
     setTimeframe(value);
@@ -791,7 +960,7 @@ export default function App() {
       id: Date.now(),
       symbol: selectedStock,
       trigger,
-      direction: trigger >= Number(selectedStockData?.price || 0) ? "above" : "below",
+      direction: alertDirection,
       active: true,
       createdAt: new Date().toLocaleTimeString(),
     };
@@ -800,9 +969,184 @@ export default function App() {
     setAlertInput("");
   }
 
+  async function enableAlertNotifications() {
+    if (!("Notification" in window)) {
+      setAlertNotifications(false);
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    setAlertNotifications(permission === "granted");
+  }
+
   function removeAlert(id) {
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
   }
+
+  function addJournalEntry() {
+    const symbol = journalDraft.symbol.trim().toUpperCase() || selectedStock;
+    const entry = {
+      ...journalDraft,
+      id: Date.now(),
+      symbol,
+      createdAt: new Date().toLocaleString(),
+      linkedPrice: Number(selectedStockData?.price || 0).toFixed(2),
+      linkedRealizedPnL: Number(realizedPnL || 0).toFixed(2),
+    };
+
+    setJournalEntries((prev) => [entry, ...prev.slice(0, 49)]);
+    setJournalDraft({
+      ...defaultJournalDraft,
+      symbol,
+      bias: journalDraft.bias,
+      setup: journalDraft.setup,
+      grade: "B",
+    });
+  }
+
+  function openReplayJournal() {
+    const closedReplayTrades = replayTrades.filter((trade) => trade.type === "SELL");
+    const latestReplayTrade = closedReplayTrades[closedReplayTrades.length - 1];
+    const replayNetPnl = Number(replayStats.netPnL || 0);
+    const replayResult = replayNetPnl > 0 ? "Win" : replayNetPnl < 0 ? "Loss" : "Review";
+
+    setJournalDraft((prev) => ({
+      ...prev,
+      symbol: selectedStock,
+      bias: replayNetPnl >= 0 ? "Long" : "Review",
+      setup: "Replay Backtest",
+      grade: replayNetPnl > 0 ? "B" : "C",
+      tags: "replay,backtest",
+      mistakeTags: replayNetPnl < 0 ? "needs-review" : "",
+      followedPlan: "Yes",
+      emotion: "Calm",
+      result: replayResult,
+      plan: `Replay review for ${selectedStock}. Candle ${replayIndex} of ${mainReplayData.length || 0}.`,
+      review: [
+        `Replay net P&L: $${replayNetPnl.toFixed(2)}`,
+        `Closed trades: ${closedReplayTrades.length}`,
+        `Win rate: ${replayStats.winRate}%`,
+        latestReplayTrade
+          ? `Last close: ${latestReplayTrade.type} ${latestReplayTrade.qty} @ $${Number(latestReplayTrade.price || 0).toFixed(2)} with P&L $${Number(latestReplayTrade.pnl || 0).toFixed(2)}`
+          : "Last close: none yet",
+      ].join("\n"),
+    }));
+    setActiveWorkspace("journal");
+    setRightTab("risk");
+    setActivePreset("journal");
+  }
+
+  function deleteJournalEntry(id) {
+    setJournalEntries((prev) => prev.filter((entry) => entry.id !== id));
+  }
+
+  const commandActions = useMemo(() => {
+    const symbolActions = [
+      ...allSymbols,
+      ...scannerStocks,
+      ...popularSymbols.map((symbol) => ({ symbol })),
+    ]
+      .filter((stock) => stock?.symbol)
+      .filter((stock, index, stocks) =>
+        stocks.findIndex((item) => item.symbol === stock.symbol) === index
+      )
+      .slice(0, 40)
+      .map((stock) => ({
+        id: `symbol-${stock.symbol}`,
+        label: `Open ${stock.symbol}`,
+        detail: stock.price
+          ? `$${stock.price} ${stock.change || ""} ${stock.volume || ""}`
+          : "Jump to symbol",
+        group: "Symbol",
+        keywords: `chart ticker watchlist ${stock.symbol}`,
+        onRun: () => selectMainSymbol(stock.symbol, stock.price ? stock : null),
+      }));
+
+    const presetActions = Object.entries(layoutPresets).map(([id, preset]) => ({
+      id: `preset-${id}`,
+      label: preset.label,
+      detail: `Workspace ${preset.activeWorkspace} · ${preset.layoutMode} chart · ${preset.rightTab}`,
+      group: "Preset",
+      keywords: `layout preset ${id}`,
+      onRun: () => applyLayoutPreset(id),
+    }));
+
+    const workspaceActions = workspaceViews.map((view) => ({
+      id: `workspace-${view.id}`,
+      label: `Go to ${view.label}`,
+      detail: "Switch workspace",
+      group: "Workspace",
+      keywords: `workspace view ${view.id}`,
+      onRun: () => setActiveWorkspace(view.id),
+    }));
+
+    const rightTabActions = rightPanelTabs.map((tab) => ({
+      id: `right-tab-${tab.id}`,
+      label: `Open ${tab.label} Panel`,
+      detail: "Switch right trading console tab",
+      group: "Panel",
+      keywords: `right panel tab ${tab.id}`,
+      onRun: () => {
+        setRightTab(tab.id);
+        setActiveWorkspace("charts");
+      },
+    }));
+
+    return [
+      {
+        id: "order-ticket",
+        label: "Open Order Ticket",
+        detail: "Focus the guarded paper order ticket",
+        group: "Trade",
+        keywords: "buy sell order ticket paper",
+        onRun: () => {
+          setActiveWorkspace("charts");
+          setRightTab("order");
+        },
+      },
+      {
+        id: "add-alert",
+        label: "Open Alerts",
+        detail: `Create or review alerts for ${selectedStock}`,
+        group: "Alert",
+        keywords: "price alert notification",
+        onRun: () => {
+          setActiveWorkspace("alerts");
+          setRightTab("alerts");
+        },
+      },
+      {
+        id: "toggle-replay",
+        label: replayMode ? "Turn Replay Off" : "Turn Replay On",
+        detail: "Toggle replay mode",
+        group: "Replay",
+        keywords: "backtest replay play",
+        onRun: () => setReplayMode((value) => !value),
+      },
+      {
+        id: "toggle-indicators",
+        label: showIndicators ? "Hide Indicators Menu" : "Show Indicators Menu",
+        detail: "Toggle chart indicator controls",
+        group: "Chart",
+        keywords: "ema indicators chart",
+        onRun: () => setShowIndicators((value) => !value),
+      },
+      ...presetActions,
+      ...workspaceActions,
+      ...rightTabActions,
+      ...symbolActions,
+    ];
+  }, [
+    allSymbols,
+    applyLayoutPreset,
+    replayMode,
+    scannerStocks,
+    selectMainSymbol,
+    selectedStock,
+    setActiveWorkspace,
+    setRightTab,
+    showIndicators,
+  ]);
 
   function stepReplay() {
     setReplayIndex((prev) => {
@@ -890,7 +1234,7 @@ export default function App() {
   }
 
   function resetWorkspace() {
-    [
+    const keysToReset = [
       "sb_selected_stock",
       "sb_secondary_symbol",
       "sb_timeframe",
@@ -898,6 +1242,7 @@ export default function App() {
       "sb_layout_mode",
       "sb_grid_mode",
       "sb_theme_mode",
+      "sb_market_region",
       "sb_show_ema9",
       "sb_show_ema20",
       "sb_scanner_tab",
@@ -906,27 +1251,46 @@ export default function App() {
       "sb_positions",
       "sb_realized_pnl",
       "sb_alerts",
+      "sb_journal_entries",
+      "sb_journal_draft",
+      "sb_activity_log",
+      "sb_active_preset",
       "sb_sync_charts",
+      "sb_trading_mode",
+      "sb_max_order_value",
+      "sb_daily_loss_limit",
+      "sb_risk_per_trade",
       "sb_active_workspace",
-    ].forEach((key) => localStorage.removeItem(key));
+      "sb_right_tab",
+      "sb_left_sections_open",
+      "sb_selected_scanner_stock",
+      "sb_selected_broker_account",
+    ];
 
-    setSelectedStock("NVDA");
-    setSecondarySymbol("TSLA");
+    removeSettings(keysToReset);
+
+    resetWorkspaceLayout();
+    resetTerminalSymbols();
     setTimeframe("15m");
     setSecondaryTimeframe("5m");
-    setLayoutMode("2");
-    setGridMode("2");
     setThemeMode("dark");
+    setMarketRegion("us");
     setShowEMA9(true);
     setShowEMA20(true);
     setScannerTab("Gainers");
-    setLiveStocks(defaultStocks);
     setOrders([]);
     setPositions({});
     setRealizedPnL(0);
     setAlerts([]);
-    setSyncCharts(false);
-    setActiveWorkspace("charts");
+    setJournalEntries([]);
+    setJournalDraft({ ...defaultJournalDraft, symbol: "NVDA" });
+    setActivityLog([]);
+    setTradingMode("paper");
+    setOrderConfirmed(false);
+    setMaxOrderValue(25000);
+    setDailyLossLimit(500);
+    setRiskPerTrade(250);
+    setSelectedScannerStock(null);
   }
 
   const placeOrder = useCallback((side, options = {}) => {
@@ -983,6 +1347,8 @@ export default function App() {
 
     const order = {
       id: Date.now(),
+      auditId: options.auditId,
+      mode: options.mode || "paper",
       side,
       symbol: selectedStock,
       quantity: filledQty,
@@ -998,6 +1364,10 @@ export default function App() {
           ? "Paper Partially Filled"
           : options.status,
       realizedPnL: orderRealizedPnL !== null ? orderRealizedPnL.toFixed(2) : null,
+      auditStatus: options.auditStatus || "Guardrails Passed",
+      guardrails: options.guardrails || null,
+      confirmationKey: options.confirmationKey,
+      submittedAt: options.submittedAt,
       time: new Date().toLocaleTimeString(),
     };
 
@@ -1009,7 +1379,68 @@ export default function App() {
     };
   }, [positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
 
-  function submitOrderTicket() {
+  function buildBrokerOrderPayload(sideOverride = orderSide, confirmed = false) {
+    const currentPrice = Number(selectedStockData?.price || 0);
+    const entryPrice =
+      orderType === "LIMIT" && Number(limitPrice) > 0
+        ? Number(limitPrice)
+        : currentPrice;
+
+    return {
+      accountNumber: selectedBrokerAccount,
+      symbol: selectedStock,
+      side: sideOverride,
+      orderType,
+      quantity: Number(quantity || 0),
+      limitPrice: orderType === "LIMIT" ? Number(limitPrice || 0) : null,
+      entryPrice,
+      maxOrderValue: Number(maxOrderValue || 0),
+      stopLoss: Number(stopLoss || 0),
+      takeProfit: Number(takeProfit || 0),
+      confirmed,
+      userConfirmed: confirmed,
+    };
+  }
+
+  async function previewLiveOrderTicket(sideOverride = orderSide) {
+    setOrderMessage("Requesting backend live order preview...");
+
+    const preview = await previewLiveOrder(buildBrokerOrderPayload(sideOverride, false));
+    const firstBlock =
+      preview?.validationErrors?.[0] ||
+      preview?.readiness?.blockingReasons?.[0] ||
+      preview?.error ||
+      null;
+
+    if (firstBlock) {
+      setOrderMessage(`Live preview blocked: ${firstBlock}`);
+      pushActivity({
+        type: "broker",
+        status: "blocked",
+        title: "Live Preview Blocked",
+        detail: firstBlock,
+        symbol: selectedStock,
+      });
+      return preview;
+    }
+
+    setOrderMessage("Live preview completed. Submit remains controlled by backend readiness gates.");
+    pushActivity({
+      type: "broker",
+      status: "ready",
+      title: "Live Preview Ready",
+      detail: `${selectedStock} preview returned from backend safety checks.`,
+      symbol: selectedStock,
+      meta: {
+        requestId: preview?.requestId,
+        estimatedValue: preview?.estimatedValue,
+      },
+    });
+
+    return preview;
+  }
+
+  async function submitOrderTicket(sideOverride = orderSide) {
     setOrderMessage("");
 
     const qty = Number(quantity);
@@ -1021,26 +1452,163 @@ export default function App() {
 
     if (!qty || qty <= 0) {
       setOrderMessage("Enter a valid quantity.");
+      pushActivity({
+        type: "order",
+        status: "blocked",
+        title: "Paper Order Blocked",
+        detail: "Order ticket rejected the request because quantity was not valid.",
+        symbol: selectedStock,
+      });
       return;
     }
 
     if (!entryPrice || entryPrice <= 0) {
       setOrderMessage("Enter a valid entry price.");
+      pushActivity({
+        type: "order",
+        status: "blocked",
+        title: "Paper Order Blocked",
+        detail: "Order ticket rejected the request because entry price was not valid.",
+        symbol: selectedStock,
+      });
       return;
     }
 
     if (orderType === "LIMIT" && !Number(limitPrice)) {
       setOrderMessage("Limit orders need a limit price.");
+      pushActivity({
+        type: "order",
+        status: "blocked",
+        title: "Limit Order Blocked",
+        detail: "Limit order was blocked because no limit price was provided.",
+        symbol: selectedStock,
+      });
       return;
     }
 
-    const result = placeOrder(orderSide, {
+    if (tradingMode !== "paper") {
+      if (safetyIssues.length > 0) {
+        setOrderMessage(safetyIssues[0]);
+        pushActivity({
+          type: "broker",
+          status: "blocked",
+          title: "Live Submit Blocked",
+          detail: safetyIssues[0],
+          symbol: selectedStock,
+        });
+        return;
+      }
+
+      const confirmText = [
+        `Request LIVE ${sideOverride} ${qty} ${selectedStock}`,
+        `Entry: $${entryPrice.toFixed(2)}`,
+        `Value: $${(entryPrice * qty).toFixed(2)}`,
+        "Backend safety gate will make the final submit decision.",
+      ].join("\n");
+
+      if (!window.confirm(confirmText)) {
+        setOrderMessage("Live submission cancelled before backend request.");
+        return;
+      }
+
+      const response = await submitLiveOrder(buildBrokerOrderPayload(sideOverride, true));
+      const firstBlock =
+        response?.blockingReasons?.[0] ||
+        response?.error ||
+        response?.preview?.validationErrors?.[0] ||
+        response?.preview?.readiness?.blockingReasons?.[0] ||
+        null;
+
+      if (response?.submitted) {
+        setOrderMessage(`${sideOverride} ${qty} ${selectedStock} submitted to Questrade.`);
+        setOrderConfirmed(false);
+        pushActivity({
+          type: "broker",
+          status: "submitted",
+          title: "Live Order Submitted",
+          detail: `${qty} ${selectedStock} submitted through backend live route.`,
+          symbol: selectedStock,
+          meta: {
+            requestId: response.requestId,
+          },
+        });
+        return;
+      }
+
+      setOrderMessage(firstBlock ? `Live submit disabled: ${firstBlock}` : "Live submit disabled by backend safety gate.");
+      pushActivity({
+        type: "broker",
+        status: "blocked",
+        title: "Live Submit Disabled",
+        detail: firstBlock || "Backend safety gate rejected the live order.",
+        symbol: selectedStock,
+        meta: {
+          requestId: response?.requestId,
+        },
+      });
+      return;
+    }
+
+    if (safetyIssues.length > 0) {
+      setOrderMessage(safetyIssues[0]);
+      pushActivity({
+        type: "risk",
+        status: "blocked",
+        title: "Risk Guardrail Blocked Order",
+        detail: safetyIssues[0],
+        symbol: selectedStock,
+        meta: {
+          orderValue,
+          orderRisk,
+          riskPerTrade: Number(riskPerTrade || 0),
+          maxOrderValue: Number(maxOrderValue || 0),
+        },
+      });
+      return;
+    }
+
+    const auditId = `SB-${Date.now().toString(36).toUpperCase()}`;
+    const submittedAt = new Date().toISOString();
+    const confirmText = [
+      `Submit PAPER ${sideOverride} ${qty} ${selectedStock}`,
+      `Entry: $${entryPrice.toFixed(2)}`,
+      `Value: $${(entryPrice * qty).toFixed(2)}`,
+      `Risk: $${orderRisk.toFixed(2)}`,
+      `Audit: ${auditId}`,
+    ].join("\n");
+
+    if (!window.confirm(confirmText)) {
+      setOrderMessage("Order submission cancelled before execution.");
+      pushActivity({
+        type: "order",
+        status: "cancelled",
+        title: "Paper Order Cancelled",
+        detail: "User cancelled the final order confirmation before execution.",
+        symbol: selectedStock,
+      });
+      return;
+    }
+
+    const result = placeOrder(sideOverride, {
+      auditId,
+      mode: "paper",
       price: entryPrice,
       orderType,
       stopLoss: Number(stopLoss) > 0 ? Number(stopLoss).toFixed(2) : null,
       takeProfit: Number(takeProfit) > 0 ? Number(takeProfit).toFixed(2) : null,
       riskReward,
       status: "Paper Filled",
+      auditStatus: "Guardrails Passed",
+      confirmationKey: orderConfirmationKey,
+      submittedAt,
+      guardrails: {
+        maxOrderValue: Number(maxOrderValue || 0),
+        dailyLossLimit: Number(dailyLossLimit || 0),
+        riskPerTrade: Number(riskPerTrade || 0),
+        orderRisk: Number(orderRisk || 0),
+        orderValue: Number(entryPrice * qty),
+        dailyRealizedLoss: Number(dailyRealizedLoss || 0),
+      },
     });
 
     if (result) {
@@ -1048,9 +1616,30 @@ export default function App() {
         ? `${result.filledQty} of ${result.requestedQty}`
         : result.filledQty;
 
-      setOrderMessage(`${orderSide} ${fillText} ${selectedStock} filled as paper ${orderType.toLowerCase()} order.`);
+      setOrderMessage(`${sideOverride} ${fillText} ${selectedStock} filled as paper ${orderType.toLowerCase()} order.`);
+      setOrderConfirmed(false);
+      pushActivity({
+        type: "order",
+        status: "filled",
+        title: `Paper ${sideOverride} Filled`,
+        detail: `${fillText} ${selectedStock} filled at $${entryPrice.toFixed(2)} as a ${orderType.toLowerCase()} order.`,
+        symbol: selectedStock,
+        meta: {
+          auditId,
+          quantity: result.filledQty,
+          value: Number(entryPrice * result.filledQty),
+          orderRisk: Number(orderRisk || 0),
+        },
+      });
     } else {
       setOrderMessage(`No ${selectedStock} position available to sell.`);
+      pushActivity({
+        type: "order",
+        status: "blocked",
+        title: "Paper Sell Blocked",
+        detail: `No ${selectedStock} paper position was available to sell.`,
+        symbol: selectedStock,
+      });
     }
   }
 
@@ -1074,36 +1663,227 @@ export default function App() {
     link.click();
   }
 
-  const updateLiveQuote = useCallback((symbol, price, extra = {}) => {
-    const cleanSymbol = symbol?.trim?.().toUpperCase?.();
-    const numericPrice = Number(price);
+  function downloadFile(filename, content, type = "text/plain;charset=utf-8") {
+    const blob = content instanceof Blob ? content : new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
 
-    if (!cleanSymbol || !numericPrice || Number.isNaN(numericPrice)) return;
+    link.download = filename;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
-    updateContextLiveQuote(cleanSymbol, numericPrice, extra);
+  function csvValue(value) {
+    const text = String(value ?? "");
+    return `"${text.replace(/"/g, '""')}"`;
+  }
 
-    setLiveStocks((prev) =>
-      prev.map((stock) => {
-        if (stock.symbol !== cleanSymbol) return stock;
-
-        const oldPrice = Number(stock.price || numericPrice);
-        const changePercent =
-          oldPrice > 0
-            ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2)
-            : "0.00";
-
-        return {
-          ...stock,
-          price: numericPrice.toFixed(2),
-          change: `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%`,
-          volume: extra.volume || stock.volume,
-        };
-      })
+  function exportJournalCsv() {
+    const headers = [
+      "createdAt",
+      "symbol",
+      "bias",
+      "setup",
+      "grade",
+      "result",
+      "followedPlan",
+      "emotion",
+      "tags",
+      "mistakeTags",
+      "screenshotUrl",
+      "plan",
+      "review",
+    ];
+    const rows = journalEntries.map((entry) =>
+      headers.map((header) => csvValue(entry[header])).join(",")
     );
-  }, [updateContextLiveQuote]);
+
+    downloadFile(
+      `journal-${new Date().toISOString().slice(0, 10)}.csv`,
+      [headers.join(","), ...rows].join("\n"),
+      "text/csv;charset=utf-8"
+    );
+  }
+
+  function exportTradeSummaryCsv() {
+    const headers = [
+      "time",
+      "symbol",
+      "side",
+      "quantity",
+      "price",
+      "value",
+      "realizedPnL",
+      "stopLoss",
+      "takeProfit",
+      "riskReward",
+      "status",
+    ];
+    const rows = orders.map((order) =>
+      headers.map((header) => csvValue(order[header])).join(",")
+    );
+
+    downloadFile(
+      `trade-summary-${new Date().toISOString().slice(0, 10)}.csv`,
+      [headers.join(","), ...rows].join("\n"),
+      "text/csv;charset=utf-8"
+    );
+  }
+
+  function isTodayRecord(dateText) {
+    if (!dateText) return false;
+    const parsed = new Date(dateText);
+
+    if (Number.isNaN(parsed.getTime())) return false;
+
+    return parsed.toDateString() === new Date().toDateString();
+  }
+
+  function buildDailyReportText() {
+    const today = new Date().toLocaleDateString();
+    const todaysOrders = orders.filter((order) => isTodayRecord(order.time));
+    const todaysJournal = journalEntries.filter((entry) => isTodayRecord(entry.createdAt));
+    const closedToday = todaysOrders.filter((order) => order.realizedPnL !== null);
+    const dailyPnl = closedToday.reduce(
+      (total, order) => total + Number(order.realizedPnL || 0),
+      0
+    );
+    const latestJournal = todaysJournal.find((entry) => entry.symbol === selectedStock) || todaysJournal[0];
+
+    return [
+      `# SbCapitalCo Daily Report - ${today}`,
+      "",
+      "## Account",
+      `- Realized P&L: $${Number(realizedPnL || 0).toFixed(2)}`,
+      `- Unrealized P&L: $${Number(totalUnrealizedPnL || 0).toFixed(2)}`,
+      `- Today's closed P&L: $${dailyPnl.toFixed(2)}`,
+      `- Orders today: ${todaysOrders.length}`,
+      `- Active symbol: ${selectedStock}`,
+      "",
+      "## Trade Summary",
+      todaysOrders.length
+        ? todaysOrders
+            .map(
+              (order) =>
+                `- ${order.time}: ${order.side} ${order.quantity} ${order.symbol} @ $${order.price} (${order.status || "Paper"})`
+            )
+            .join("\n")
+        : "- No paper trades recorded today.",
+      "",
+      "## Journal Links",
+      todaysJournal.length
+        ? todaysJournal
+            .map((entry) => `- ${entry.createdAt}: ${entry.symbol} ${entry.setup} Grade ${entry.grade}`)
+            .join("\n")
+        : "- No journal entries recorded today.",
+      "",
+      "## Screenshot Reference",
+      `- Suggested chart screenshot: ${selectedStock}-chart.png`,
+      latestJournal ? `- Linked journal entry: ${latestJournal.id}` : "- Linked journal entry: none",
+      "",
+    ].join("\n");
+  }
+
+  function exportDailyReport() {
+    downloadFile(
+      `daily-report-${new Date().toISOString().slice(0, 10)}.md`,
+      buildDailyReportText(),
+      "text/markdown;charset=utf-8"
+    );
+  }
+
+  function exportWeeklyReport() {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const weeklyOrders = orders.filter((order) => {
+      const parsed = new Date(order.time);
+      return !Number.isNaN(parsed.getTime()) && parsed.getTime() >= weekAgo;
+    });
+    const weeklyJournal = journalEntries.filter((entry) => {
+      const parsed = new Date(entry.createdAt);
+      return !Number.isNaN(parsed.getTime()) && parsed.getTime() >= weekAgo;
+    });
+    const weeklyPnl = weeklyOrders.reduce(
+      (total, order) => total + Number(order.realizedPnL || 0),
+      0
+    );
+    const mistakeCounts = weeklyJournal.reduce((stats, entry) => {
+      String(entry.mistakeTags || entry.tags || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .forEach((tag) => {
+          stats[tag] = (stats[tag] || 0) + 1;
+        });
+      return stats;
+    }, {});
+
+    downloadFile(
+      `weekly-review-${new Date().toISOString().slice(0, 10)}.md`,
+      [
+        `# SbCapitalCo Weekly Review - ${new Date().toLocaleDateString()}`,
+        "",
+        `- Closed/order records: ${weeklyOrders.length}`,
+        `- Journal reviews: ${weeklyJournal.length}`,
+        `- Weekly realized P&L: $${weeklyPnl.toFixed(2)}`,
+        "",
+        "## Setup Performance",
+        ...Object.entries(
+          weeklyJournal.reduce((stats, entry) => {
+            stats[entry.setup] ||= { total: 0, aGrade: 0 };
+            stats[entry.setup].total += 1;
+            if (entry.grade === "A" || entry.grade === "B") stats[entry.setup].aGrade += 1;
+            return stats;
+          }, {})
+        ).map(([setup, stat]) => `- ${setup}: ${stat.aGrade}/${stat.total} A/B reviews`),
+        "",
+        "## Mistake Tags",
+        ...(Object.entries(mistakeCounts).length
+          ? Object.entries(mistakeCounts).map(([tag, count]) => `- ${tag}: ${count}`)
+          : ["- No mistake tags recorded."]),
+        "",
+        "## Screenshot Links",
+        ...(weeklyJournal.filter((entry) => entry.screenshotUrl).length
+          ? weeklyJournal
+              .filter((entry) => entry.screenshotUrl)
+              .map((entry) => `- ${entry.symbol} ${entry.createdAt}: ${entry.screenshotUrl}`)
+          : ["- No screenshots linked."]),
+        "",
+      ].join("\n"),
+      "text/markdown;charset=utf-8"
+    );
+  }
+
+  function exportScreenshotJournalLink() {
+    const canvas = chartAreaRef.current?.querySelector("canvas");
+    const latestEntry =
+      journalEntries.find((entry) => entry.symbol === selectedStock) || journalEntries[0] || null;
+    const fileDate = new Date().toISOString().slice(0, 10);
+
+    if (canvas) {
+      canvas.toBlob((blob) => {
+        if (blob) downloadFile(`${fileDate}-${selectedStock}-chart.png`, blob, "image/png");
+      });
+    }
+
+    downloadFile(
+      `${fileDate}-${selectedStock}-screenshot-link.md`,
+      [
+        `# Screenshot Journal Link - ${selectedStock}`,
+        "",
+        `- Screenshot file: ${fileDate}-${selectedStock}-chart.png`,
+        latestEntry ? `- Journal entry id: ${latestEntry.id}` : "- Journal entry id: none",
+        latestEntry ? `- Journal created: ${latestEntry.createdAt}` : "- Journal created: none",
+        latestEntry ? `- Setup: ${latestEntry.setup}` : "- Setup: none",
+        "",
+      ].join("\n"),
+      "text/markdown;charset=utf-8"
+    );
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      cloudWorkspaceReadyRef.current = false;
       setUser(currentUser);
 
       if (!currentUser) {
@@ -1119,76 +1899,145 @@ export default function App() {
         if (snapshot.exists()) {
           applyWorkspace(snapshot.data());
           setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
+        } else {
+          setCloudStatus("Signed in - local workspace active");
         }
+        cloudWorkspaceReadyRef.current = true;
       } catch {
+        cloudWorkspaceReadyRef.current = true;
         setCloudStatus("Signed in · cloud load skipped");
       }
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [applyWorkspace]);
 
   useEffect(() => {
-    Promise.resolve().then(checkBrokerStatus);
-  }, [checkBrokerStatus]);
+    if (!user || !cloudWorkspaceReadyRef.current) return undefined;
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await setDoc(doc(db, "workspaces", user.uid), {
+          ...workspacePayload,
+          updatedAt: serverTimestamp(),
+          owner: user.uid,
+        });
+
+        setCloudStatus(`Cloud autosaved ${new Date().toLocaleTimeString()}`);
+      } catch {
+        setCloudStatus("Cloud autosave failed");
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [user, workspacePayload]);
+
+  useEffect(() => {
+    if (brokerBootstrappedRef.current) return;
+
+    brokerBootstrappedRef.current = true;
+    Promise.resolve().then(handleRefreshBroker);
+  }, [handleRefreshBroker]);
 
   useEffect(() => {
     if (selectedBrokerAccount) {
-      Promise.resolve().then(() => loadBrokerAccountData(selectedBrokerAccount));
+      Promise.resolve().then(() => handleLoadBrokerAccountData(selectedBrokerAccount));
     }
-  }, [loadBrokerAccountData, selectedBrokerAccount]);
+  }, [handleLoadBrokerAccountData, selectedBrokerAccount]);
 
   useEffect(() => {
-    localStorage.setItem("sb_selected_stock", JSON.stringify(selectedStock));
-    localStorage.setItem("sb_secondary_symbol", JSON.stringify(secondarySymbol));
-    localStorage.setItem("sb_timeframe", JSON.stringify(timeframe));
-    localStorage.setItem("sb_secondary_timeframe", JSON.stringify(secondaryTimeframe));
-    localStorage.setItem("sb_layout_mode", JSON.stringify(layoutMode));
-    localStorage.setItem("sb_grid_mode", JSON.stringify(gridMode));
-    localStorage.setItem("sb_theme_mode", JSON.stringify(themeMode));
-    localStorage.setItem("sb_show_ema9", JSON.stringify(showEMA9));
-    localStorage.setItem("sb_show_ema20", JSON.stringify(showEMA20));
-    localStorage.setItem("sb_scanner_tab", JSON.stringify(scannerTab));
-    localStorage.setItem("sb_watchlist", JSON.stringify(liveStocks));
-    localStorage.setItem("sb_orders", JSON.stringify(orders));
-    localStorage.setItem("sb_positions", JSON.stringify(positions));
-    localStorage.setItem("sb_realized_pnl", JSON.stringify(realizedPnL));
-    localStorage.setItem("sb_alerts", JSON.stringify(alerts));
-    localStorage.setItem("sb_sync_charts", JSON.stringify(syncCharts));
-    localStorage.setItem("sb_active_workspace", JSON.stringify(activeWorkspace));
+    if (brokerConnected && selectedBrokerAccount) {
+      Promise.resolve().then(() => loadLiveReadiness(selectedBrokerAccount));
+    }
+  }, [brokerConnected, loadLiveReadiness, selectedBrokerAccount]);
+
+  useEffect(() => {
+    if (!brokerSyncMeta?.lastSuccessAt) return;
+    if (lastBrokerSyncLoggedRef.current === brokerSyncMeta.lastSuccessAt) return;
+
+    lastBrokerSyncLoggedRef.current = brokerSyncMeta.lastSuccessAt;
+    pushActivity({
+      type: "broker",
+      status: "synced",
+      title: "Broker Sync Completed",
+      detail: "Broker balances, positions, or orders were refreshed successfully.",
+    });
+  }, [brokerSyncMeta?.lastSuccessAt, pushActivity]);
+
+  useEffect(() => {
+    if (!brokerError) return;
+    if (lastBrokerErrorLoggedRef.current === brokerError) return;
+
+    lastBrokerErrorLoggedRef.current = brokerError;
+    pushActivity({
+      type: "broker",
+      status: "failed",
+      title: "Broker Sync Failed",
+      detail: brokerError,
+    });
+  }, [brokerError, pushActivity]);
+
+  useEffect(() => {
+    saveSetting("sb_timeframe", timeframe);
+    saveSetting("sb_secondary_timeframe", secondaryTimeframe);
+    saveSetting("sb_theme_mode", themeMode);
+    saveSetting("sb_market_region", marketRegion);
+    saveSetting("sb_show_ema9", showEMA9);
+    saveSetting("sb_show_ema20", showEMA20);
+    saveSetting("sb_scanner_tab", scannerTab);
+    saveSetting("sb_orders", orders);
+    saveSetting("sb_positions", positions);
+    saveSetting("sb_realized_pnl", realizedPnL);
+    saveSetting("sb_alerts", alerts);
+    saveSetting("sb_journal_entries", journalEntries);
+    saveSetting("sb_journal_draft", journalDraft);
+    saveSetting("sb_activity_log", activityLog);
+    saveSetting("sb_trading_mode", tradingMode);
+    saveSetting("sb_max_order_value", maxOrderValue);
+    saveSetting("sb_daily_loss_limit", dailyLossLimit);
+    saveSetting("sb_risk_per_trade", riskPerTrade);
   }, [
-    selectedStock,
-    secondarySymbol,
     timeframe,
     secondaryTimeframe,
-    layoutMode,
-    gridMode,
     themeMode,
+    marketRegion,
     showEMA9,
     showEMA20,
     scannerTab,
-    liveStocks,
     orders,
     positions,
     realizedPnL,
     alerts,
-    syncCharts,
-    activeWorkspace,
+    journalEntries,
+    journalDraft,
+    activityLog,
+    tradingMode,
+    maxOrderValue,
+    dailyLossLimit,
+    riskPerTrade,
   ]);
 
   useEffect(() => {
     function handleHotkeys(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandPaletteOpen((open) => !open);
+        return;
+      }
+
       const tag = event.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea") return;
 
       if (event.shiftKey && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        placeOrder("BUY");
+        setOrderSide("BUY");
+        setOrderMessage("Review and confirm the order ticket before submitting a BUY.");
       }
 
       if (event.shiftKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        placeOrder("SELL");
+        setOrderSide("SELL");
+        setOrderMessage("Review and confirm the order ticket before submitting a SELL.");
       }
 
       if (event.shiftKey && event.key === "1") {
@@ -1210,7 +2059,7 @@ export default function App() {
     window.addEventListener("keydown", handleHotkeys);
 
     return () => window.removeEventListener("keydown", handleHotkeys);
-  }, [placeOrder]);
+  }, [setGridMode, setLayoutMode]);
 
   useEffect(() => {
     if (!replayMode || !replayPlaying) return;
@@ -1249,6 +2098,15 @@ export default function App() {
           if (!triggered) return alert;
 
           changed = true;
+          if (
+            alertNotifications &&
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            new Notification(`${alert.symbol} alert triggered`, {
+              body: `${alert.direction} $${Number(alert.trigger).toFixed(2)}`,
+            });
+          }
           return {
             ...alert,
             active: false,
@@ -1261,196 +2119,61 @@ export default function App() {
     }, 0);
 
     return () => clearTimeout(timeout);
-  }, [selectedStockData, selectedStock]);
-
-  useEffect(() => {
-    async function fetchFmpScanners() {
-      setScannerLoading(true);
-
-      try {
-        const response = await fetch(`${BROKER_API_URL}/api/scanner`);
-
-        if (!response.ok) {
-          throw new Error("Backend scanner unavailable");
-        }
-
-        const data = await response.json();
-
-        setFmpGainers(data.gainers || []);
-        setFmpLosers(data.losers || []);
-        setFmpActive(data.active || []);
-        setFmpMomentum(data.momentum || []);
-        setFmpRelativeVolume(data.relativeVolume || []);
-        setFmpAiMovers(data.aiMovers || []);
-        setFmpSmallCaps(data.smallCaps || []);
-      } catch {
-        if (!FMP_API_KEY) {
-          setFmpGainers([]);
-          setFmpLosers([]);
-          setFmpActive([]);
-          setFmpMomentum([]);
-          setFmpRelativeVolume([]);
-          setFmpAiMovers([]);
-          setFmpSmallCaps([]);
-          setScannerLoading(false);
-          return;
-        }
-
-        try {
-          const [gainersRes, losersRes, activeRes] = await Promise.all([
-            fetch(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${FMP_API_KEY}`),
-            fetch(`https://financialmodelingprep.com/stable/biggest-losers?apikey=${FMP_API_KEY}`),
-            fetch(`https://financialmodelingprep.com/stable/actively-trading-list?apikey=${FMP_API_KEY}`),
-          ]);
-
-          const [gainersData, losersData, activeData] = await Promise.all([
-            gainersRes.json(),
-            losersRes.json(),
-            activeRes.json(),
-          ]);
-          const nextGainers = formatFmpStocks(gainersData);
-          const nextLosers = formatFmpStocks(losersData);
-          const nextActive = formatFmpStocks(activeData);
-          const nextSmallCaps = [...nextGainers, ...nextActive]
-            .filter((stock) => {
-              const price = Number(stock.price || 0);
-              return price > 0 && price <= 20;
-            })
-            .filter((stock, index, stocks) =>
-              stocks.findIndex((item) => item.symbol === stock.symbol) === index
-            )
-            .sort((a, b) => parsePercent(b.change) - parsePercent(a.change))
-            .slice(0, 12);
-
-          setFmpGainers(nextGainers);
-          setFmpLosers(nextLosers);
-          setFmpActive(nextActive);
-          setFmpMomentum([]);
-          setFmpRelativeVolume([]);
-          setFmpAiMovers([]);
-          setFmpSmallCaps(nextSmallCaps);
-        } catch {
-          setFmpGainers([]);
-          setFmpLosers([]);
-          setFmpActive([]);
-          setFmpMomentum([]);
-          setFmpRelativeVolume([]);
-          setFmpAiMovers([]);
-          setFmpSmallCaps([]);
-        }
-      }
-
-      setScannerLoading(false);
-    }
-
-    fetchFmpScanners();
-    const interval = setInterval(fetchFmpScanners, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, []);
+  }, [alertNotifications, selectedStockData, selectedStock]);
 
   useEffect(() => {
     return subscribeToSymbols(trackedSymbols);
   }, [subscribeToSymbols, trackedSymbols]);
 
   useEffect(() => {
-    if (!FINNHUB_API_KEY) return;
-
     let cancelled = false;
 
     const pollLiveQuotes = async () => {
       const uniqueSymbols = [...new Set(trackedSymbols)].slice(0, 12);
 
-      await Promise.allSettled(
-        uniqueSymbols.map(async (symbol) => {
-          try {
-            const response = await fetch(
-              `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`
-            );
+      if (!uniqueSymbols.length) return;
 
-            const quote = await response.json();
-            const price = Number(quote.c || 0);
+      try {
+        const response = await fetchWithTimeout(
+          `${BROKER_API_URL}/api/questrade/quotes?symbols=${encodeURIComponent(uniqueSymbols.join(","))}`,
+          8000
+        );
 
-            if (!cancelled && price > 0) {
-              updateLiveQuote(symbol, price, {
-                volume: "QUOTE",
-                source: "REST",
-              });
-            }
-          } catch {
-            // Keep websocket/simulated values if REST quote fails.
-          }
-        })
-      );
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
+
+        if (cancelled) return;
+
+        quotes.forEach((quote) => {
+          const price = Number(quote.price || 0);
+
+          if (price <= 0) return;
+
+          updateLiveQuote(quote.symbol, price, {
+            volume: quote.volume || "QUOTE",
+            source: quote.delayed ? "QTRD DELAYED" : "QTRD",
+            delayed: Boolean(quote.delayed),
+            realtime: quote.realtime !== false,
+            bidPrice: quote.bidPrice,
+            askPrice: quote.askPrice,
+            lastTradeTime: quote.lastTradeTime,
+          });
+        });
+      } catch {
+        // Keep websocket/simulated values if the backend quote bridge is unavailable.
+      }
     };
 
     pollLiveQuotes();
-    const interval = setInterval(pollLiveQuotes, 3000);
+    const interval = setInterval(pollLiveQuotes, 10_000);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
   }, [trackedSymbols, updateLiveQuote]);
-
-  useEffect(() => {
-    async function fetchNews() {
-      if (!FINNHUB_API_KEY) return;
-
-      setNewsLoading(true);
-
-      try {
-        const today = new Date();
-        const fromDate = new Date();
-        fromDate.setDate(today.getDate() - 14);
-
-        const to = today.toISOString().split("T")[0];
-        const from = fromDate.toISOString().split("T")[0];
-
-        const response = await fetch(
-          `https://finnhub.io/api/v1/company-news?symbol=${selectedStock}&from=${from}&to=${to}&token=${FINNHUB_API_KEY}`
-        );
-
-        const data = await response.json();
-
-        if (Array.isArray(data) && data.length > 0) {
-          setNews(
-            data.slice(0, 12).map((item) => ({
-              id: item.id || item.datetime,
-              time: new Date(item.datetime * 1000).toLocaleTimeString(),
-              source: item.source || "Market News",
-              text: item.headline,
-              url: item.url,
-            }))
-          );
-        } else {
-          setNews([
-            {
-              id: 1,
-              time: new Date().toLocaleTimeString(),
-              source: "SbCapitalCo.",
-              text: `${selectedStock} remains active as traders watch momentum levels.`,
-              url: "https://finnhub.io/",
-            },
-          ]);
-        }
-      } catch {
-        setNews([
-          {
-            id: 1,
-            time: new Date().toLocaleTimeString(),
-            source: "SbCapitalCo.",
-            text: `Unable to load live news for ${selectedStock}.`,
-            url: "https://finnhub.io/",
-          },
-        ]);
-      }
-
-      setNewsLoading(false);
-    }
-
-    fetchNews();
-  }, [selectedStock]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1500,196 +2223,64 @@ export default function App() {
     activeWorkspace === "replay" ||
     activeWorkspace === "portfolio" ||
     activeWorkspace === "alerts";
+  const showLeftDockPanel = showLeftDock && (!isCompactTerminal || activeWorkspace !== "charts");
+  const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
+  const sidebarPanelSize = isPhoneTerminal ? 15 : 4;
+  const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 30;
+  const workspaceDefaultSize =
+    100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
 
   const centerRows =
+    activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
     activeWorkspace === "watchlist" ||
     activeWorkspace === "journal" ||
     activeWorkspace === "settings"
       ? "1fr"
-      : "1fr 130px";
+      : "1fr 170px";
 
-  function renderChartPanel({
-    title,
-    symbol,
-    setSymbol,
-    tf,
-    setTf,
-    livePrice,
-    secondary = false,
-    chartStatus = "LOADING",
-    onStatusChange,
-  }) {
+  const {
+    marketDataStatusLabel,
+    mainChartSourceLabel,
+    scannerSourceLabel,
+    newsSourceLabel,
+    brokerSourceLabel,
+    modeSourceLabel,
+  } = buildTerminalSourceLabels({
+    liveQuotes,
+    platformHealth,
+    mainChartStatus,
+    scannerMeta,
+    newsMeta,
+    brokerConnected,
+  });
+
+  function renderChartPanel(chartProps) {
     return (
-      <div
-        style={{
-          ...panelStyle({
-            padding: "0px",
-            background: "#050b14",
-          }),
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          height: "100%",
-          minHeight: 0,
-        }}
-      >
-        <div
-          style={{
-            padding: "6px 10px",
-            marginBottom: "0px",
-            background: theme.panel,
-            borderBottom: `1px solid ${theme.border}`,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "8px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: "10px", color: theme.muted }}>{title}</div>
-              <div style={{ fontSize: secondary ? "16px" : "19px", fontWeight: 900 }}>
-                {symbol}
-              </div>
-              <span
-                style={{
-                  color: secondary ? theme.blue : theme.green,
-                  fontWeight: 800,
-                  fontSize: "10px",
-                }}
-              >
-                ● QUOTE LIVE · CHART {chartStatus}
-              </span>
-            </div>
-
-            {secondary && (
-              <input
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                style={{
-                  width: "82px",
-                  height: "28px",
-                  padding: "0 7px",
-                  background: theme.panel2,
-                  border: `1px solid ${theme.border}`,
-                  color: theme.text,
-                  borderRadius: "4px",
-                  fontWeight: 800,
-                }}
-              />
-            )}
-
-            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
-              {["1m", "5m", "15m", "1H", "1D"].map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setTf(item)}
-                  style={timeframeButtonStyle(tf === item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {!secondary && (
-          <div
-            style={{
-              display: "flex",
-              gap: "5px",
-              marginBottom: "0px",
-              padding: "5px 8px",
-              flexWrap: "wrap",
-              position: "relative",
-              background: theme.panel,
-              borderBottom: `1px solid ${theme.border}`,
-            }}
-          >
-            <button style={buttonStyle(false)}>Crosshair</button>
-            <button
-              style={buttonStyle(false)}
-              onClick={() => setShowIndicators(!showIndicators)}
-            >
-              Indicators
-            </button>
-            <button style={buttonStyle(false)}>Draw</button>
-            <button style={buttonStyle(false)} onClick={takeScreenshot}>
-              Screenshot
-            </button>
-            <button style={buttonStyle(false)} onClick={toggleFullscreen}>
-              Fullscreen
-            </button>
-            <button style={buttonStyle(false)}>Settings</button>
-
-            {showIndicators && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: "36px",
-                  left: "78px",
-                  background: theme.panel,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: "6px",
-                  padding: "10px",
-                  zIndex: 20,
-                  width: "150px",
-                }}
-              >
-                <label style={{ display: "block", marginBottom: "8px" }}>
-                  <input
-                    type="checkbox"
-                    checked={showEMA9}
-                    onChange={() => setShowEMA9(!showEMA9)}
-                  />{" "}
-                  EMA 9
-                </label>
-
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showEMA20}
-                    onChange={() => setShowEMA20(!showEMA20)}
-                  />{" "}
-                  EMA 20
-                </label>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div
-          ref={!secondary ? chartAreaRef : null}
-          style={{
-            flex: 1,
-            minHeight: 0,
-            height: "100%",
-            background: "#050b14",
-          }}
-        >
-          <Chart
-            symbol={symbol}
-            timeframe={tf}
-            livePrice={Number(livePrice || 100)}
-            livePulse={
-              allSymbols.find((item) => item.symbol === symbol)?.lastUpdated ||
-              initialLivePulse
-            }
-            showEMA9={showEMA9}
-            showEMA20={showEMA20}
-            onStatusChange={onStatusChange}
-            replayMode={replayMode && !secondary}
-            replayIndex={replayIndex}
-            onReplayData={setMainReplayData}
-            replayTrades={replayTrades}
-          />
-        </div>
-      </div>
+      <ChartPanel
+        {...chartProps}
+        theme={theme}
+        allSymbols={allSymbols}
+        viewportWidth={viewportWidth}
+        panelStyle={panelStyle}
+        buttonStyle={buttonStyle}
+        timeframeButtonStyle={timeframeButtonStyle}
+        showIndicators={showIndicators}
+        setShowIndicators={setShowIndicators}
+        showEMA9={showEMA9}
+        setShowEMA9={setShowEMA9}
+        showEMA20={showEMA20}
+        setShowEMA20={setShowEMA20}
+        takeScreenshot={takeScreenshot}
+        toggleFullscreen={toggleFullscreen}
+        chartAreaRef={chartAreaRef}
+        initialLivePulse={initialLivePulse}
+        replayMode={replayMode}
+        replayIndex={replayIndex}
+        setMainReplayData={setMainReplayData}
+        replayTrades={replayTrades}
+        brokerApiUrl={BROKER_API_URL}
+      />
     );
   }
 
@@ -1700,11 +2291,13 @@ export default function App() {
         background: theme.bg,
         color: theme.text,
         overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
         fontFamily:
-          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+          "Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
       }}
     >
-      <TerminalTopBar
+        <TerminalTopBar
         theme={theme}
         workspaceViews={workspaceViews}
         activeWorkspace={activeWorkspace}
@@ -1720,6 +2313,10 @@ export default function App() {
         resetReplay={resetReplay}
         wsStatus={wsStatus}
         mainChartStatus={mainChartStatus}
+        marketDataStatusLabel={marketDataStatusLabel}
+        chartStatusLabel={mainChartSourceLabel}
+        brokerStateLabel={brokerSourceLabel}
+        modeStatusLabel={modeSourceLabel}
         brokerStatus={brokerStatus}
         brokerConnected={brokerConnected}
         isDark={isDark}
@@ -1727,26 +2324,35 @@ export default function App() {
         saveWorkspaceToCloud={saveWorkspaceToCloud}
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
         resetWorkspace={resetWorkspace}
+        layoutPresets={layoutPresets}
+        activePreset={activePreset}
+        applyLayoutPreset={applyLayoutPreset}
+        marketRegions={marketRegions}
+        marketRegion={marketRegion}
+        setMarketRegion={setMarketRegion}
+        activeMarket={activeMarket}
         buttonStyle={buttonStyle}
         user={user}
+        compact={isCompactTerminal}
       />
 
       <TickerTape
         theme={theme}
-        stocks={allSymbols.slice(0, 20)}
+        stocks={tickerTapeSymbols.slice(0, activeWorkspace === "intelligence" ? 14 : 20)}
         onPick={selectMainSymbol}
       />
 
       <PanelGroup
         direction="horizontal"
         style={{
-          height: "calc(100vh - 72px)",
+          flex: "1 1 auto",
+          minHeight: 0,
           padding: "6px",
           gap: "6px",
           overflow: "hidden",
         }}
       >
-        <Panel id="sidebar-panel" order={1} defaultSize={4} minSize={4} maxSize={6}>
+        <Panel id="sidebar-panel" order={1} defaultSize={sidebarPanelSize} minSize={sidebarPanelSize} maxSize={isPhoneTerminal ? 15 : 6}>
           <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
@@ -1757,7 +2363,7 @@ export default function App() {
 
         <PanelResizeHandle id="sidebar-resize-handle" style={verticalResizeHandleStyle} />
 
-        {showLeftDock && (
+        {showLeftDockPanel && (
           <>
             <Panel id="left-dock-panel" order={2} defaultSize={18} minSize={12} maxSize={32}>
               <div
@@ -1779,23 +2385,26 @@ export default function App() {
           )}
 
           {activeWorkspace === "journal" && (
-            <div
-              style={{
-                background: theme.panel2,
-                border: `1px solid ${theme.border}`,
-                borderRadius: "6px",
-                padding: "8px",
-                fontSize: "11px",
-                lineHeight: "1.6",
-                marginBottom: "10px",
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: "4px" }}>Session Notes</div>
-              <div style={{ color: theme.muted }}>
-                Journal module foundation is ready. Next upgrade can add trade notes,
-                emotional tags, screenshots, and cloud-saved analytics.
-              </div>
-            </div>
+            <Suspense fallback={<LoadingPanel theme={theme} label="Loading journal" height="220px" />}>
+              <JournalPanel
+                theme={theme}
+                buttonStyle={buttonStyle}
+                draft={journalDraft}
+                setDraft={setJournalDraft}
+                entries={journalEntries}
+                addEntry={addJournalEntry}
+                deleteEntry={deleteJournalEntry}
+                selectedStock={selectedStock}
+                realizedPnL={realizedPnL}
+                totalUnrealizedPnL={totalUnrealizedPnL}
+                orders={orders}
+                exportJournalCsv={exportJournalCsv}
+                exportTradeSummaryCsv={exportTradeSummaryCsv}
+                exportDailyReport={exportDailyReport}
+                exportWeeklyReport={exportWeeklyReport}
+                exportScreenshotJournalLink={exportScreenshotJournalLink}
+              />
+            </Suspense>
           )}
 
           {activeWorkspace === "settings" && (
@@ -1812,38 +2421,96 @@ export default function App() {
             >
               <div style={{ fontWeight: 900, marginBottom: "4px" }}>Workspace Controls</div>
               <div>Active View: {activeWorkspace}</div>
+              <div>Preset: {layoutPresets[activePreset]?.label || "Custom"}</div>
               <div>Layout: {layoutMode} chart</div>
               <div>Sync: {syncCharts ? "On" : "Off"}</div>
               <div>Cloud: {user ? "Signed In" : "Local"}</div>
             </div>
           )}
 
-          <input
-            value={searchSymbol}
-            onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") addSymbol();
-            }}
-            placeholder="AAPL, MSFT, SPY..."
-            style={{
-              width: "100%",
-              padding: "8px",
-              background: theme.panel2,
-              border: `1px solid ${theme.border}`,
-              color: theme.text,
-              borderRadius: "4px",
-              marginBottom: "6px",
-              fontSize: "11px",
-            }}
-          />
+          {activeWorkspace !== "journal" && (
+          <>
+          <div style={{ position: "relative", marginBottom: "6px" }}>
+            <Search
+              size={14}
+              style={{
+                position: "absolute",
+                left: "8px",
+                top: "8px",
+                color: theme.muted,
+                pointerEvents: "none",
+              }}
+            />
+            <input
+              value={searchSymbol}
+              onChange={(e) => setSearchSymbol(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addSymbol();
+              }}
+              placeholder="AAPL, MSFT, SPY..."
+              style={{
+                width: "100%",
+                padding: "8px 8px 8px 28px",
+                background: theme.panel2,
+                border: `1px solid ${theme.border}`,
+                color: theme.text,
+                borderRadius: "4px",
+                fontSize: "11px",
+              }}
+            />
+          </div>
 
-          <button onClick={addSymbol} style={{ ...buttonStyle(true), width: "100%" }}>
-            Add Symbol
+          {symbolSuggestions.length > 0 && (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: "5px",
+                marginBottom: "6px",
+              }}
+            >
+              {symbolSuggestions.map((stock) => (
+                <button
+                  key={stock.symbol}
+                  onClick={() => addSymbolToWatchlist(stock.symbol)}
+                  title={`Add ${stock.symbol}`}
+                  style={{
+                    ...buttonStyle(false),
+                    minWidth: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "4px",
+                    padding: "0 7px",
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {stock.symbol}
+                  </span>
+                  <Plus size={13} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={addSymbol}
+            style={{
+              ...buttonStyle(true),
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            <Plus size={14} />
+            <span>Add Symbol</span>
           </button>
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Account + Cloud</h3>
+          {sectionHeader("account", "Account + Cloud", user ? "Signed in" : "Local")}
 
-          {user ? (
+          {leftSectionsOpen.account && (user ? (
             <div style={{ fontSize: "10px", lineHeight: "1.5" }}>
               <div style={{ color: theme.green, fontWeight: 900 }}>Signed in</div>
               <div style={{ color: theme.muted, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1869,7 +2536,7 @@ export default function App() {
               <div style={{ color: theme.muted, marginTop: "5px" }}>{cloudStatus}</div>
             </div>
           ) : (
-            <div>
+            <div style={{ minWidth: 0 }}>
               <input
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
@@ -1929,16 +2596,24 @@ export default function App() {
                 {authMessage || cloudStatus}
               </div>
             </div>
+          ))}
+
+          {sectionHeader("watchlist", "Watchlist", String(liveStocks.length))}
+
+          {leftSectionsOpen.watchlist && liveStocks.length === 0 && (
+            emptyState("Watchlist is empty", "Add a symbol above to start tracking live quotes.")
           )}
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Watchlist</h3>
-
-          {liveStocks.map((stock) => (
+          {leftSectionsOpen.watchlist && liveStocks.map((stock) => (
             <div
               key={stock.symbol}
               onClick={() => selectMainSymbol(stock.symbol)}
               style={{
-                padding: "6px 0",
+                display: "grid",
+                gridTemplateColumns: "1fr 24px",
+                gap: "5px",
+                alignItems: "center",
+                padding: "5px 0",
                 borderBottom: `1px solid ${theme.border}`,
                 cursor: "pointer",
                 color: selectedStock === stock.symbol ? theme.blue : theme.text,
@@ -1946,28 +2621,62 @@ export default function App() {
                 fontSize: "11px",
               }}
             >
-              {stock.symbol}
+              <span>{stock.symbol}</span>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  removeWatchlistSymbol(stock.symbol);
+                }}
+                title={`Remove ${stock.symbol}`}
+                style={{
+                  width: "22px",
+                  height: "22px",
+                  display: "grid",
+                  placeItems: "center",
+                  background: "transparent",
+                  border: `1px solid ${theme.border}`,
+                  color: theme.muted,
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={12} />
+              </button>
             </div>
           ))}
 
-          <h3 style={{ marginTop: "12px", fontSize: "13px" }}>
-            Scanner {scannerLoading ? "Loading..." : ""}
-          </h3>
+          {sectionHeader("scanner", "Scanner", scannerLoading ? "Loading" : String(scannerStocks.length))}
 
-          <ProfessionalScanner
-  theme={theme}
-  scannerTab={scannerTab}
-  setScannerTab={setScannerTab}
-  scannerStocks={scannerStocks}
-  selectMainSymbol={selectMainSymbol}
-/>
+          {leftSectionsOpen.scanner && (
+            <Suspense fallback={<LoadingPanel theme={theme} label="Loading scanner" height="120px" />}>
+              {scannerLoading ? (
+                <LoadingPanel theme={theme} label="Loading scanner" height="120px" />
+              ) : (
+                <ProfessionalScanner
+                  theme={theme}
+                  scannerTab={scannerTab}
+                  setScannerTab={setScannerTab}
+                  scannerStocks={scannerStocks}
+                  scannerMeta={scannerMeta}
+                  selectMainSymbol={selectMainSymbol}
+                  selectedScannerStock={selectedScannerStock}
+                  addSymbolToWatchlist={addSymbolToWatchlist}
+                />
+              )}
+            </Suspense>
+          )}
 
-          <h3 style={{ marginTop: "4px", fontSize: "13px" }}>Small Cap Movers</h3>
-          <ScannerTable
-            rows={liveSmallCapMovers}
-            onPick={selectMainSymbol}
-            theme={theme}
-          />
+          {sectionHeader("movers", "Small Cap Movers", String(liveSmallCapMovers.length))}
+
+          {leftSectionsOpen.movers && (
+            <ScannerTable
+              rows={liveSmallCapMovers}
+              onPick={selectMainSymbol}
+              theme={theme}
+            />
+          )}
+          </>
+          )}
         </div>
             </Panel>
 
@@ -1975,7 +2684,7 @@ export default function App() {
           </>
         )}
 
-        <Panel id="workspace-panel" order={3} defaultSize={showRightDock ? 58 : 78} minSize={30}>
+        <Panel id="workspace-panel" order={3} defaultSize={workspaceDefaultSize} minSize={workspaceMinSize}>
           <div
           style={{
             display: "grid",
@@ -1986,210 +2695,646 @@ export default function App() {
             overflow: "hidden",
           }}
         >
-          <WorkspaceGrid
-            theme={theme}
-            layoutMode={layoutMode}
-            gridMode={gridMode}
-            renderChartPanel={renderChartPanel}
-            selectedStock={selectedStock}
-            secondarySymbol={secondarySymbol}
-            setSecondarySymbol={setSecondarySymbol}
-            timeframe={timeframe}
-            setMainTimeframe={setMainTimeframe}
-            secondaryTimeframe={secondaryTimeframe}
-            setSecondaryTimeframe={setSecondaryTimeframe}
-            selectedStockData={selectedStockData}
-            secondaryStockData={secondaryStockData}
-            mainChartStatus={mainChartStatus}
-            secondaryChartStatus={secondaryChartStatus}
-            setMainChartStatus={setMainChartStatus}
-            setSecondaryChartStatus={setSecondaryChartStatus}
-            syncCharts={syncCharts}
-          />
+          {activeWorkspace === "intelligence" ? (
+            <Suspense fallback={<LoadingPanel theme={theme} label="Loading market intelligence" />}>
+              <MarketIntelligenceTerminal
+                theme={theme}
+                brokerApiUrl={BROKER_API_URL}
+                user={user}
+                localWatchlist={liveStocks}
+                addSymbolToWatchlist={addSymbolToWatchlist}
+                removeWatchlistSymbol={removeWatchlistSymbol}
+                selectMainSymbol={selectMainSymbol}
+              />
+            </Suspense>
+          ) : (
+            <WorkspaceGrid
+              theme={theme}
+              layoutMode={layoutMode}
+              gridMode={gridMode}
+              renderChartPanel={renderChartPanel}
+              selectedStock={selectedStock}
+              setMainSymbol={selectMainSymbol}
+              secondarySymbol={secondarySymbol}
+              setSecondarySymbol={setSecondarySymbol}
+              timeframe={timeframe}
+              setMainTimeframe={setMainTimeframe}
+              secondaryTimeframe={secondaryTimeframe}
+              setSecondaryTimeframe={setSecondaryTimeframe}
+              selectedStockData={selectedStockData}
+              secondaryStockData={secondaryStockData}
+              allSymbols={allSymbols}
+              mainChartStatus={mainChartStatus}
+              secondaryChartStatus={secondaryChartStatus}
+              setMainChartStatus={setMainChartStatus}
+              setSecondaryChartStatus={setSecondaryChartStatus}
+              syncCharts={syncCharts}
+              compact={isPhoneTerminal}
+            />
+          )}
 
           {(activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") && (
-          <div
-            style={panelStyle({
-              height: "130px",
-              overflowY: "auto",
-            })}
-          >
-            {panelTitle("Market News")}
-
-            {newsLoading ? (
-              <p>Loading...</p>
-            ) : (
-              news.map((item) => (
-                <a
-                  key={item.id}
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    display: "block",
-                    color: theme.text,
-                    textDecoration: "none",
-                    borderBottom: `1px solid ${theme.border}`,
-                    padding: "3px 0",
-                    fontSize: "10px",
-                    lineHeight: "1.3",
-                  }}
-                >
-                  <div style={{ color: theme.muted, fontSize: "9px" }}>
-                    {item.time} · {item.source}
-                  </div>
-                  <div>{item.text}</div>
-                </a>
-              ))
-            )}
-          </div>
+            <MarketNewsPanel
+              news={news}
+              newsLoading={newsLoading}
+              newsMeta={newsMeta}
+              selectedStock={selectedStock}
+              theme={theme}
+              terminalMonoFont={terminalMonoFont}
+            />
           )}
         </div>
         </Panel>
 
-        <RightTradingPanel showRightDock={showRightDock}>
-  <PanelResizeHandle id="right-dock-resize-handle" style={verticalResizeHandleStyle} />
-  <Panel id="right-dock-panel" order={4} defaultSize={20} minSize={15} maxSize={35}>
-    <div
-      style={panelStyle({
-        height: "100%",
-        overflowY: "auto",
-      })}
-    >
-      {panelTitle("Broker + Paper Trade + Level 1/2")}
+        <RightTradingPanel showRightDock={showRightDockPanel}>
+            <PanelResizeHandle id="right-dock-resize-handle" style={verticalResizeHandleStyle} />
+            <Panel id="right-dock-panel" order={4} defaultSize={20} minSize={15} maxSize={35}>
+              <div
+                style={panelStyle({
+                  height: "100%",
+                  overflowY: "auto",
+                })}
+              >
+                {panelTitle("Trading Console")}
 
-          <BrokerHeader
-            theme={theme}
-            brokerConnected={brokerConnected}
-            brokerStatus={brokerStatus}
-            brokerAccounts={brokerAccounts}
-            brokerLoading={brokerLoading}
-            selectedBrokerAccount={selectedBrokerAccount}
-            setSelectedBrokerAccount={setSelectedBrokerAccount}
-            refreshBroker={refreshBroker}
-            loadBrokerAccountData={loadBrokerAccountData}
-            primaryBrokerBalance={primaryBrokerBalance}
-            buttonStyle={buttonStyle}
-            brokerApiUrl={BROKER_API_URL}
-          />
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(64px, 1fr))",
+                    gap: "5px",
+                    marginBottom: "10px",
+                    padding: "5px",
+                    background: theme.panel,
+                    border: `1px solid ${theme.borderSoft || theme.border}`,
+                    borderRadius: "8px",
+                  }}
+                >
+                  {rightPanelTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setRightTab(tab.id)}
+                      style={{
+                        ...buttonStyle(rightTab === tab.id),
+                        height: "28px",
+                        minWidth: 0,
+                        padding: "0 6px",
+                        fontSize: "10px",
+                        borderColor: rightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
+                        background: rightTab === tab.id
+                          ? `linear-gradient(180deg, ${theme.blue}, #1765c6)`
+                          : "transparent",
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-          <BrokerPositions
-            theme={theme}
-            brokerPositions={brokerPositions}
-            brokerOrders={brokerOrders}
-          />
+                <Suspense fallback={<LoadingPanel theme={theme} label="Loading trading panels" height="180px" />}>
+                  {rightTab === "order" && (
+                    <OrderTicket
+                      theme={theme}
+                      buttonStyle={buttonStyle}
+                      orderSide={orderSide}
+                      setOrderSide={setOrderSide}
+                      orderType={orderType}
+                      setOrderType={setOrderType}
+                      quantity={quantity}
+                      setQuantity={setQuantity}
+                      limitPrice={limitPrice}
+                      setLimitPrice={setLimitPrice}
+                      stopLoss={stopLoss}
+                      setStopLoss={setStopLoss}
+                      takeProfit={takeProfit}
+                      setTakeProfit={setTakeProfit}
+                      selectedStock={selectedStock}
+                      selectedStockData={selectedStockData}
+                      orderEntryPrice={orderEntryPrice}
+                      estimatedValue={estimatedValue}
+                      riskReward={riskReward}
+                      orderRisk={orderRisk}
+                      orderReward={orderReward}
+                      tradingMode={tradingMode}
+                      setTradingMode={setTradingMode}
+                      orderConfirmed={orderConfirmed}
+                      setOrderConfirmed={setOrderConfirmed}
+                      maxOrderValue={maxOrderValue}
+                      setMaxOrderValue={setMaxOrderValue}
+                      dailyLossLimit={dailyLossLimit}
+                      setDailyLossLimit={setDailyLossLimit}
+                      riskPerTrade={riskPerTrade}
+                      setRiskPerTrade={setRiskPerTrade}
+                      orderPreview={orderPreview}
+                      liveReadiness={liveReadiness}
+                      liveOrderPreview={liveOrderPreview}
+                      liveOrderLoading={liveOrderLoading}
+                      orderConfirmationKey={orderConfirmationKey}
+                      safetyIssues={safetyIssues}
+                      previewLiveOrderTicket={previewLiveOrderTicket}
+                      submitOrderTicket={submitOrderTicket}
+                      orderMessage={orderMessage}
+                    />
+                  )}
 
-          <OrderTicket
-            theme={theme}
-            buttonStyle={buttonStyle}
-            orderSide={orderSide}
-            setOrderSide={setOrderSide}
-            orderType={orderType}
-            setOrderType={setOrderType}
-            quantity={quantity}
-            setQuantity={setQuantity}
-            limitPrice={limitPrice}
-            setLimitPrice={setLimitPrice}
-            stopLoss={stopLoss}
-            setStopLoss={setStopLoss}
-            takeProfit={takeProfit}
-            setTakeProfit={setTakeProfit}
-            selectedStock={selectedStock}
-            selectedStockData={selectedStockData}
-            orderEntryPrice={orderEntryPrice}
-            estimatedValue={estimatedValue}
-            riskReward={riskReward}
-            orderRisk={orderRisk}
-            orderReward={orderReward}
-            submitOrderTicket={submitOrderTicket}
-            orderMessage={orderMessage}
-          />
+                  {rightTab === "broker" && (
+                    <>
+                      <BrokerHeader
+                        theme={theme}
+                        brokerConnected={brokerConnected}
+                        brokerStatus={brokerStatus}
+                        brokerDetails={brokerDetails}
+                        brokerError={brokerError}
+                        brokerAccounts={brokerAccounts}
+                        brokerLoading={brokerLoading}
+                        selectedBrokerAccount={selectedBrokerAccount}
+                        setSelectedBrokerAccount={setSelectedBrokerAccount}
+                        refreshBroker={handleRefreshBroker}
+                        loadBrokerAccountData={handleLoadBrokerAccountData}
+                        primaryBrokerBalance={primaryBrokerBalance}
+                        buttonStyle={buttonStyle}
+                        brokerApiUrl={BROKER_API_URL}
+                        platformHealth={platformHealth}
+                        liveReadiness={liveReadiness}
+                        brokerSyncMeta={brokerSyncMeta}
+                      />
 
-          <PaperAccountPanel
-            theme={theme}
-            selectedStock={selectedStock}
-            selectedStockData={selectedStockData}
-            orders={orders}
-            realizedPnL={realizedPnL}
-            totalUnrealizedPnL={totalUnrealizedPnL}
-          />
+                      <BrokerPositions
+                        theme={theme}
+                        brokerPositions={brokerPositions}
+                        brokerOrders={brokerOrders}
+                        brokerConnected={brokerConnected}
+                        brokerSyncMeta={brokerSyncMeta}
+                      />
+                    </>
+                  )}
 
-          <ReplayPanel
-            theme={theme}
-            buttonStyle={buttonStyle}
-            replayPlaying={replayPlaying}
-            setReplayPlaying={setReplayPlaying}
-            stepReplay={stepReplay}
-            resetReplay={resetReplay}
-            replaySpeed={replaySpeed}
-            setReplaySpeed={setReplaySpeed}
-            replayBuy={replayBuy}
-            replaySell={replaySell}
-            replayIndex={replayIndex}
-            mainReplayData={mainReplayData}
-            replayCandle={replayCandle}
-            replayStats={replayStats}
-          />
+                  {rightTab === "risk" && (
+                    <>
+                      <RiskDashboard
+                        theme={theme}
+                        positions={positions}
+                        allSymbols={allSymbols}
+                        orders={orders}
+                        realizedPnL={realizedPnL}
+                        totalUnrealizedPnL={totalUnrealizedPnL}
+                        dailyLossLimit={dailyLossLimit}
+                        maxOrderValue={maxOrderValue}
+                        riskPerTrade={riskPerTrade}
+                        primaryBrokerBalance={primaryBrokerBalance}
+                        brokerPositions={brokerPositions}
+                        brokerConnected={brokerConnected}
+                        brokerSyncMeta={brokerSyncMeta}
+                      />
 
-          <AlertsPanel
-            theme={theme}
-            buttonStyle={buttonStyle}
-            alertInput={alertInput}
-            setAlertInput={setAlertInput}
-            addPriceAlert={addPriceAlert}
-            alerts={alerts}
-            removeAlert={removeAlert}
-            selectedStockData={selectedStockData}
-          />
+                      <PaperAccountPanel
+                        theme={theme}
+                        selectedStock={selectedStock}
+                        selectedStockData={selectedStockData}
+                        orders={orders}
+                        realizedPnL={realizedPnL}
+                        totalUnrealizedPnL={totalUnrealizedPnL}
+                      />
 
-          <DOMPanel
-            theme={theme}
-            ladderRows={ladderRows}
-            selectedStockData={selectedStockData}
-            level2={level2}
-          />
+                      <OpenPositionsPanel
+                        theme={theme}
+                        positions={positions}
+                        allSymbols={allSymbols}
+                      />
 
-          <OpenPositionsPanel
-            theme={theme}
-            positions={positions}
-            allSymbols={allSymbols}
-          />
+                      <RecentOrdersPanel
+                        theme={theme}
+                        orders={orders}
+                      />
+                    </>
+                  )}
 
-          <RecentOrdersPanel
-            theme={theme}
-            orders={orders}
-          />
-        </div>
-  </Panel>
-</RightTradingPanel>
+                  {rightTab === "replay" && (
+                    <ReplayPanel
+                      theme={theme}
+                      buttonStyle={buttonStyle}
+                      replayPlaying={replayPlaying}
+                      setReplayPlaying={setReplayPlaying}
+                      stepReplay={stepReplay}
+                      resetReplay={resetReplay}
+                      replaySpeed={replaySpeed}
+                      setReplaySpeed={setReplaySpeed}
+                      replayBuy={replayBuy}
+                      replaySell={replaySell}
+                      replayIndex={replayIndex}
+                      mainReplayData={mainReplayData}
+                      replayCandle={replayCandle}
+                      replayStats={replayStats}
+                      replayTrades={replayTrades}
+                      replayEquity={replayEquity}
+                      selectedStock={selectedStock}
+                      openReplayJournal={openReplayJournal}
+                    />
+                  )}
+
+                  {rightTab === "activity" && (
+                    <ActivityLogPanel
+                      theme={theme}
+                      activityLog={activityLog}
+                      clearActivityLog={clearActivityLog}
+                      buttonStyle={buttonStyle}
+                    />
+                  )}
+
+                  {rightTab === "health" && (
+                    <ProductionHealthPanel
+                      theme={theme}
+                      brokerApiUrl={BROKER_API_URL}
+                      platformHealth={platformHealth}
+                      brokerConnected={brokerConnected}
+                      brokerDetails={brokerDetails}
+                      brokerError={brokerError}
+                      brokerSyncMeta={brokerSyncMeta}
+                      scannerMeta={scannerMeta}
+                      scannerLoading={scannerLoading}
+                      wsStatus={wsStatus}
+                      mainChartStatus={mainChartStatus}
+                      refreshBroker={handleRefreshBroker}
+                      buttonStyle={buttonStyle}
+                    />
+                  )}
+
+                  {rightTab === "alerts" && (
+                    <AlertsPanel
+                      theme={theme}
+                      buttonStyle={buttonStyle}
+                      alertInput={alertInput}
+                      setAlertInput={setAlertInput}
+                      alertDirection={alertDirection}
+                      setAlertDirection={setAlertDirection}
+                      addPriceAlert={addPriceAlert}
+                      alerts={alerts}
+                      removeAlert={removeAlert}
+                      alertNotifications={alertNotifications}
+                      enableAlertNotifications={enableAlertNotifications}
+                      selectedStockData={selectedStockData}
+                    />
+                  )}
+
+                  {rightTab === "dom" && (
+                    <DOMPanel
+                      theme={theme}
+                      ladderRows={ladderRows}
+                      selectedStockData={selectedStockData}
+                      level2={level2}
+                    />
+                  )}
+
+                  {rightTab === "keys" && (
+                    <ShortcutsPanel theme={theme} />
+                  )}
+                </Suspense>
+              </div>
+            </Panel>
+          </RightTradingPanel>
       </PanelGroup>
 
+      {isPhoneTerminal && activeWorkspace === "charts" && (
+        <div
+          style={{
+            position: "fixed",
+            left: "88px",
+            right: "8px",
+            bottom: mobileDockOpen ? "calc(58vh + 36px)" : "32px",
+            zIndex: 45,
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: "5px",
+            padding: "5px",
+            background: "rgba(5,7,13,0.92)",
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "8px",
+            boxShadow: "0 14px 34px rgba(0,0,0,0.35)",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          {[
+            ["order", "Trade"],
+            ["risk", "Risk"],
+            ["replay", "Replay"],
+            ["alerts", "Alerts"],
+          ].map(([tabId, label]) => (
+            <button
+              key={tabId}
+              onClick={() => openMobileDockTab(tabId)}
+              style={{
+                ...buttonStyle(rightTab === tabId && mobileDockOpen),
+                height: "32px",
+                minWidth: 0,
+                padding: "0 5px",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isPhoneTerminal && mobileDockOpen && activeWorkspace === "charts" && (
+        <div
+          style={{
+            position: "fixed",
+            left: "82px",
+            right: "6px",
+            bottom: "30px",
+            maxHeight: "58vh",
+            zIndex: 50,
+            background: `linear-gradient(180deg, ${theme.panel2}, ${theme.bg})`,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "10px 10px 8px 8px",
+            boxShadow: "0 -18px 44px rgba(0,0,0,0.48)",
+            overflow: "hidden",
+            display: "grid",
+            gridTemplateRows: "auto 1fr",
+          }}
+        >
+          <div
+            style={{
+              height: "42px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "8px",
+              padding: "0 10px",
+              borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: theme.text, fontSize: "12px", fontWeight: 950 }}>
+                Mobile Trading Dock
+              </div>
+              <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 850 }}>
+                {selectedStock} · {rightPanelTabs.find((tab) => tab.id === rightTab)?.label || "Tools"}
+              </div>
+            </div>
+            <button
+              onClick={() => setMobileDockOpen(false)}
+              title="Close mobile trading dock"
+              style={{
+                width: "30px",
+                height: "30px",
+                display: "grid",
+                placeItems: "center",
+                background: theme.panel,
+                border: `1px solid ${theme.borderSoft || theme.border}`,
+                color: theme.muted,
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div style={{ overflowY: "auto", padding: "9px" }}>
+            <Suspense fallback={<LoadingPanel theme={theme} label="Loading mobile tools" height="180px" />}>
+              {rightTab === "order" && (
+                <OrderTicket
+                  theme={theme}
+                  buttonStyle={buttonStyle}
+                  orderSide={orderSide}
+                  setOrderSide={setOrderSide}
+                  orderType={orderType}
+                  setOrderType={setOrderType}
+                  quantity={quantity}
+                  setQuantity={setQuantity}
+                  limitPrice={limitPrice}
+                  setLimitPrice={setLimitPrice}
+                  stopLoss={stopLoss}
+                  setStopLoss={setStopLoss}
+                  takeProfit={takeProfit}
+                  setTakeProfit={setTakeProfit}
+                  selectedStock={selectedStock}
+                  selectedStockData={selectedStockData}
+                  orderEntryPrice={orderEntryPrice}
+                  estimatedValue={estimatedValue}
+                  riskReward={riskReward}
+                  orderRisk={orderRisk}
+                  orderReward={orderReward}
+                  tradingMode={tradingMode}
+                  setTradingMode={setTradingMode}
+                  orderConfirmed={orderConfirmed}
+                  setOrderConfirmed={setOrderConfirmed}
+                  maxOrderValue={maxOrderValue}
+                  setMaxOrderValue={setMaxOrderValue}
+                  dailyLossLimit={dailyLossLimit}
+                  setDailyLossLimit={setDailyLossLimit}
+                  riskPerTrade={riskPerTrade}
+                  setRiskPerTrade={setRiskPerTrade}
+                  orderPreview={orderPreview}
+                  liveReadiness={liveReadiness}
+                  liveOrderPreview={liveOrderPreview}
+                  liveOrderLoading={liveOrderLoading}
+                  orderConfirmationKey={orderConfirmationKey}
+                  safetyIssues={safetyIssues}
+                  previewLiveOrderTicket={previewLiveOrderTicket}
+                  submitOrderTicket={submitOrderTicket}
+                  orderMessage={orderMessage}
+                  compact
+                />
+              )}
+
+              {rightTab === "risk" && (
+                <>
+                  <RiskDashboard
+                    theme={theme}
+                    positions={positions}
+                    allSymbols={allSymbols}
+                    orders={orders}
+                    realizedPnL={realizedPnL}
+                    totalUnrealizedPnL={totalUnrealizedPnL}
+                    dailyLossLimit={dailyLossLimit}
+                    maxOrderValue={maxOrderValue}
+                    riskPerTrade={riskPerTrade}
+                    primaryBrokerBalance={primaryBrokerBalance}
+                    brokerPositions={brokerPositions}
+                    brokerConnected={brokerConnected}
+                    brokerSyncMeta={brokerSyncMeta}
+                  />
+
+                  <PaperAccountPanel
+                    theme={theme}
+                    selectedStock={selectedStock}
+                    selectedStockData={selectedStockData}
+                    orders={orders}
+                    realizedPnL={realizedPnL}
+                    totalUnrealizedPnL={totalUnrealizedPnL}
+                  />
+                </>
+              )}
+
+              {rightTab === "broker" && (
+                <>
+                  <BrokerHeader
+                    theme={theme}
+                    brokerConnected={brokerConnected}
+                    brokerStatus={brokerStatus}
+                    brokerDetails={brokerDetails}
+                    brokerError={brokerError}
+                    brokerAccounts={brokerAccounts}
+                    brokerLoading={brokerLoading}
+                    selectedBrokerAccount={selectedBrokerAccount}
+                    setSelectedBrokerAccount={setSelectedBrokerAccount}
+                    refreshBroker={handleRefreshBroker}
+                    loadBrokerAccountData={handleLoadBrokerAccountData}
+                    primaryBrokerBalance={primaryBrokerBalance}
+                    buttonStyle={buttonStyle}
+                    brokerApiUrl={BROKER_API_URL}
+                    platformHealth={platformHealth}
+                    liveReadiness={liveReadiness}
+                    brokerSyncMeta={brokerSyncMeta}
+                  />
+
+                  <BrokerPositions
+                    theme={theme}
+                    brokerPositions={brokerPositions}
+                    brokerOrders={brokerOrders}
+                    brokerConnected={brokerConnected}
+                    brokerSyncMeta={brokerSyncMeta}
+                  />
+                </>
+              )}
+
+              {rightTab === "replay" && (
+                <ReplayPanel
+                  theme={theme}
+                  buttonStyle={buttonStyle}
+                  replayPlaying={replayPlaying}
+                  setReplayPlaying={setReplayPlaying}
+                  stepReplay={stepReplay}
+                  resetReplay={resetReplay}
+                  replaySpeed={replaySpeed}
+                  setReplaySpeed={setReplaySpeed}
+                  replayBuy={replayBuy}
+                  replaySell={replaySell}
+                  replayIndex={replayIndex}
+                  mainReplayData={mainReplayData}
+                  replayCandle={replayCandle}
+                  replayStats={replayStats}
+                  replayTrades={replayTrades}
+                  replayEquity={replayEquity}
+                  selectedStock={selectedStock}
+                  openReplayJournal={openReplayJournal}
+                />
+              )}
+
+              {rightTab === "activity" && (
+                <ActivityLogPanel
+                  theme={theme}
+                  activityLog={activityLog}
+                  clearActivityLog={clearActivityLog}
+                  buttonStyle={buttonStyle}
+                />
+              )}
+
+              {rightTab === "health" && (
+                <ProductionHealthPanel
+                  theme={theme}
+                  brokerApiUrl={BROKER_API_URL}
+                  platformHealth={platformHealth}
+                  brokerConnected={brokerConnected}
+                  brokerDetails={brokerDetails}
+                  brokerError={brokerError}
+                  brokerSyncMeta={brokerSyncMeta}
+                  scannerMeta={scannerMeta}
+                  scannerLoading={scannerLoading}
+                  wsStatus={wsStatus}
+                  mainChartStatus={mainChartStatus}
+                  refreshBroker={handleRefreshBroker}
+                  buttonStyle={buttonStyle}
+                />
+              )}
+
+              {rightTab === "alerts" && (
+                <AlertsPanel
+                  theme={theme}
+                  buttonStyle={buttonStyle}
+                  alertInput={alertInput}
+                  setAlertInput={setAlertInput}
+                  alertDirection={alertDirection}
+                  setAlertDirection={setAlertDirection}
+                  addPriceAlert={addPriceAlert}
+                  alerts={alerts}
+                  removeAlert={removeAlert}
+                  alertNotifications={alertNotifications}
+                  enableAlertNotifications={enableAlertNotifications}
+                  selectedStockData={selectedStockData}
+                />
+              )}
+            </Suspense>
+          </div>
+        </div>
+      )}
+
       <div
+        className="terminal-status-bar"
         style={{
           height: "26px",
-          background: theme.panel,
+          background: `linear-gradient(180deg, ${theme.panel}, ${theme.bg})`,
           borderTop: `1px solid ${theme.border}`,
           color: theme.muted,
           fontSize: "10px",
           display: "flex",
           alignItems: "center",
-          gap: "14px",
+          gap: "0",
           padding: "0 10px",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
         }}
 >
-        <span>Connected: Finnhub + FMP</span>
-        <span>Main: {selectedStock}</span>
-        <span>Secondary: {secondarySymbol}</span>
-        <span>Layout: {layoutMode} Chart</span>
-        <span>Realized P&L: ${Number(realizedPnL).toFixed(2)}</span>
-        <span>Paper Trading Only</span>
-        <span>Hotkeys: Shift+B Buy · Shift+S Sell</span>
-        <span>Chart Engine: Timeframe Aggregated</span>
-        <span>Phase 3: Replay + Backtesting</span>
-        <span>Cloud: {user ? user.email : "Local"}</span>
-        <span>Broker: {brokerStatus}</span>
-        <span>Workspace: {activeWorkspace}</span>
+        {[
+          ["Market Data", marketDataStatusLabel],
+          ["Scanner", scannerSourceLabel],
+          ["News", newsSourceLabel],
+          ["Broker", brokerSourceLabel],
+          ["Mode", modeSourceLabel],
+          ["Chart", mainChartSourceLabel],
+          ["Main", selectedStock],
+          ["Secondary", secondarySymbol],
+          ["Layout", `${layoutMode} Chart`],
+          ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
+          ["Cloud", user ? user.email : "Local"],
+        ].map(([label, value]) => (
+          <span
+            key={label}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px",
+              padding: "0 8px",
+              minHeight: "18px",
+              borderRight: `1px solid ${theme.borderSoft || theme.border}`,
+            }}
+          >
+            <span style={{ color: theme.faint || theme.muted, fontWeight: 800 }}>
+              {label}:
+            </span>
+            <span
+              style={{
+                color: getStatusColor(value, theme),
+                fontFamily: terminalMonoFont,
+                fontVariantNumeric: "tabular-nums",
+                fontWeight: 850,
+              }}
+            >
+              {value}
+            </span>
+          </span>
+        ))}
       </div>
+
+      <Suspense fallback={null}>
+        <CommandPalette
+          theme={theme}
+          isOpen={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+          actions={commandActions}
+        />
+      </Suspense>
     </div>
   );
 }

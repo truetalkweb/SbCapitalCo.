@@ -1,4 +1,5 @@
 import {
+  Brain,
   BarChart3,
   Search,
   Play,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
+  { id: "intelligence", label: "Intel", icon: Brain },
   { id: "charts", label: "Charts", icon: BarChart3 },
   { id: "scanner", label: "Scanner", icon: Search },
   { id: "watchlist", label: "Watchlist", icon: Star },
@@ -28,12 +30,12 @@ export default function Tradingsidebar({
   return (
     <aside
       style={{
-        width: "64px",
-        minWidth: "64px",
-        maxWidth: "64px",
+        width: "60px",
+        minWidth: "60px",
+        maxWidth: "60px",
         height: "100%",
-        background: "#050b14",
-        borderRight: "1px solid #1e293b",
+        background: "linear-gradient(180deg, #060a12, #03050a)",
+        borderRight: "1px solid #202a3a",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -48,7 +50,7 @@ export default function Tradingsidebar({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          borderBottom: "1px solid #1e293b",
+          borderBottom: "1px solid #202a3a",
           position: "relative",
           flexShrink: 0,
         }}
@@ -62,7 +64,8 @@ export default function Tradingsidebar({
             borderRadius: "50%",
             objectFit: "cover",
             background: "#000",
-            border: "1.5px solid rgba(255,255,255,0.85)",
+            border: "1px solid rgba(231,236,243,0.72)",
+            boxShadow: "0 0 0 3px rgba(255,255,255,0.025)",
           }}
         />
 
@@ -76,6 +79,7 @@ export default function Tradingsidebar({
             borderRadius: "50%",
             background: brokerConnected ? "#00c896" : "#ef5350",
             border: "1px solid #050b14",
+            boxShadow: `0 0 10px ${brokerConnected ? "#00c896" : "#ef5350"}`,
           }}
         />
       </div>
@@ -87,7 +91,7 @@ export default function Tradingsidebar({
           flexDirection: "column",
           alignItems: "center",
           paddingTop: "8px",
-          gap: "4px",
+          gap: "3px",
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
@@ -104,15 +108,15 @@ export default function Tradingsidebar({
               onClick={() => setActiveWorkspace(item.id)}
               style={{
                 width: "100%",
-                height: "48px",
+                height: "46px",
                 border: "none",
                 borderLeft: active
-                  ? "3px solid #2196f3"
+                  ? "3px solid #19c6d8"
                   : "3px solid transparent",
                 background: active
-                  ? "linear-gradient(90deg, rgba(33,150,243,0.20), transparent)"
+                  ? "linear-gradient(90deg, rgba(25,198,216,0.18), transparent)"
                   : "transparent",
-                color: active ? "#2196f3" : "#94a3b8",
+                color: active ? "#19c6d8" : "#8a95a8",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -123,17 +127,17 @@ export default function Tradingsidebar({
               onMouseEnter={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = "rgba(148,163,184,0.08)";
-                  e.currentTarget.style.color = "#e5e7eb";
+                  e.currentTarget.style.color = "#e7ecf3";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#94a3b8";
+                  e.currentTarget.style.color = "#8a95a8";
                 }
               }}
             >
-              <Icon size={22} strokeWidth={active ? 2.4 : 2} />
+              <Icon size={20} strokeWidth={active ? 2.4 : 2} />
             </button>
           );
         })}

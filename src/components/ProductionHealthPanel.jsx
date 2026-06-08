@@ -1,0 +1,229 @@
+function formatDateTime(value) {
+  if (!value) return "Not synced";
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) return "Not synced";
+
+  return parsed.toLocaleString();
+}
+
+function formatExpiry(tokenStatus, brokerDetails) {
+  const expiresAt = tokenStatus?.expiresAt || brokerDetails?.token?.expiresAt;
+  const backendTime = brokerDetails?.backendTime ? new Date(brokerDetails.backendTime) : new Date();
+
+  if (!expiresAt) return "Refresh pending";
+
+  const parsed = new Date(expiresAt);
+
+  if (Number.isNaN(parsed.getTime())) return "Refresh pending";
+
+  const minutes = Math.max(0, Math.round((parsed.getTime() - backendTime.getTime()) / 60000));
+
+  return `${minutes}m remaining`;
+}
+
+function HealthRow({ theme, label, value, status = "info", detail }) {
+  const color =
+    status === "ok" ? theme.green : status === "bad" ? theme.red : status === "warn" ? theme.amber : theme.blue;
+
+  return (
+    <div
+      style={{
+        background: theme.panel3 || theme.panel,
+        border: `1px solid ${theme.borderSoft || theme.border}`,
+        borderRadius: "8px",
+        padding: "8px",
+        minWidth: 0,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+        <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950 }}>{label}</div>
+        <span
+          style={{
+            color,
+            border: `1px solid ${color}55`,
+            background: `${color}14`,
+            borderRadius: "999px",
+            padding: "3px 7px",
+            fontSize: "8px",
+            fontWeight: 950,
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {status}
+        </span>
+      </div>
+      <div style={{ color: theme.text, fontSize: "11px", fontWeight: 900, marginTop: "7px", wordBreak: "break-word" }}>
+        {value}
+      </div>
+      {detail && (
+        <div style={{ color: theme.muted, fontSize: "10px", lineHeight: "1.45", marginTop: "5px" }}>
+          {detail}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ProductionHealthPanel({
+  theme,
+  brokerApiUrl,
+  platformHealth,
+  brokerConnected,
+  brokerDetails,
+  brokerError,
+  brokerSyncMeta,
+  scannerMeta,
+  scannerLoading,
+  wsStatus,
+  mainChartStatus,
+  refreshBroker,
+  buttonStyle,
+}) {
+  const tokenStatus = brokerDetails?.tokenStatus || platformHealth?.broker?.token || {};
+  const tokenStore = brokerDetails?.tokenStore || platformHealth?.broker?.tokenStore || {};
+  const brokerWarnings = brokerDetails?.warnings || platformHealth?.broker?.warnings || [];
+  const scannerWarning = scannerMeta?.lastWarning || platformHealth?.scanner?.lastError || "";
+  const backendOnline = platformHealth?.backend?.status === "online";
+  const scannerDegraded = Boolean(scannerMeta?.degraded || platformHealth?.scanner?.degraded);
+  const tokenPersisted = Boolean(tokenStore.firestore || tokenStatus.refreshTokenPersisted);
+  const marketDataDelayed = platformHealth?.marketData?.delayed === true;
+  const marketDataOk = platformHealth?.marketData?.httpStatus === 200 || platformHealth?.marketData?.source === "Questrade";
+  const marketDataLabel = marketDataDelayed ? "QTRD DELAYED" : marketDataOk ? "QTRD LIVE" : "QTRD PENDING";
+  const chartLabel = mainChartStatus === "QTRD" || mainChartStatus === "LIVE"
+    ? "CHART QTRD"
+    : mainChartStatus === "SIM"
+      ? "CHART SIM"
+      : `CHART ${mainChartStatus || "PENDING"}`;
+  const scannerSource = String(scannerMeta?.source || platformHealth?.scanner?.source || "").toUpperCase();
+  const scannerLabel = scannerLoading
+    ? "SCANNER LOADING"
+    : scannerSource.includes("LOCAL")
+      ? "LOCAL FALLBACK"
+      : scannerSource.includes("FALLBACK")
+        ? "FMP FALLBACK"
+        : scannerSource.includes("FMP")
+          ? "FMP SCANNER"
+          : scannerDegraded
+            ? "SCANNER FALLBACK"
+            : "SCANNER PENDING";
+  const endpointLabel = brokerApiUrl.includes("railway.app")
+    ? "Railway production backend"
+    : brokerApiUrl.includes("localhost")
+    ? "Local backend"
+    : "Custom backend";
+  const appHost = typeof window !== "undefined" ? window.location.host : "local";
+  const cardStyle = {
+    background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
+    border: `1px solid ${theme.borderSoft || theme.border}`,
+    borderRadius: "8px",
+    padding: "9px",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "9px" }}>
+      <div style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 950 }}>Production Health</h3>
+            <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
+              Frontend, Railway, scanner, and broker diagnostics without exposing secrets.
+            </div>
+          </div>
+          <span
+            style={{
+              color: backendOnline && brokerConnected ? theme.green : theme.amber,
+              border: `1px solid ${backendOnline && brokerConnected ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.35)"}`,
+              background: backendOnline && brokerConnected ? "rgba(0,200,150,0.08)" : "rgba(245,184,75,0.08)",
+              borderRadius: "999px",
+              padding: "4px 8px",
+              fontSize: "9px",
+              fontWeight: 950,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {backendOnline && brokerConnected ? "OPERATIONAL" : "DEGRADED"}
+          </span>
+        </div>
+      </div>
+
+      <HealthRow
+        theme={theme}
+        label="Frontend + Chart"
+        value={`${appHost} / ${chartLabel}`}
+        status="ok"
+        detail={`Market data: ${marketDataLabel}. Transport: ${wsStatus || "BACKEND"}.`}
+      />
+      <HealthRow
+        theme={theme}
+        label="Railway Backend"
+        value={endpointLabel}
+        status={backendOnline ? "ok" : "warn"}
+        detail={`Platform health: ${platformHealth?.backend?.status || "Pending response"}.`}
+      />
+      <HealthRow
+        theme={theme}
+        label="Scanner Source"
+        value={scannerLabel}
+        status={scannerDegraded ? "warn" : "ok"}
+        detail={[
+          `Freshness: ${formatDateTime(scannerMeta?.updatedAt || platformHealth?.scanner?.lastSuccessAt)}`,
+          scannerMeta?.cached ? "Cached response active." : "Cache state normal.",
+          scannerWarning ? `Warning: ${scannerWarning}` : "No scanner warning reported.",
+        ].join(" ")}
+      />
+      <HealthRow
+        theme={theme}
+        label="Questrade Connection"
+        value={brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED"}
+        status={brokerConnected ? "ok" : "warn"}
+        detail={brokerError || "Broker status endpoint responded without an active error."}
+      />
+      <HealthRow
+        theme={theme}
+        label="Token Persistence"
+        value={tokenPersisted ? "Refresh token persisted" : "Persistence not confirmed"}
+        status={tokenPersisted ? "ok" : "warn"}
+        detail={`Expiry: ${formatExpiry(tokenStatus, brokerDetails)}.`}
+      />
+      <HealthRow
+        theme={theme}
+        label="Last Broker Sync"
+        value={formatDateTime(brokerSyncMeta?.lastSuccessAt || platformHealth?.broker?.sync?.lastSuccessAt)}
+        status={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError ? "bad" : "ok"}
+        detail={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError || "No broker sync error recorded."}
+      />
+
+      {(brokerWarnings.length > 0 || scannerWarning || brokerError) && (
+        <div
+          style={{
+            ...cardStyle,
+            color: theme.amber,
+            fontSize: "10px",
+            lineHeight: "1.45",
+          }}
+        >
+          <div style={{ color: theme.text, fontWeight: 950, marginBottom: "4px" }}>API Warnings</div>
+          {[...brokerWarnings.slice(0, 3), scannerWarning, brokerError]
+            .filter(Boolean)
+            .map((warning, index) => (
+              <div key={`${warning}-${index}`} style={{ marginTop: index ? "5px" : 0 }}>
+                {warning}
+              </div>
+            ))}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={refreshBroker}
+        style={{ ...(buttonStyle ? buttonStyle(false) : {}), width: "100%" }}
+      >
+        Refresh Broker + Health
+      </button>
+    </div>
+  );
+}

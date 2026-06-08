@@ -56,6 +56,27 @@ export function MarketDataProvider({ children }) {
             extra.source ||
             previous?.source ||
             "WS",
+
+          delayed:
+            typeof extra.delayed === "boolean"
+              ? extra.delayed
+              : previous?.delayed || false,
+
+          realtime:
+            typeof extra.realtime === "boolean"
+              ? extra.realtime
+              : typeof extra.delayed === "boolean"
+                ? !extra.delayed
+                : previous?.realtime ?? true,
+
+          bidPrice:
+            extra.bidPrice ?? previous?.bidPrice ?? null,
+
+          askPrice:
+            extra.askPrice ?? previous?.askPrice ?? null,
+
+          lastTradeTime:
+            extra.lastTradeTime || previous?.lastTradeTime || null,
         },
       };
     });
@@ -85,7 +106,17 @@ export function MarketDataProvider({ children }) {
                   volume:
                     trade.v || "LIVE",
 
-                  source: "WS",
+                  source: trade.source || "QTRD STREAM",
+
+                  delayed: Boolean(trade.delayed),
+
+                  realtime: trade.realtime !== false,
+
+                  bidPrice: trade.bidPrice,
+
+                  askPrice: trade.askPrice,
+
+                  lastTradeTime: trade.lastTradeTime,
                 }
               );
             }

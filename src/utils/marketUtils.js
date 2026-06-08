@@ -1,0 +1,215 @@
+export async function fetchWithTimeout(url, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export function formatNewsTime(value) {
+  const timestamp = typeof value === "number" ? value * 1000 : value;
+  const date = new Date(timestamp || Date.now());
+
+  return (Number.isNaN(date.getTime()) ? new Date() : date).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function normalizePanelNewsItem(item, index, selectedSymbol) {
+  const headline = String(item?.headline || item?.text || item?.summary || "").trim();
+
+  if (!headline) return null;
+
+  const source = item.source || "Market News";
+  const fallback = Boolean(item.fallback || item.degraded) ||
+    String(source).toLowerCase().includes("fallback") ||
+    String(source).toLowerCase().includes("scanner");
+
+  return {
+    id: item.id || `${selectedSymbol || "MARKET"}-${index}-${headline.slice(0, 32)}`,
+    time: formatNewsTime(item.timestamp || item.publishedDate || item.datetime || item.time),
+    source,
+    text: headline,
+    url: item.url || null,
+    relatedTicker: item.relatedTicker || selectedSymbol,
+    summary: item.summary || "",
+    fallback,
+  };
+}
+
+export function createMarketNewsFallback(selectedSymbol) {
+  const symbol = selectedSymbol || "MARKET";
+  const now = Date.now();
+
+  return [
+    {
+      id: `${symbol}-fallback-catalyst`,
+      time: formatNewsTime(now),
+      source: "Scanner Catalyst",
+      text: `${symbol} catalyst feed is degraded; scanner context is standing in until live headlines return.`,
+      url: null,
+      relatedTicker: symbol,
+      summary: "Backend news providers did not return a confirmed article for this request.",
+      fallback: true,
+    },
+    {
+      id: `${symbol}-fallback-volume`,
+      time: formatNewsTime(now - 60_000),
+      source: "Scanner Catalyst",
+      text: `${symbol} remains on watch for relative volume, spread, and tape confirmation.`,
+      url: null,
+      relatedTicker: symbol,
+      summary: "Fallback scanner row; use chart and quote confirmation before trading.",
+      fallback: true,
+    },
+    {
+      id: `${symbol}-fallback-market`,
+      time: formatNewsTime(now - 120_000),
+      source: "Fallback",
+      text: "Broad market news is temporarily unavailable from the backend feed.",
+      url: null,
+      relatedTicker: "MARKET",
+      summary: "Provider failure fallback.",
+      fallback: true,
+    },
+  ];
+}
+
+export function parsePercent(value) {
+  return Number(String(value || "0").replace("%", "")) || 0;
+}
+
+export function parseMarketVolume(value) {
+  const cleanValue = String(value || "0").replace(/,/g, "").trim();
+  const numericValue = parseFloat(cleanValue) || 0;
+
+  if (cleanValue.includes("B")) return numericValue * 1_000_000_000;
+  if (cleanValue.includes("M")) return numericValue * 1_000_000;
+  if (cleanValue.includes("K")) return numericValue * 1_000;
+
+  return numericValue;
+}
+
+export function formatChartSourceStatus(status) {
+  if (status === "QTRD") return "HIST QTRD";
+  if (status === "SIM") return "CHART SIM";
+  if (status === "LIVE") return "QUOTE LIVE";
+  if (status === "DELAYED") return "QUOTE DELAYED";
+  if (status === "LOADING") return "CHART LOADING";
+  if (status === "STALE") return "QUOTE STALE";
+
+  return `CHART ${String(status || "PENDING").toUpperCase()}`;
+}
+
+export function formatQuoteSourceStatus(quote) {
+  if (quote?.delayed) return "QUOTE DELAYED";
+  if (String(quote?.source || "").includes("QTRD")) return "QUOTE LIVE";
+  if (String(quote?.source || "").includes("WS")) return "QUOTE STREAM";
+  if (String(quote?.source || "").includes("REST")) return "QUOTE REST";
+
+  return "QUOTE PENDING";
+}
+
+export function formatScannerSourceStatus(scannerMeta = {}) {
+  const source = String(scannerMeta.provider || scannerMeta.source || "").toUpperCase();
+  const warnings = [
+    scannerMeta.lastWarning,
+    ...(Array.isArray(scannerMeta.warnings) ? scannerMeta.warnings : []),
+  ].filter(Boolean);
+  const providerLimited = scannerMeta.degraded &&
+    warnings.some((warning) => /429|rate|limit|fmp/i.test(String(warning)));
+
+  if (providerLimited) return "PROVIDER LIMITED";
+  if (scannerMeta.cached) return "SCANNER CACHED";
+  if (source.includes("LOCAL")) return "LOCAL FALLBACK";
+  if (scannerMeta.fallback) return "SCANNER FALLBACK";
+  if (source.includes("FALLBACK")) return "FMP FALLBACK";
+  if (source.includes("FMP")) return "FMP SCANNER";
+
+  return scannerMeta.degraded ? "SCANNER FALLBACK" : "SCANNER PENDING";
+}
+
+export function formatNewsSourceStatus(newsMeta = {}) {
+  if (newsMeta.degraded) return "NEWS FALLBACK";
+  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "PROVIDER LIMITED";
+  if (newsMeta.cached) return "NEWS CACHED";
+  if (newsMeta.source) return "NEWS LIVE";
+
+  return "NEWS PENDING";
+}
+
+export function getStatusColor(label, theme) {
+  const value = String(label || "").toUpperCase();
+
+  if (value.includes("DISCONNECTED") || value.includes("ERROR")) return theme.red;
+  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING")) {
+    return theme.amber;
+  }
+  if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("FMP") || value.includes("NEWS")) {
+    return theme.green;
+  }
+
+  return theme.muted;
+}
+
+export function buildTerminalSourceLabels({
+  liveQuotes = {},
+  platformHealth = null,
+  mainChartStatus = "LOADING",
+  scannerMeta = {},
+  newsMeta = {},
+  brokerConnected = false,
+}) {
+  const quoteMetaRows = Object.values(liveQuotes || {});
+  const hasQuestradeQuote =
+    quoteMetaRows.some((quote) => String(quote?.source || "").includes("QTRD")) ||
+    platformHealth?.marketData?.source === "Questrade";
+  const quoteIsDelayed =
+    quoteMetaRows.some((quote) => quote?.delayed) ||
+    platformHealth?.marketData?.delayed === true;
+
+  return {
+    marketDataStatusLabel: quoteIsDelayed
+      ? "QTRD DELAYED"
+      : hasQuestradeQuote || platformHealth?.marketData?.httpStatus === 200
+        ? "QTRD LIVE"
+        : "QTRD PENDING",
+    mainChartSourceLabel: formatChartSourceStatus(mainChartStatus),
+    scannerSourceLabel: formatScannerSourceStatus(scannerMeta),
+    newsSourceLabel: formatNewsSourceStatus(newsMeta),
+    brokerSourceLabel: brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED",
+    modeSourceLabel: "PAPER MODE",
+  };
+}
+
+export function applyLiveQuote(stock, liveQuotes) {
+  const quote = liveQuotes[stock.symbol];
+
+  if (!quote) return stock;
+
+  return {
+    ...stock,
+    price: quote.price,
+    change: quote.change,
+    volume: quote.volume || stock.volume,
+    source: quote.source || stock.source,
+    delayed: quote.delayed ?? stock.delayed,
+    realtime: quote.realtime ?? stock.realtime,
+    bidPrice: quote.bidPrice ?? stock.bidPrice,
+    askPrice: quote.askPrice ?? stock.askPrice,
+    lastTradeTime: quote.lastTradeTime || stock.lastTradeTime,
+    lastUpdated: quote.lastUpdated || stock.lastUpdated,
+  };
+}
+
+export function getMomentumScore(stock) {
+  return Math.abs(parsePercent(stock.change)) * 10 + parseMarketVolume(stock.volume) / 1_000_000;
+}
+
+export function getRelativeVolumeScore(stock) {
+  return parseMarketVolume(stock.volume);
+}

@@ -1,3 +1,10 @@
+import {
+  createCardStyle,
+  createInputStyle,
+  createLabelStyle,
+  sectionTitleStyle as createSectionTitleStyle,
+} from "./uiPrimitives";
+
 export default function OrderTicket({
   theme,
   buttonStyle,
@@ -20,23 +27,283 @@ export default function OrderTicket({
   riskReward,
   orderRisk,
   orderReward,
+  tradingMode,
+  setTradingMode,
+  orderConfirmed,
+  setOrderConfirmed,
+  maxOrderValue,
+  setMaxOrderValue,
+  dailyLossLimit,
+  setDailyLossLimit,
+  riskPerTrade,
+  setRiskPerTrade,
+  orderPreview,
+  liveReadiness = null,
+  liveOrderPreview = null,
+  liveOrderLoading = false,
+  orderConfirmationKey,
+  safetyIssues = [],
+  previewLiveOrderTicket,
   submitOrderTicket,
   orderMessage,
+  compact = false,
 }) {
+  const canSubmit = safetyIssues.length === 0;
+  const visibleSafetyIssues = safetyIssues.slice(0, 3);
+  const liveBlockingReasons = Array.isArray(liveReadiness?.blockingReasons)
+    ? liveReadiness.blockingReasons
+    : [];
+  const liveWarnings = Array.isArray(liveReadiness?.warnings)
+    ? liveReadiness.warnings
+    : [];
+  const previewErrors = Array.isArray(liveOrderPreview?.validationErrors)
+    ? liveOrderPreview.validationErrors
+    : [];
+  const liveCheckRows = [
+    ["Broker", liveReadiness?.brokerConnected, "Broker connection is not ready."],
+    ["Account", liveReadiness?.selectedAccountValid, "No valid broker account is selected."],
+    ["Permission", liveReadiness?.orderPermissionDetected, "Live order permission is not confirmed."],
+    ["Risk", liveReadiness?.riskControlsEnabled, "Risk controls are not fully configured."],
+    ["Audit", liveReadiness?.auditLoggingEnabled, "Audit logging is not confirmed."],
+    ["Live Env", liveReadiness?.liveTradingEnabled, "Live trading environment is disabled."],
+  ];
+  const derivedLiveBlocks = liveReadiness
+    ? liveCheckRows
+        .filter(([, ok]) => !ok)
+        .map(([, , reason]) => reason)
+    : ["Live readiness has not loaded yet."];
+  const visibleLiveBlocks = Array.from(new Set([...liveBlockingReasons, ...derivedLiveBlocks]));
+  const liveReady =
+    Boolean(liveReadiness) &&
+    liveBlockingReasons.length === 0 &&
+    liveCheckRows.every(([, ok]) => ok === true);
+  const liveStatusLabel =
+    tradingMode === "paper"
+      ? "PAPER MODE"
+      : liveReady
+      ? "LIVE READY"
+      : liveReadiness
+      ? "LIVE BLOCKED"
+      : "LIVE CHECKING";
+  const liveStatusColor =
+    tradingMode === "paper"
+      ? theme.green
+      : !liveReady
+      ? theme.amber
+      : theme.green;
+  const entry = Number(orderEntryPrice || 0);
+  const stop = Number(stopLoss || 0);
+  const target = Number(takeProfit || 0);
+  const stopDistance = stop > 0 && entry > 0 ? Math.abs(entry - stop) : 0;
+  const targetDistance = target > 0 && entry > 0 ? Math.abs(target - entry) : 0;
+  const suggestedRiskQty = stopDistance > 0
+    ? Math.max(1, Math.floor(Number(riskPerTrade || 0) / stopDistance))
+    : 0;
+  const currentPosition = Number(orderPreview.positionQuantity || 0);
+  const positionAverage = Number(orderPreview.positionAverage || 0);
+  const checklist = [
+    ["Symbol", Boolean(selectedStock)],
+    ["Size", Number(quantity || 0) > 0],
+    ["Stop", stopDistance > 0],
+    ["Target", targetDistance > 0],
+    ["R:R", Number(riskReward) >= 1.5],
+    ["Guardrails", safetyIssues.length === 0],
+  ];
+
+  function applyStopPreset(percent) {
+    if (!entry) return;
+    const direction = orderSide === "BUY" ? -1 : 1;
+    setStopLoss((entry * (1 + direction * percent / 100)).toFixed(2));
+  }
+
+  function applyTargetPreset(multiplier) {
+    if (!entry || !stopDistance) return;
+    const direction = orderSide === "BUY" ? 1 : -1;
+    setTakeProfit((entry + direction * stopDistance * multiplier).toFixed(2));
+  }
+  const inputStyle = (enabled = true) => createInputStyle(theme, enabled);
+  const labelStyle = createLabelStyle(theme);
+  const cardStyle = createCardStyle(theme);
+  const sectionTitleStyle = createSectionTitleStyle(theme);
+
   return (
     <>
-      <h3 style={{ marginTop: "12px", fontSize: "13px" }}>Professional Order Ticket</h3>
+      <div style={{ margin: "2px 0 8px", display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 950 }}>Execution Ticket</h3>
+          <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
+            {selectedStock} order controls
+          </div>
+        </div>
+        <span
+          style={{
+            color: liveStatusColor,
+            background: tradingMode === "paper" || liveReady ? "rgba(0,200,150,0.10)" : "rgba(245,184,75,0.10)",
+            border: `1px solid ${tradingMode === "paper" || liveReady ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.40)"}`,
+            borderRadius: "999px",
+            padding: "4px 8px",
+            fontSize: "9px",
+            fontWeight: 950,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {liveStatusLabel}
+        </span>
+      </div>
 
       <div
         style={{
-          background: theme.panel2,
-          border: `1px solid ${theme.border}`,
+          background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
+          border: `1px solid ${theme.borderSoft || theme.border}`,
           borderRadius: "8px",
-          padding: "9px",
+          padding: "10px",
           display: "grid",
-          gap: "8px",
+          gap: "10px",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
         }}
       >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px" }}>
+          {[
+            ["Entry", `$${Number(orderEntryPrice || 0).toFixed(2)}`, theme.text],
+            ["Value", `$${estimatedValue}`, theme.blue],
+            ["R:R", riskReward, Number(riskReward) >= 1.5 ? theme.green : theme.amber],
+          ].map(([label, value, color]) => (
+            <div
+              key={label}
+              style={{
+                background: theme.panel,
+                border: `1px solid ${theme.borderSoft || theme.border}`,
+                borderRadius: "6px",
+                padding: "7px",
+                minWidth: 0,
+              }}
+            >
+              <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 950, textTransform: "uppercase" }}>{label}</div>
+              <div style={{ color, fontSize: "12px", fontWeight: 950, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "6px",
+          }}
+        >
+          <button
+            onClick={() => setTradingMode("paper")}
+            style={{
+              ...buttonStyle(tradingMode === "paper"),
+              background: tradingMode === "paper" ? theme.blue : theme.panel3 || theme.panel,
+            }}
+          >
+            Paper
+          </button>
+
+          <button
+            onClick={() => setTradingMode("live")}
+            title="Open live readiness and backend broker execution checks"
+            style={{
+              ...buttonStyle(tradingMode !== "paper"),
+              background: tradingMode !== "paper" ? theme.amber : theme.panel3 || theme.panel,
+              border: tradingMode !== "paper" ? "none" : `1px solid rgba(245,184,75,0.42)`,
+              color: tradingMode !== "paper" ? "#061018" : theme.amber,
+              cursor: "pointer",
+            }}
+          >
+            {compact ? "Live" : "Live Readiness"}
+          </button>
+        </div>
+
+        {tradingMode !== "paper" && (
+          <div
+            style={{
+              ...cardStyle,
+              border: `1px solid ${liveReady ? "rgba(0,200,150,0.42)" : "rgba(245,184,75,0.42)"}`,
+              background: liveReady ? "rgba(0,200,150,0.055)" : "rgba(245,184,75,0.055)",
+              display: "grid",
+              gap: "8px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+              <div>
+                <div style={{ color: theme.text, fontWeight: 950, fontSize: "11px" }}>Live Readiness</div>
+                <div style={{ color: theme.muted, fontSize: "9px", marginTop: "2px" }}>
+                  Backend-controlled broker execution gate
+                </div>
+              </div>
+              <div style={{ color: liveStatusColor, fontSize: "9px", fontWeight: 950 }}>
+                {liveReady ? "READY" : "SUBMIT DISABLED"}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "5px" }}>
+              {liveCheckRows.map(([label, ok]) => (
+                <div
+                  key={label}
+                  style={{
+                    border: `1px solid ${ok ? "rgba(0,200,150,0.34)" : theme.borderSoft || theme.border}`,
+                    background: ok ? "rgba(0,200,150,0.07)" : theme.panel,
+                    borderRadius: "6px",
+                    padding: "6px",
+                  }}
+                >
+                  <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 950, textTransform: "uppercase" }}>{label}</div>
+                  <div style={{ color: ok ? theme.green : theme.amber, fontSize: "10px", fontWeight: 950, marginTop: "2px" }}>
+                    {ok ? "OK" : "Blocked"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(visibleLiveBlocks.length > 0 || liveWarnings.length > 0) && (
+              <div style={{ display: "grid", gap: "4px", fontSize: "10px", lineHeight: "1.45" }}>
+                {[...visibleLiveBlocks.slice(0, 3), ...liveWarnings.slice(0, 1)].map((item) => (
+                  <div key={item} style={{ color: visibleLiveBlocks.includes(item) ? theme.amber : theme.muted }}>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {liveOrderPreview && (
+              <div
+                style={{
+                  borderTop: `1px solid ${theme.borderSoft || theme.border}`,
+                  paddingTop: "7px",
+                  display: "grid",
+                  gap: "4px",
+                  fontSize: "10px",
+                  color: theme.muted,
+                }}
+              >
+                <div style={{ color: theme.text, fontWeight: 950 }}>Backend Preview</div>
+                <div>
+                  Request: <b style={{ color: theme.blue, fontFamily: "'JetBrains Mono', monospace" }}>{liveOrderPreview.requestId || "Pending"}</b>
+                </div>
+                <div>
+                  Value: <b style={{ color: theme.text, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {liveOrderPreview.estimatedValue ? `$${Number(liveOrderPreview.estimatedValue).toFixed(2)}` : "Pending"}
+                  </b>
+                </div>
+                <div>
+                  Impact: <b style={{ color: liveOrderPreview.impact?.ok ? theme.green : theme.amber }}>
+                    {liveOrderPreview.impact?.attempted
+                      ? liveOrderPreview.impact.ok
+                        ? "Confirmed"
+                        : "Rejected"
+                      : "Not run"}
+                  </b>
+                </div>
+                {previewErrors.slice(0, 2).map((item) => (
+                  <div key={item} style={{ color: theme.amber }}>{item}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
           <button
             onClick={() => setOrderSide("BUY")}
@@ -78,26 +345,17 @@ export default function OrderTicket({
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-          <label style={{ fontSize: "10px", color: theme.muted }}>
+          <label style={labelStyle}>
             Quantity
             <input
               type="number"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                background: theme.panel,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "5px",
-                marginTop: "4px",
-                fontSize: "11px",
-              }}
+              style={inputStyle()}
             />
           </label>
 
-          <label style={{ fontSize: "10px", color: theme.muted }}>
+          <label style={labelStyle}>
             Limit Price
             <input
               type="number"
@@ -105,73 +363,104 @@ export default function OrderTicket({
               onChange={(e) => setLimitPrice(e.target.value)}
               disabled={orderType !== "LIMIT"}
               placeholder={String(selectedStockData?.price || "")}
+              style={inputStyle(orderType === "LIMIT")}
+            />
+          </label>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", fontSize: "10px" }}>
+            <span style={sectionTitleStyle}>Position Aware Sizing</span>
+            <span style={{ color: theme.muted }}>
+              Position {currentPosition} @ ${positionAverage.toFixed(2)}
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+            <label style={labelStyle}>
+              Risk / Trade $
+              <input
+                type="number"
+                value={riskPerTrade}
+                onChange={(e) => setRiskPerTrade(e.target.value)}
+                style={inputStyle()}
+              />
+            </label>
+            <button
+              onClick={() => suggestedRiskQty && setQuantity(String(suggestedRiskQty))}
+              disabled={!suggestedRiskQty}
               style={{
-                width: "100%",
-                padding: "8px",
-                background: orderType === "LIMIT" ? theme.panel : "rgba(127,127,127,0.10)",
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "5px",
-                marginTop: "4px",
-                fontSize: "11px",
-                opacity: orderType === "LIMIT" ? 1 : 0.55,
+                ...buttonStyle(Boolean(suggestedRiskQty)),
+                marginTop: "20px",
+                opacity: suggestedRiskQty ? 1 : 0.55,
               }}
+            >
+              {suggestedRiskQty ? `Use ${suggestedRiskQty} Sh` : compact ? "Set Stop" : "Set Stop First"}
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "5px" }}>
+            {[0.5, 1, 2].map((preset) => (
+              <button key={preset} onClick={() => applyStopPreset(preset)} style={buttonStyle(false)}>
+                Stop {preset}%
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "5px" }}>
+            {[1.5, 2, 3].map((preset) => (
+              <button key={preset} onClick={() => applyTargetPreset(preset)} style={buttonStyle(false)}>
+                Target {preset}R
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+          <label style={labelStyle}>
+            Max Order $
+            <input
+              type="number"
+              value={maxOrderValue}
+              onChange={(e) => setMaxOrderValue(e.target.value)}
+              style={inputStyle()}
+            />
+          </label>
+
+          <label style={labelStyle}>
+            Loss Lockout $
+            <input
+              type="number"
+              value={dailyLossLimit}
+              onChange={(e) => setDailyLossLimit(e.target.value)}
+              style={inputStyle()}
             />
           </label>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-          <label style={{ fontSize: "10px", color: theme.muted }}>
+          <label style={labelStyle}>
             Stop Loss
             <input
               type="number"
               value={stopLoss}
               onChange={(e) => setStopLoss(e.target.value)}
               placeholder="Optional"
-              style={{
-                width: "100%",
-                padding: "8px",
-                background: theme.panel,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "5px",
-                marginTop: "4px",
-                fontSize: "11px",
-              }}
+              style={inputStyle()}
             />
           </label>
 
-          <label style={{ fontSize: "10px", color: theme.muted }}>
+          <label style={labelStyle}>
             Take Profit
             <input
               type="number"
               value={takeProfit}
               onChange={(e) => setTakeProfit(e.target.value)}
               placeholder="Optional"
-              style={{
-                width: "100%",
-                padding: "8px",
-                background: theme.panel,
-                border: `1px solid ${theme.border}`,
-                color: theme.text,
-                borderRadius: "5px",
-                marginTop: "4px",
-                fontSize: "11px",
-              }}
+              style={inputStyle()}
             />
           </label>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "6px",
-            fontSize: "10px",
-            lineHeight: "1.5",
-            color: theme.muted,
-          }}
-        >
+        <div style={{ ...cardStyle, gridTemplateColumns: "1fr 1fr", fontSize: "10px", lineHeight: "1.5", color: theme.muted }}>
+          <div style={{ gridColumn: "1 / -1", ...sectionTitleStyle }}>Order Math</div>
           <div>
             Symbol: <b style={{ color: theme.text }}>{selectedStock}</b>
           </div>
@@ -192,16 +481,124 @@ export default function OrderTicket({
           </div>
         </div>
 
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: "5px",
+          }}
+        >
+          {checklist.map(([label, ok]) => (
+            <div
+              key={label}
+              style={{
+                padding: "5px",
+                borderRadius: "5px",
+                border: `1px solid ${ok ? "rgba(0,200,150,0.35)" : theme.border}`,
+                background: ok ? "rgba(0,200,150,0.08)" : theme.panel3 || theme.panel,
+                color: ok ? theme.green : theme.muted,
+                fontSize: "9px",
+                fontWeight: 900,
+                textAlign: "center",
+              }}
+            >
+              {ok ? "OK " : "Check "}
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            ...cardStyle,
+            border: `1px solid ${canSubmit ? "rgba(0,200,150,0.45)" : "rgba(239,83,80,0.50)"}`,
+            fontSize: "10px",
+            lineHeight: "1.55",
+            color: theme.muted,
+          }}
+        >
+          <div style={{ color: theme.text, fontWeight: 900, marginBottom: "4px" }}>
+            Order Preview
+          </div>
+          <div>
+            {orderPreview.mode.toUpperCase()} {orderPreview.side} {orderPreview.quantity}{" "}
+            {orderPreview.symbol} @ ${orderPreview.entryPrice.toFixed(2)}
+          </div>
+          <div>Value: ${orderPreview.value.toFixed(2)}</div>
+          <div>
+            Guardrails: max ${orderPreview.maxOrderValue.toFixed(2)} / loss lockout $
+            {orderPreview.dailyLossLimit.toFixed(2)}
+          </div>
+          <div>
+            Risk cap: ${orderPreview.riskPerTrade.toFixed(2)} / order risk ${orderRisk.toFixed(2)}
+          </div>
+          <div>Realized loss today: ${orderPreview.dailyRealizedLoss.toFixed(2)}</div>
+
+          {visibleSafetyIssues.length > 0 && (
+            <div style={{ display: "grid", gap: "3px", marginTop: "5px" }}>
+              {visibleSafetyIssues.map((issue) => (
+                <div key={issue} style={{ color: theme.red, fontWeight: 850 }}>
+                  {issue}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <label
+          style={{
+            display: "flex",
+            gap: "7px",
+            alignItems: "flex-start",
+            fontSize: "10px",
+            color: theme.text,
+            lineHeight: "1.35",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={orderConfirmed === orderConfirmationKey}
+            onChange={(e) =>
+              setOrderConfirmed(e.target.checked ? orderConfirmationKey : "")
+            }
+          />
+          <span>I reviewed the symbol, side, quantity, price, and guardrails.</span>
+        </label>
+
+        {tradingMode !== "paper" && (
+          <button
+            onClick={() => previewLiveOrderTicket?.(orderSide)}
+            disabled={liveOrderLoading}
+            style={{
+              ...buttonStyle(true),
+              width: "100%",
+              background: theme.blue,
+              opacity: liveOrderLoading ? 0.7 : 1,
+              cursor: liveOrderLoading ? "wait" : "pointer",
+            }}
+          >
+            {liveOrderLoading ? "Checking Backend..." : "Preview Live Order"}
+          </button>
+        )}
+
         <button
           onClick={submitOrderTicket}
+          disabled={!canSubmit}
           style={{
             ...buttonStyle(true),
             width: "100%",
-            background: orderSide === "BUY" ? theme.green : theme.red,
-            border: "none",
+            background: canSubmit
+              ? orderSide === "BUY"
+                ? theme.green
+                : theme.red
+              : theme.panel2,
+            border: canSubmit ? "none" : `1px solid ${theme.border}`,
+            color: canSubmit ? "#ffffff" : theme.muted,
+            opacity: 1,
+            cursor: canSubmit ? "pointer" : "not-allowed",
           }}
         >
-          Submit Paper {orderSide}
+          Submit {tradingMode === "paper" ? "Paper" : "Live"} {orderSide}
         </button>
 
         <div style={{ fontSize: "10px", color: theme.muted, lineHeight: "1.4" }}>

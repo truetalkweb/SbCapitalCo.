@@ -2,7 +2,7 @@ import LoadingPanel from "./LoadingPanel";
 import { getNewsStatusLabel } from "../hooks/useMarketNews";
 
 function getStatusColor(label, theme) {
-  if (label === "NEWS FALLBACK" || label === "PROVIDER LIMITED") return theme.amber;
+  if (String(label).includes("FALLBACK") || String(label).includes("LIMITED") || String(label).includes("PENDING")) return theme.amber;
   if (label === "NEWS LIVE" || label === "NEWS CACHED") return theme.green;
 
   return theme.muted;
@@ -36,6 +36,12 @@ export default function MarketNewsPanel({
 }) {
   const statusLabel = getNewsStatusLabel(newsMeta);
   const statusColor = getStatusColor(statusLabel, theme);
+  const visibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
+  const diagnosticsTitle = [
+    visibleMessage,
+    newsMeta.warning,
+    ...(newsMeta.providerWarnings || []),
+  ].filter(Boolean).join("; ") || newsMeta.source;
 
   return (
     <div
@@ -74,7 +80,7 @@ export default function MarketNewsPanel({
             fontSize: "9px",
             fontWeight: 850,
           }}
-          title={newsMeta.warning || newsMeta.providerWarnings?.join("; ") || newsMeta.source}
+          title={diagnosticsTitle}
         >
           <span
             style={{
@@ -89,7 +95,7 @@ export default function MarketNewsPanel({
             {statusLabel}
           </span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: theme.muted }}>
-            {newsMeta.source || "Backend News"}
+            {visibleMessage || newsMeta.source || "Backend News"}
           </span>
         </div>
       </div>

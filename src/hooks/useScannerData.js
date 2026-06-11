@@ -51,6 +51,11 @@ function buildScannerMeta(data) {
     fmpConfigured: Boolean(data.fmpConfigured),
     providerDiagnostics: data.providerDiagnostics || [],
     warnings: data.warnings || [],
+    userWarnings: data.userWarnings || [],
+    userMessage: data.userMessage || null,
+    statusLabel: data.statusLabel || null,
+    providerStatus: data.providerStatus || null,
+    backendTime: data.backendTime || null,
     lastWarning: data.lastWarning || data.warning || data.primaryScannerError || null,
   };
 }

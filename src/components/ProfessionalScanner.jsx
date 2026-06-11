@@ -330,20 +330,24 @@ export default function ProfessionalScanner({
     : scannerMeta.lastWarning
       ? [scannerMeta.lastWarning]
       : [];
-  const providerLimited = degraded && warnings.some((warning) =>
-    /429|rate|limit|fmp/i.test(String(warning))
-  );
+  const userWarnings = Array.isArray(scannerMeta.userWarnings) ? scannerMeta.userWarnings.filter(Boolean) : [];
+  const providerLimited = Boolean(scannerMeta.providerStatus?.providerLimited) ||
+    (degraded && warnings.some((warning) =>
+      /429|rate|limit|fmp|restricted|subscription/i.test(String(warning))
+    ));
   const normalizedSource = String(rawSourceLabel || "").toUpperCase();
-  const sourceLabel = providerLimited
-    ? "PROVIDER LIMITED"
+  const sourceLabel = scannerMeta.statusLabel
+    ? scannerMeta.statusLabel
+    : providerLimited
+    ? "SCANNER PROVIDER LIMITED"
     : degraded && normalizedSource.includes("LOCAL")
-      ? "LOCAL FALLBACK"
+      ? "SCANNER FALLBACK"
       : degraded && normalizedSource.includes("FALLBACK")
-        ? "FMP FALLBACK"
+        ? "SCANNER FALLBACK"
         : scannerMeta.cached
           ? "SCANNER CACHED"
           : normalizedSource.includes("FMP")
-            ? "FMP SCANNER"
+            ? "SCANNER LIVE"
             : degraded
               ? "SCANNER FALLBACK"
               : rawSourceLabel;
@@ -509,7 +513,7 @@ export default function ProfessionalScanner({
           }}
           title={warnings[0] || "Primary movers are limited; backend fallback ranking is active."}
         >
-          Provider limited. Fallback ranking is active; confirm trades on chart and Questrade data.
+          {scannerMeta.userMessage || userWarnings[0] || "Provider limited. Fallback ranking is active; confirm trades on chart and Questrade data."}
         </div>
       )}
 

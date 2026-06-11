@@ -12,6 +12,11 @@ const DEFAULT_NEWS_META = {
   updatedAt: null,
   warning: null,
   providerWarnings: [],
+  userWarnings: [],
+  userMessage: null,
+  statusLabel: null,
+  providerStatus: null,
+  backendTime: null,
 };
 
 function mergeNewsRows(primaryRows, marketRows) {
@@ -32,6 +37,7 @@ function mergeNewsRows(primaryRows, marketRows) {
 function buildNewsMeta(meta, normalizedRows) {
   const fallbackRows = normalizedRows.filter((item) => item.fallback).length;
   const providerWarnings = Array.isArray(meta.providerWarnings) ? meta.providerWarnings : [];
+  const userWarnings = Array.isArray(meta.userWarnings) ? meta.userWarnings : [];
 
   return {
     source: meta.source || "Backend News",
@@ -40,13 +46,24 @@ function buildNewsMeta(meta, normalizedRows) {
     updatedAt: meta.updatedAt || new Date().toISOString(),
     warning: meta.warning || providerWarnings[0] || null,
     providerWarnings,
+    userWarnings,
+    userMessage: meta.userMessage || userWarnings[0] || null,
+    statusLabel: meta.statusLabel || null,
+    providerStatus: meta.providerStatus || null,
+    backendTime: meta.backendTime || null,
     fallbackRows,
   };
 }
 
 export function getNewsStatusLabel(newsMeta = {}) {
+  if (newsMeta.statusLabel) return newsMeta.statusLabel;
+  if (newsMeta.providerStatus?.label) {
+    const label = String(newsMeta.providerStatus.label).toUpperCase();
+    return label === "LIVE" ? "NEWS LIVE" : `NEWS ${label}`;
+  }
+
   if (newsMeta.degraded) return "NEWS FALLBACK";
-  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "PROVIDER LIMITED";
+  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "NEWS PROVIDER LIMITED";
   if (newsMeta.cached) return "NEWS CACHED";
   if (newsMeta.source) return "NEWS LIVE";
 

@@ -115,27 +115,39 @@ export function formatQuoteSourceStatus(quote) {
 }
 
 export function formatScannerSourceStatus(scannerMeta = {}) {
+  if (scannerMeta.statusLabel) return scannerMeta.statusLabel;
+  if (scannerMeta.providerStatus?.label) {
+    const label = String(scannerMeta.providerStatus.label).toUpperCase();
+    return label === "LIVE" ? "SCANNER LIVE" : `SCANNER ${label}`;
+  }
+
   const source = String(scannerMeta.provider || scannerMeta.source || "").toUpperCase();
   const warnings = [
     scannerMeta.lastWarning,
     ...(Array.isArray(scannerMeta.warnings) ? scannerMeta.warnings : []),
   ].filter(Boolean);
   const providerLimited = scannerMeta.degraded &&
-    warnings.some((warning) => /429|rate|limit|fmp/i.test(String(warning)));
+    warnings.some((warning) => /429|rate|limit|fmp|restricted|subscription/i.test(String(warning)));
 
-  if (providerLimited) return "PROVIDER LIMITED";
+  if (providerLimited) return "SCANNER PROVIDER LIMITED";
   if (scannerMeta.cached) return "SCANNER CACHED";
-  if (source.includes("LOCAL")) return "LOCAL FALLBACK";
+  if (source.includes("LOCAL")) return "SCANNER FALLBACK";
   if (scannerMeta.fallback) return "SCANNER FALLBACK";
-  if (source.includes("FALLBACK")) return "FMP FALLBACK";
-  if (source.includes("FMP")) return "FMP SCANNER";
+  if (source.includes("FALLBACK")) return "SCANNER FALLBACK";
+  if (source.includes("FMP")) return "SCANNER LIVE";
 
   return scannerMeta.degraded ? "SCANNER FALLBACK" : "SCANNER PENDING";
 }
 
 export function formatNewsSourceStatus(newsMeta = {}) {
+  if (newsMeta.statusLabel) return newsMeta.statusLabel;
+  if (newsMeta.providerStatus?.label) {
+    const label = String(newsMeta.providerStatus.label).toUpperCase();
+    return label === "LIVE" ? "NEWS LIVE" : `NEWS ${label}`;
+  }
+
   if (newsMeta.degraded) return "NEWS FALLBACK";
-  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "PROVIDER LIMITED";
+  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "NEWS PROVIDER LIMITED";
   if (newsMeta.cached) return "NEWS CACHED";
   if (newsMeta.source) return "NEWS LIVE";
 
@@ -145,8 +157,8 @@ export function formatNewsSourceStatus(newsMeta = {}) {
 export function getStatusColor(label, theme) {
   const value = String(label || "").toUpperCase();
 
-  if (value.includes("DISCONNECTED") || value.includes("ERROR")) return theme.red;
-  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING")) {
+  if (value.includes("DISCONNECTED") || value.includes("ERROR") || value.includes("UNAVAILABLE")) return theme.red;
+  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("LIMITED")) {
     return theme.amber;
   }
   if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("FMP") || value.includes("NEWS")) {

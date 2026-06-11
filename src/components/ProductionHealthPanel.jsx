@@ -85,7 +85,12 @@ export default function ProductionHealthPanel({
   const tokenStatus = brokerDetails?.tokenStatus || platformHealth?.broker?.token || {};
   const tokenStore = brokerDetails?.tokenStore || platformHealth?.broker?.tokenStore || {};
   const brokerWarnings = brokerDetails?.warnings || platformHealth?.broker?.warnings || [];
-  const scannerWarning = scannerMeta?.lastWarning || platformHealth?.scanner?.lastError || "";
+  const scannerWarning = scannerMeta?.userMessage ||
+    scannerMeta?.userWarnings?.[0] ||
+    platformHealth?.scanner?.providerStatus?.userMessage ||
+    platformHealth?.scanner?.providerStatus?.userWarnings?.[0] ||
+    "";
+  const scannerDiagnostic = scannerMeta?.lastWarning || platformHealth?.scanner?.lastError || "";
   const backendOnline = platformHealth?.backend?.status === "online";
   const scannerDegraded = Boolean(scannerMeta?.degraded || platformHealth?.scanner?.degraded);
   const tokenPersisted = Boolean(tokenStore.firestore || tokenStatus.refreshTokenPersisted);
@@ -97,15 +102,24 @@ export default function ProductionHealthPanel({
     : mainChartStatus === "SIM"
       ? "CHART SIM"
       : `CHART ${mainChartStatus || "PENDING"}`;
+  const scannerStatusLabel = scannerMeta?.statusLabel ||
+    (scannerMeta?.providerStatus?.label
+      ? `SCANNER ${String(scannerMeta.providerStatus.label).toUpperCase()}`
+      : null) ||
+    (platformHealth?.scanner?.providerStatus?.label
+      ? `SCANNER ${String(platformHealth.scanner.providerStatus.label).toUpperCase()}`
+      : null);
   const scannerSource = String(scannerMeta?.source || platformHealth?.scanner?.source || "").toUpperCase();
   const scannerLabel = scannerLoading
     ? "SCANNER LOADING"
-    : scannerSource.includes("LOCAL")
-      ? "LOCAL FALLBACK"
+    : scannerStatusLabel
+      ? scannerStatusLabel
+      : scannerSource.includes("LOCAL")
+      ? "SCANNER FALLBACK"
       : scannerSource.includes("FALLBACK")
-        ? "FMP FALLBACK"
+        ? "SCANNER FALLBACK"
         : scannerSource.includes("FMP")
-          ? "FMP SCANNER"
+          ? "SCANNER LIVE"
           : scannerDegraded
             ? "SCANNER FALLBACK"
             : "SCANNER PENDING";
@@ -172,7 +186,7 @@ export default function ProductionHealthPanel({
         detail={[
           `Freshness: ${formatDateTime(scannerMeta?.updatedAt || platformHealth?.scanner?.lastSuccessAt)}`,
           scannerMeta?.cached ? "Cached response active." : "Cache state normal.",
-          scannerWarning ? `Warning: ${scannerWarning}` : "No scanner warning reported.",
+          scannerWarning ? `Status: ${scannerWarning}` : "No scanner warning reported.",
         ].join(" ")}
       />
       <HealthRow
@@ -210,7 +224,11 @@ export default function ProductionHealthPanel({
           {[...brokerWarnings.slice(0, 3), scannerWarning, brokerError]
             .filter(Boolean)
             .map((warning, index) => (
-              <div key={`${warning}-${index}`} style={{ marginTop: index ? "5px" : 0 }}>
+              <div
+                key={`${warning}-${index}`}
+                title={index === brokerWarnings.slice(0, 3).length && scannerDiagnostic ? scannerDiagnostic : undefined}
+                style={{ marginTop: index ? "5px" : 0 }}
+              >
                 {warning}
               </div>
             ))}

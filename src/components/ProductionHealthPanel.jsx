@@ -1,3 +1,5 @@
+import { getCleanProviderMessage, getQuestradeHealth } from "../utils/healthStatus";
+
 function formatDateTime(value) {
   if (!value) return "Not synced";
 
@@ -81,10 +83,17 @@ export default function ProductionHealthPanel({
   mainChartStatus,
   refreshBroker,
   buttonStyle,
+  qtrdHealth,
 }) {
   const tokenStatus = brokerDetails?.tokenStatus || platformHealth?.broker?.token || {};
   const tokenStore = brokerDetails?.tokenStore || platformHealth?.broker?.tokenStore || {};
   const brokerWarnings = brokerDetails?.warnings || platformHealth?.broker?.warnings || [];
+  const resolvedQtrdHealth = qtrdHealth || getQuestradeHealth({
+    brokerConnected,
+    brokerDetails,
+    brokerError,
+    platformHealth,
+  });
   const scannerWarning = scannerMeta?.userMessage ||
     scannerMeta?.userWarnings?.[0] ||
     platformHealth?.scanner?.providerStatus?.userMessage ||
@@ -96,7 +105,8 @@ export default function ProductionHealthPanel({
   const tokenPersisted = Boolean(tokenStore.firestore || tokenStatus.refreshTokenPersisted);
   const marketDataDelayed = platformHealth?.marketData?.delayed === true;
   const marketDataOk = platformHealth?.marketData?.httpStatus === 200 || platformHealth?.marketData?.source === "Questrade";
-  const marketDataLabel = marketDataDelayed ? "QTRD DELAYED" : marketDataOk ? "QTRD LIVE" : "QTRD PENDING";
+  const marketDataLabel = resolvedQtrdHealth.label ||
+    (marketDataDelayed ? "QTRD DELAYED" : marketDataOk ? "QTRD LIVE" : "QTRD PENDING");
   const chartLabel = mainChartStatus === "QTRD" || mainChartStatus === "LIVE"
     ? "CHART QTRD"
     : mainChartStatus === "SIM"
@@ -169,7 +179,7 @@ export default function ProductionHealthPanel({
         label="Frontend + Chart"
         value={`${appHost} / ${chartLabel}`}
         status="ok"
-        detail={`Market data: ${marketDataLabel}. Transport: ${wsStatus || "BACKEND"}.`}
+        detail={`Market data: ${marketDataLabel}. ${resolvedQtrdHealth.message} Transport: ${wsStatus || "BACKEND"}.`}
       />
       <HealthRow
         theme={theme}
@@ -192,9 +202,9 @@ export default function ProductionHealthPanel({
       <HealthRow
         theme={theme}
         label="Questrade Connection"
-        value={brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED"}
-        status={brokerConnected ? "ok" : "warn"}
-        detail={brokerError || "Broker status endpoint responded without an active error."}
+        value={brokerConnected ? "BROKER CONNECTED" : marketDataLabel}
+        status={brokerConnected ? "ok" : resolvedQtrdHealth.status === "bad" ? "bad" : "warn"}
+        detail={resolvedQtrdHealth.rawMessage || resolvedQtrdHealth.message || "Broker status endpoint responded without an active error."}
       />
       <HealthRow
         theme={theme}
@@ -229,7 +239,7 @@ export default function ProductionHealthPanel({
                 title={index === brokerWarnings.slice(0, 3).length && scannerDiagnostic ? scannerDiagnostic : undefined}
                 style={{ marginTop: index ? "5px" : 0 }}
               >
-                {warning}
+                {getCleanProviderMessage(warning)}
               </div>
             ))}
         </div>
@@ -240,7 +250,7 @@ export default function ProductionHealthPanel({
         onClick={refreshBroker}
         style={{ ...(buttonStyle ? buttonStyle(false) : {}), width: "100%" }}
       >
-        Refresh Broker + Health
+        Retry Broker + Health
       </button>
     </div>
   );

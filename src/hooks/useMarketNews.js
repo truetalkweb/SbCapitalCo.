@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   createMarketNewsFallback,
   fetchWithTimeout,
@@ -75,10 +75,8 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsMeta, setNewsMeta] = useState(DEFAULT_NEWS_META);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchNews() {
+  const fetchNews = useCallback(
+    async ({ cancelled = () => false } = {}) => {
       setNewsLoading(true);
 
       try {
@@ -120,14 +118,14 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
           .sort((a, b) => Number(a.fallback) - Number(b.fallback))
           .slice(0, limit);
 
-        if (!cancelled) {
+        if (!cancelled()) {
           const nextNews = normalizedRows.length ? normalizedRows : createMarketNewsFallback(selectedStock);
 
           setNews(nextNews);
           setNewsMeta(buildNewsMeta(meta, nextNews));
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled()) {
           const fallbackRows = createMarketNewsFallback(selectedStock);
 
           setNews(fallbackRows);
@@ -142,24 +140,34 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
         }
       }
 
-      if (!cancelled) {
+      if (!cancelled()) {
         setNewsLoading(false);
       }
-    }
+    },
+    [brokerApiUrl, limit, selectedStock]
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+    let initialLoad = null;
 
     if (selectedStock && brokerApiUrl) {
-      fetchNews();
+      initialLoad = window.setTimeout(() => {
+        fetchNews({ cancelled: () => isCancelled });
+      }, 0);
     }
 
     return () => {
-      cancelled = true;
+      isCancelled = true;
+      if (initialLoad) window.clearTimeout(initialLoad);
     };
-  }, [brokerApiUrl, limit, selectedStock]);
+  }, [brokerApiUrl, fetchNews, selectedStock]);
 
   return {
     news,
     newsLoading,
     newsMeta,
     newsStatusLabel: getNewsStatusLabel(newsMeta),
+    refreshNews: fetchNews,
   };
 }

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import TickerTape from "./components/TickerTape";
 import TerminalTopBar from "./components/TerminalTopBar";
+import ProductionHealthStrip from "./components/ProductionHealthStrip";
 import TradingSidebar from "./components/TradingSidebar";
 import WorkspaceGrid from "./components/WorkspaceGrid";
 import RightTradingPanel from "./components/RightTradingPanel";
@@ -51,6 +52,7 @@ import {
   fetchWithTimeout,
   getStatusColor,
 } from "./utils/marketUtils";
+import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatus";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 
@@ -243,6 +245,7 @@ export default function App() {
     liveOrderPreview,
     brokerSyncMeta,
     primaryBrokerBalance,
+    lastHealthCheckedAt,
     loadBrokerAccountData,
     loadLiveReadiness,
     previewLiveOrder,
@@ -323,6 +326,7 @@ export default function App() {
     scannerMeta,
     selectedScannerStock,
     setSelectedScannerStock,
+    refreshScanner,
   } = useScannerData({
     brokerApiUrl: BROKER_API_URL,
     onActivity: pushActivity,
@@ -391,6 +395,8 @@ export default function App() {
     news,
     newsLoading,
     newsMeta,
+    newsStatusLabel,
+    refreshNews,
   } = useMarketNews({
     selectedStock,
     brokerApiUrl: BROKER_API_URL,
@@ -739,6 +745,30 @@ export default function App() {
 
     await refreshBroker();
   }, [pushActivity, refreshBroker]);
+
+  const [healthRefreshing, setHealthRefreshing] = useState(false);
+
+  const handleRefreshProductionHealth = useCallback(async () => {
+    if (healthRefreshing) return;
+
+    setHealthRefreshing(true);
+    pushActivity({
+      type: "system",
+      status: "info",
+      title: "Health Refresh Requested",
+      detail: "Refreshing backend, Questrade, scanner, and news status.",
+    });
+
+    try {
+      await Promise.allSettled([
+        refreshBroker(),
+        refreshScanner(),
+        refreshNews(),
+      ]);
+    } finally {
+      setHealthRefreshing(false);
+    }
+  }, [healthRefreshing, pushActivity, refreshBroker, refreshScanner, refreshNews]);
 
   const handleLoadBrokerAccountData = useCallback(async (accountNumber) => {
     pushActivity({
@@ -1833,6 +1863,45 @@ export default function App() {
     newsMeta,
     brokerConnected,
   });
+  const qtrdHealth = useMemo(
+    () =>
+      getQuestradeHealth({
+        brokerConnected,
+        brokerDetails,
+        brokerError,
+        platformHealth,
+        liveQuotes,
+      }),
+    [brokerConnected, brokerDetails, brokerError, liveQuotes, platformHealth]
+  );
+  const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
+  const resolvedMarketDataStatusLabel = qtrdHealth.label || marketDataStatusLabel;
+  const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
+  const rawScannerMessage = scannerMeta?.userMessage ||
+    scannerMeta?.userWarnings?.[0] ||
+    platformHealth?.scanner?.providerStatus?.userMessage ||
+    platformHealth?.scanner?.providerStatus?.userWarnings?.[0] ||
+    scannerMeta?.lastWarning ||
+    "";
+  const rawNewsMessage = newsMeta?.userMessage ||
+    newsMeta?.userWarnings?.[0] ||
+    newsMeta?.providerStatus?.userMessage ||
+    newsMeta?.providerStatus?.userWarnings?.[0] ||
+    newsMeta?.warning ||
+    "";
+  const resolvedScannerMessage = rawScannerMessage
+    ? getCleanProviderMessage(rawScannerMessage, "Provider limited. Cached/fallback data active.")
+    : "Scanner status normal.";
+  const resolvedNewsMessage = rawNewsMessage
+    ? getCleanProviderMessage(rawNewsMessage, "News provider limited. Showing available headlines.")
+    : "News status normal.";
+  const healthLastCheckedAt =
+    lastHealthCheckedAt ||
+    platformHealth?.backendTime ||
+    newsMeta?.backendTime ||
+    scannerMeta?.backendTime ||
+    newsMeta?.updatedAt ||
+    scannerMeta?.updatedAt;
 
   function renderChartPanel(chartProps) {
     return (
@@ -1892,7 +1961,7 @@ export default function App() {
         resetReplay={resetReplay}
         wsStatus={wsStatus}
         mainChartStatus={mainChartStatus}
-        marketDataStatusLabel={marketDataStatusLabel}
+        marketDataStatusLabel={resolvedMarketDataStatusLabel}
         chartStatusLabel={mainChartSourceLabel}
         brokerStateLabel={brokerSourceLabel}
         modeStatusLabel={modeSourceLabel}
@@ -1919,6 +1988,20 @@ export default function App() {
         theme={theme}
         stocks={tickerTapeSymbols.slice(0, activeWorkspace === "intelligence" ? 14 : 20)}
         onPick={selectMainSymbol}
+      />
+
+      <ProductionHealthStrip
+        theme={theme}
+        terminalMonoFont={terminalMonoFont}
+        backendLabel={backendHealthLabel}
+        qtrdHealth={qtrdHealth}
+        scannerLabel={scannerSourceLabel}
+        scannerMessage={resolvedScannerMessage}
+        newsLabel={resolvedNewsStatusLabel}
+        newsMessage={resolvedNewsMessage}
+        lastCheckedAt={healthLastCheckedAt}
+        onRefresh={handleRefreshProductionHealth}
+        refreshing={healthRefreshing}
       />
 
       <PanelGroup
@@ -2435,6 +2518,7 @@ export default function App() {
                         platformHealth={platformHealth}
                         liveReadiness={liveReadiness}
                         brokerSyncMeta={brokerSyncMeta}
+                        qtrdHealth={qtrdHealth}
                       />
 
                       <BrokerPositions
@@ -2532,7 +2616,8 @@ export default function App() {
                       scannerLoading={scannerLoading}
                       wsStatus={wsStatus}
                       mainChartStatus={mainChartStatus}
-                      refreshBroker={handleRefreshBroker}
+                      refreshBroker={handleRefreshProductionHealth}
+                      qtrdHealth={qtrdHealth}
                       buttonStyle={buttonStyle}
                     />
                   )}
@@ -2766,6 +2851,7 @@ export default function App() {
                     platformHealth={platformHealth}
                     liveReadiness={liveReadiness}
                     brokerSyncMeta={brokerSyncMeta}
+                    qtrdHealth={qtrdHealth}
                   />
 
                   <BrokerPositions
@@ -2823,7 +2909,8 @@ export default function App() {
                   scannerLoading={scannerLoading}
                   wsStatus={wsStatus}
                   mainChartStatus={mainChartStatus}
-                  refreshBroker={handleRefreshBroker}
+                  refreshBroker={handleRefreshProductionHealth}
+                  qtrdHealth={qtrdHealth}
                   buttonStyle={buttonStyle}
                 />
               )}
@@ -2866,9 +2953,10 @@ export default function App() {
         }}
 >
         {[
-          ["Market Data", marketDataStatusLabel],
+          ["Market Data", resolvedMarketDataStatusLabel],
+          ["Backend", backendHealthLabel],
           ["Scanner", scannerSourceLabel],
-          ["News", newsSourceLabel],
+          ["News", resolvedNewsStatusLabel],
           ["Broker", brokerSourceLabel],
           ["Mode", modeSourceLabel],
           ["Chart", mainChartSourceLabel],
@@ -2877,6 +2965,7 @@ export default function App() {
           ["Layout", `${layoutMode} Chart`],
           ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
           ["Cloud", user ? user.email : "Local"],
+          ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
         ].map(([label, value]) => (
           <span
             key={label}

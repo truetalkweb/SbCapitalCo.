@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { getCleanProviderMessage } from "../utils/healthStatus";
 import { loadSetting, saveSetting } from "../utils/storage";
 
 export function useBrokerData(brokerApiUrl) {
@@ -17,6 +18,7 @@ export function useBrokerData(brokerApiUrl) {
   const [brokerLoading, setBrokerLoading] = useState(false);
   const [liveOrderLoading, setLiveOrderLoading] = useState(false);
   const [platformHealth, setPlatformHealth] = useState(null);
+  const [lastHealthCheckedAt, setLastHealthCheckedAt] = useState(null);
   const [liveReadiness, setLiveReadiness] = useState(null);
   const [liveOrderPreview, setLiveOrderPreview] = useState(null);
   const [brokerSyncMeta, setBrokerSyncMeta] = useState({
@@ -24,16 +26,22 @@ export function useBrokerData(brokerApiUrl) {
     latencyMs: null,
   });
 
-  function getBrokerError(error) {
+  function getBrokerError(error, clean = false) {
     const payload = error?.response?.data?.error || error?.response?.data || error?.message;
     const status = error?.response?.status;
     const statusText = error?.response?.statusText;
     const prefix = status ? `HTTP ${status}${statusText ? ` ${statusText}` : ""}: ` : "";
 
-    if (!payload) return `${prefix}Broker request failed`;
-    if (typeof payload === "string") return `${prefix}${payload}`;
+    if (!payload) return clean ? "Broker request failed." : `${prefix}Broker request failed`;
+    if (typeof payload === "string") {
+      const message = `${prefix}${payload}`;
 
-    return `${prefix}${payload.error_description || payload.error || JSON.stringify(payload)}`;
+      return clean ? getCleanProviderMessage(message, "Questrade degraded. Retry shortly.") : message;
+    }
+
+    const message = `${prefix}${payload.error_description || payload.error || JSON.stringify(payload)}`;
+
+    return clean ? getCleanProviderMessage(message, "Questrade degraded. Retry shortly.") : message;
   }
 
   const checkBrokerStatus = useCallback(async () => {
@@ -65,16 +73,33 @@ export function useBrokerData(brokerApiUrl) {
 
       setBrokerConnected(connected);
       setBrokerDetails(response.data || null);
-      setBrokerError(response.data?.error ? getBrokerError({ response }) : "");
-      setBrokerStatus(connected ? "Connected to Questrade" : "Questrade disconnected");
+      const cleanError = response.data?.error ? getBrokerError({ response }, true) : "";
+
+      setBrokerError(cleanError);
+      setBrokerStatus(connected ? "Connected to Questrade" : cleanError || "Questrade degraded");
+      setLastHealthCheckedAt(new Date().toISOString());
+
+      return {
+        connected,
+        details: response.data || null,
+        error: cleanError,
+      };
     } catch (error) {
       setBrokerConnected(false);
       setBrokerDetails(error.response?.data || null);
-      setBrokerError(getBrokerError(error));
-      setBrokerStatus(error.response ? "Questrade auth failed" : "Backend offline");
-    }
+      setBrokerError(getBrokerError(error, true));
+      setBrokerStatus(error.response ? "Questrade degraded" : "Backend offline");
+      setLastHealthCheckedAt(new Date().toISOString());
 
-    setBrokerLoading(false);
+      return {
+        connected: false,
+        details: error.response?.data || null,
+        error: getBrokerError(error, true),
+      };
+    }
+    finally {
+      setBrokerLoading(false);
+    }
   }, [brokerApiUrl]);
 
   const loadLiveReadiness = useCallback(
@@ -257,7 +282,11 @@ export function useBrokerData(brokerApiUrl) {
   );
 
   const refreshBroker = useCallback(async () => {
-    await checkBrokerStatus();
+    const statusResult = await checkBrokerStatus();
+
+    if (!statusResult?.connected) {
+      return statusResult;
+    }
 
     const result = await loadBrokerAccounts();
     const accountNumber = result.selectedAccount || selectedBrokerAccount;
@@ -266,6 +295,8 @@ export function useBrokerData(brokerApiUrl) {
       await loadBrokerAccountData(accountNumber);
       await loadLiveReadiness(accountNumber);
     }
+
+    return statusResult;
   }, [
     checkBrokerStatus,
     loadBrokerAccounts,
@@ -297,6 +328,7 @@ export function useBrokerData(brokerApiUrl) {
     liveOrderPreview,
     brokerSyncMeta,
     primaryBrokerBalance,
+    lastHealthCheckedAt,
     checkBrokerStatus,
     loadBrokerAccounts,
     loadBrokerAccountData,

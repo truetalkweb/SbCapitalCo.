@@ -1,3 +1,5 @@
+import { getCleanProviderMessage, getQuestradeHealth } from "../utils/healthStatus";
+
 function formatMoney(value) {
   if (value === null || value === undefined || value === "") return "Pending";
 
@@ -120,6 +122,7 @@ export default function BrokerHeader({
   platformHealth,
   liveReadiness,
   brokerSyncMeta,
+  qtrdHealth,
 }) {
   const accounts = Array.isArray(brokerAccounts) ? brokerAccounts : [];
   const canSync = brokerConnected && accounts.length > 0 && !brokerLoading;
@@ -128,6 +131,12 @@ export default function BrokerHeader({
   const brokerWarnings = brokerDetails?.warnings || platformHealth?.broker?.warnings || [];
   const syncStatus = platformHealth?.broker?.sync || brokerSyncMeta || {};
   const lastHttpStatus = tokenStatus.lastHttpStatus || brokerDetails?.token?.lastHttpStatus || null;
+  const resolvedQtrdHealth = qtrdHealth || getQuestradeHealth({
+    brokerConnected,
+    brokerDetails,
+    brokerError,
+    platformHealth,
+  });
   const expiresAt = tokenStatus.expiresAt ? new Date(tokenStatus.expiresAt) : null;
   const backendTime = brokerDetails?.backendTime ? new Date(brokerDetails.backendTime) : new Date();
   const minutesToExpiry = expiresAt
@@ -140,7 +149,10 @@ export default function BrokerHeader({
     ? "Local backend"
     : "Custom backend";
   const selectedAccount = accounts.find((account) => account.number === selectedBrokerAccount);
-  const diagnostic = brokerError || tokenStatus.lastError || brokerDetails?.error || "";
+  const rawDiagnostic = brokerError || tokenStatus.lastError || brokerDetails?.error || "";
+  const diagnostic = rawDiagnostic
+    ? getCleanProviderMessage(rawDiagnostic, resolvedQtrdHealth.message || "Questrade degraded. Retry shortly.")
+    : "";
   const liveBlockingReasons = Array.isArray(liveReadiness?.blockingReasons)
     ? liveReadiness.blockingReasons
     : [];
@@ -190,7 +202,7 @@ export default function BrokerHeader({
         <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "flex-start" }}>
           <div>
             <div style={{ color: brokerConnected ? theme.green : theme.red, fontWeight: 950, fontSize: "12px" }}>
-              {brokerConnected ? "Connected to Questrade" : "Questrade disconnected"}
+              {brokerConnected ? "Connected to Questrade" : resolvedQtrdHealth.label}
             </div>
             <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px", wordBreak: "break-word" }}>
               {endpointLabel}
@@ -372,7 +384,9 @@ export default function BrokerHeader({
           <div style={{ color: theme.text, fontWeight: 950, marginBottom: "2px" }}>
             Broker Diagnostic
           </div>
-          <div>{diagnostic || brokerWarnings.slice(0, 2).join(" ")}</div>
+          <div title={rawDiagnostic || undefined}>
+            {diagnostic || brokerWarnings.slice(0, 2).map((warning) => getCleanProviderMessage(warning)).join(" ")}
+          </div>
         </div>
       )}
     </>

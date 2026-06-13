@@ -188,7 +188,7 @@ export default function TerminalTopBar({
     const value = String(label || "").toUpperCase();
 
     if (value.includes("DISCONNECTED") || value.includes("ERROR")) return theme.red;
-    if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING")) {
+    if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("DEGRADED") || value.includes("TIMEOUT") || value.includes("LIMITED")) {
       return theme.amber || "#f5b84b";
     }
     if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("PAPER")) {

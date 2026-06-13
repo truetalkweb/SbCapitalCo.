@@ -1,5 +1,6 @@
 import LoadingPanel from "./LoadingPanel";
 import { getNewsStatusLabel } from "../hooks/useMarketNews";
+import { getCleanProviderMessage } from "../utils/healthStatus";
 
 function getStatusColor(label, theme) {
   if (String(label).includes("FALLBACK") || String(label).includes("LIMITED") || String(label).includes("PENDING")) return theme.amber;
@@ -36,7 +37,10 @@ export default function MarketNewsPanel({
 }) {
   const statusLabel = getNewsStatusLabel(newsMeta);
   const statusColor = getStatusColor(statusLabel, theme);
-  const visibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
+  const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
+  const visibleMessage = rawVisibleMessage
+    ? getCleanProviderMessage(rawVisibleMessage, "News provider limited. Showing available headlines.")
+    : null;
   const diagnosticsTitle = [
     visibleMessage,
     newsMeta.warning,

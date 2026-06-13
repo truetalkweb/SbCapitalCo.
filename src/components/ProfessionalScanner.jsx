@@ -1,5 +1,6 @@
 import { useState } from "react";
 import StockDetailCard from "./StockDetailCard";
+import { getCleanProviderMessage } from "../utils/healthStatus";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -331,6 +332,10 @@ export default function ProfessionalScanner({
       ? [scannerMeta.lastWarning]
       : [];
   const userWarnings = Array.isArray(scannerMeta.userWarnings) ? scannerMeta.userWarnings.filter(Boolean) : [];
+  const scannerVisibleWarning = getCleanProviderMessage(
+    scannerMeta.userMessage || userWarnings[0] || warnings[0],
+    "Provider limited. Cached/fallback data active."
+  );
   const providerLimited = Boolean(scannerMeta.providerStatus?.providerLimited) ||
     (degraded && warnings.some((warning) =>
       /429|rate|limit|fmp|restricted|subscription/i.test(String(warning))
@@ -513,7 +518,7 @@ export default function ProfessionalScanner({
           }}
           title={warnings[0] || "Primary movers are limited; backend fallback ranking is active."}
         >
-          {scannerMeta.userMessage || userWarnings[0] || "Provider limited. Fallback ranking is active; confirm trades on chart and Questrade data."}
+          {scannerVisibleWarning}
         </div>
       )}
 

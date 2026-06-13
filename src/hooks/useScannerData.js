@@ -146,5 +146,6 @@ export function useScannerData({ brokerApiUrl, onActivity }) {
     scannerMeta,
     selectedScannerStock,
     setSelectedScannerStock,
+    refreshScanner: loadScanner,
   };
 }

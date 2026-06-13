@@ -158,7 +158,7 @@ export function getStatusColor(label, theme) {
   const value = String(label || "").toUpperCase();
 
   if (value.includes("DISCONNECTED") || value.includes("ERROR") || value.includes("UNAVAILABLE")) return theme.red;
-  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("LIMITED")) {
+  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("LIMITED") || value.includes("DEGRADED") || value.includes("TIMEOUT")) {
     return theme.amber;
   }
   if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("FMP") || value.includes("NEWS")) {

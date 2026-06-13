@@ -4,6 +4,7 @@ import {
   createLabelStyle,
   sectionTitleStyle as createSectionTitleStyle,
 } from "./uiPrimitives";
+import { getCleanProviderMessage } from "../utils/healthStatus";
 
 export default function OrderTicket({
   theme,
@@ -72,7 +73,12 @@ export default function OrderTicket({
         .filter(([, ok]) => !ok)
         .map(([, , reason]) => reason)
     : ["Live readiness has not loaded yet."];
-  const visibleLiveBlocks = Array.from(new Set([...liveBlockingReasons, ...derivedLiveBlocks]));
+  const visibleLiveBlocks = Array.from(new Set([...liveBlockingReasons, ...derivedLiveBlocks]))
+    .map((reason) => getCleanProviderMessage(reason, "Live readiness check is temporarily limited. Retry shortly."));
+  const visibleLiveWarnings = liveWarnings
+    .map((warning) => getCleanProviderMessage(warning, "Live readiness warning is active."));
+  const visiblePreviewErrors = previewErrors
+    .map((error) => getCleanProviderMessage(error, "Live order preview is temporarily limited. Retry shortly."));
   const liveReady =
     Boolean(liveReadiness) &&
     liveBlockingReasons.length === 0 &&
@@ -257,9 +263,9 @@ export default function OrderTicket({
               ))}
             </div>
 
-            {(visibleLiveBlocks.length > 0 || liveWarnings.length > 0) && (
+            {(visibleLiveBlocks.length > 0 || visibleLiveWarnings.length > 0) && (
               <div style={{ display: "grid", gap: "4px", fontSize: "10px", lineHeight: "1.45" }}>
-                {[...visibleLiveBlocks.slice(0, 3), ...liveWarnings.slice(0, 1)].map((item) => (
+                {[...visibleLiveBlocks.slice(0, 3), ...visibleLiveWarnings.slice(0, 1)].map((item) => (
                   <div key={item} style={{ color: visibleLiveBlocks.includes(item) ? theme.amber : theme.muted }}>
                     {item}
                   </div>
@@ -296,7 +302,7 @@ export default function OrderTicket({
                       : "Not run"}
                   </b>
                 </div>
-                {previewErrors.slice(0, 2).map((item) => (
+                {visiblePreviewErrors.slice(0, 2).map((item) => (
                   <div key={item} style={{ color: theme.amber }}>{item}</div>
                 ))}
               </div>

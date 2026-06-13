@@ -109,8 +109,10 @@ export default function MarketIntelligenceTerminal({
   const [news, setNews] = useState([]);
   const [summaries, setSummaries] = useState({});
   const [watchlist, setWatchlist] = useState([]);
+  const [watchlistIntelligence, setWatchlistIntelligence] = useState([]);
   const [selectedTicker, setSelectedTicker] = useState("NVDA");
   const [tickerDetail, setTickerDetail] = useState(null);
+  const [tickerIntelligence, setTickerIntelligence] = useState(null);
   const [activeMoverTab, setActiveMoverTab] = useState("gainers");
   const [tickerFilter, setTickerFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -171,7 +173,7 @@ export default function MarketIntelligenceTerminal({
       const [moversResponse, newsResponse, watchlistResponse] = await Promise.all([
         fetch(`${brokerApiUrl}/api/movers`),
         fetch(`${brokerApiUrl}/api/news?limit=18`),
-        fetch(`${brokerApiUrl}/api/watchlist`, {
+        fetch(`${brokerApiUrl}/api/watchlist/intelligence?limit=12&newsLimit=4`, {
           headers: makeHeaders(user),
         }),
       ]);
@@ -187,6 +189,7 @@ export default function MarketIntelligenceTerminal({
       setMovers(moversData);
       setNews(nextNews);
       setWatchlist(watchlistData?.items || []);
+      setWatchlistIntelligence(watchlistData?.items || []);
       setLastUpdated(new Date().toISOString());
 
       const summaryPairs = await Promise.all(
@@ -230,9 +233,13 @@ export default function MarketIntelligenceTerminal({
       try {
         const response = await fetch(`${brokerApiUrl}/api/ticker/${encodeURIComponent(cleanSymbol)}?includeAi=true`);
         if (!response.ok) throw new Error("Ticker detail unavailable");
-        setTickerDetail(await response.json());
+        const detail = await response.json();
+
+        setTickerDetail(detail);
+        setTickerIntelligence(detail.catalystIntelligence || detail.aiSummary || null);
       } catch {
         setTickerDetail(null);
+        setTickerIntelligence(null);
       }
 
       setDetailLoading(false);
@@ -275,10 +282,14 @@ export default function MarketIntelligenceTerminal({
   }, [activeMoverTab, movers, tickerFilter]);
 
   const selectedNews = useMemo(() => {
-    return news
+    const detailNews = Array.isArray(tickerDetail?.news) ? tickerDetail.news : [];
+
+    return [...detailNews, ...news]
       .filter((item) => !selectedTicker || item.relatedTicker === selectedTicker)
       .slice(0, 8);
-  }, [news, selectedTicker]);
+  }, [news, selectedTicker, tickerDetail]);
+  const activeIntelligence = tickerIntelligence || tickerDetail?.catalystIntelligence || tickerDetail?.aiSummary || null;
+  const watchlistRows = watchlistIntelligence.length ? watchlistIntelligence : watchlist;
 
   async function addWatch(symbol) {
     const cleanSymbol = String(symbol || selectedTicker || "").trim().toUpperCase();
@@ -560,8 +571,67 @@ export default function MarketIntelligenceTerminal({
                   </div>
                 </div>
                 <div style={{ color: theme.muted, fontSize: "10px", lineHeight: "1.45", marginTop: "8px" }}>
-                  {tickerDetail?.catalyst || "Waiting for a confirmed catalyst."}
+                  {activeIntelligence?.summary || tickerDetail?.catalyst || "Waiting for a confirmed catalyst."}
                 </div>
+                {activeIntelligence && (
+                  <div
+                    style={{
+                      marginTop: "9px",
+                      display: "grid",
+                      gridTemplateColumns: phoneLayout ? "1fr" : "0.5fr 0.5fr 1fr",
+                      gap: "7px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: theme.panel,
+                        border: `1px solid ${theme.borderSoft || theme.border}`,
+                        borderRadius: "7px",
+                        padding: "7px",
+                      }}
+                    >
+                      <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>Sentiment</div>
+                      <div style={{ color: sentimentColor(theme, activeIntelligence.sentiment), fontSize: "11px", fontWeight: 900, textTransform: "uppercase" }}>
+                        {activeIntelligence.sentiment || "neutral"}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        background: theme.panel,
+                        border: `1px solid ${theme.borderSoft || theme.border}`,
+                        borderRadius: "7px",
+                        padding: "7px",
+                      }}
+                    >
+                      <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>Attention</div>
+                      <div style={{ ...monoStyle, color: theme.text, fontSize: "11px", fontWeight: 900 }}>
+                        {Math.round(Number(activeIntelligence.attentionScore || 0))}/100
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        background: theme.panel,
+                        border: `1px solid ${theme.borderSoft || theme.border}`,
+                        borderRadius: "7px",
+                        padding: "7px",
+                      }}
+                    >
+                      <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>Impact</div>
+                      <div style={{ color: theme.text, fontSize: "10px", lineHeight: 1.35 }}>
+                        {activeIntelligence.possibleImpact}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {Array.isArray(activeIntelligence?.whyMoving) && activeIntelligence.whyMoving.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "grid", gap: "4px" }}>
+                    {activeIntelligence.whyMoving.slice(0, 3).map((reason, index) => (
+                      <div key={`${selectedTicker}-why-${index}`} style={{ color: theme.muted, fontSize: "10px", lineHeight: 1.35 }}>
+                        <span style={{ color: theme.cyan || theme.blue, fontWeight: 900 }}>Why:</span> {reason}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -640,17 +710,23 @@ export default function MarketIntelligenceTerminal({
               </div>
             </div>
             <span style={{ ...monoStyle, color: theme.cyan || theme.blue, fontSize: "10px", fontWeight: 700 }}>
-              {watchlist.length || localWatchlist.length}
+              {watchlistRows.length || localWatchlist.length}
             </span>
           </div>
 
           <div style={{ overflow: "auto", minHeight: 0, padding: "10px", display: "grid", gap: "7px", alignContent: "start" }}>
-            {(watchlist.length ? watchlist : localWatchlist).length === 0 ? (
+            {(watchlistRows.length ? watchlistRows : localWatchlist).length === 0 ? (
               <EmptyBlock theme={theme} title="Watchlist empty" detail="Add tickers from the scanner to monitor catalyst flow." />
             ) : (
-              (watchlist.length ? watchlist : localWatchlist).slice(0, 14).map((item) => {
+              (watchlistRows.length ? watchlistRows : localWatchlist).slice(0, 14).map((item) => {
                 const symbol = item.symbol;
-                const catalyst = item.latestCatalyst?.headline || item.catalyst || "Latest catalyst pending.";
+                const intel = item.intelligence || null;
+                const catalyst =
+                  intel?.summary ||
+                  item.latestCatalyst?.headline ||
+                  item.catalyst ||
+                  "Latest catalyst pending.";
+                const stock = item.stock || item;
 
                 return (
                   <div
@@ -680,7 +756,32 @@ export default function MarketIntelligenceTerminal({
                       }}
                     >
                       <div style={{ ...monoStyle, fontSize: "11px", fontWeight: 700 }}>{symbol}</div>
-                      <div style={{ color: theme.muted, fontSize: "9px", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          marginTop: "2px",
+                          ...monoStyle,
+                          color: theme.muted,
+                          fontSize: "9px",
+                        }}
+                      >
+                        {stock.price && <span>${Number(stock.price).toFixed(2)}</span>}
+                        {stock.change && (
+                          <span style={{ color: parsePercent(stock.change) >= 0 ? theme.green : theme.red }}>
+                            {stock.change}
+                          </span>
+                        )}
+                        {intel?.sentiment && (
+                          <span style={{ color: sentimentColor(theme, intel.sentiment), textTransform: "uppercase" }}>
+                            {intel.sentiment}
+                          </span>
+                        )}
+                        {intel?.attentionScore && <span>{Math.round(Number(intel.attentionScore))}/100</span>}
+                      </div>
+                      <div style={{ color: theme.muted, fontSize: "9px", marginTop: "4px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {catalyst}
                       </div>
                     </button>

@@ -2378,6 +2378,7 @@ export default function App() {
                 addSymbolToWatchlist={addSymbolToWatchlist}
                 removeWatchlistSymbol={removeWatchlistSymbol}
                 selectMainSymbol={selectMainSymbol}
+                selectedStock={selectedStock}
               />
             </Suspense>
           ) : (

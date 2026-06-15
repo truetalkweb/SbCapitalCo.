@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, Search, Star } from "lucide-react";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
@@ -104,6 +104,7 @@ export default function MarketIntelligenceTerminal({
   addSymbolToWatchlist,
   removeWatchlistSymbol,
   selectMainSymbol,
+  selectedStock,
 }) {
   const [movers, setMovers] = useState(null);
   const [news, setNews] = useState([]);
@@ -120,6 +121,7 @@ export default function MarketIntelligenceTerminal({
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const detailRequestRef = useRef(0);
   const compactLayout = viewportWidth < 760;
   const phoneLayout = viewportWidth < 520;
   const moverGridColumns = compactLayout
@@ -164,6 +166,44 @@ export default function MarketIntelligenceTerminal({
     fontFamily: monoFont,
     fontVariantNumeric: "tabular-nums",
   };
+
+  const applyOptimisticTickerDetail = useCallback((symbol, stock = null) => {
+    const cleanSymbol = String(symbol || stock?.symbol || "").trim().toUpperCase();
+    if (!cleanSymbol || !stock) return;
+
+    const scannerSummary =
+      stock.whyMoving ||
+      stock.catalyst ||
+      `${cleanSymbol} was selected from the live mover tape. Loading backend catalyst intelligence.`;
+
+    setTickerDetail({
+      symbol: cleanSymbol,
+      price: stock.price || null,
+      change: stock.change || stock.changePercent || null,
+      companyName: stock.companyName || stock.name || stock.sector || "Scanner Selection",
+      catalyst: scannerSummary,
+      normalized: {
+        symbol: cleanSymbol,
+        price: stock.price || null,
+        change: stock.change || stock.changePercent || null,
+        source: stock.source || "scanner",
+        catalyst: scannerSummary,
+      },
+      news: [],
+      optimistic: true,
+    });
+    setTickerIntelligence({
+      symbol: cleanSymbol,
+      source: "scanner",
+      sentiment: "neutral",
+      attentionScore: Number(stock.scannerScore || stock.score || 0) || 50,
+      summary: scannerSummary,
+      whyMoving: [scannerSummary],
+      possibleImpact: "Backend AI catalyst intelligence is loading for this ticker.",
+      riskWarning: "Confirm the live chart, news freshness, liquidity, and risk before entry.",
+      confidence: "scanner context",
+    });
+  }, []);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -226,8 +266,9 @@ export default function MarketIntelligenceTerminal({
     async (symbol) => {
       const cleanSymbol = String(symbol || "").trim().toUpperCase();
       if (!cleanSymbol) return;
+      const requestId = detailRequestRef.current + 1;
+      detailRequestRef.current = requestId;
 
-      setSelectedTicker(cleanSymbol);
       setDetailLoading(true);
 
       try {
@@ -235,14 +276,20 @@ export default function MarketIntelligenceTerminal({
         if (!response.ok) throw new Error("Ticker detail unavailable");
         const detail = await response.json();
 
+        if (requestId !== detailRequestRef.current) return;
+
         setTickerDetail(detail);
         setTickerIntelligence(detail.normalized?.intelligence || detail.catalystIntelligence || detail.aiSummary || null);
       } catch {
+        if (requestId !== detailRequestRef.current) return;
+
         setTickerDetail(null);
         setTickerIntelligence(null);
       }
 
-      setDetailLoading(false);
+      if (requestId === detailRequestRef.current) {
+        setDetailLoading(false);
+      }
     },
     [brokerApiUrl]
   );
@@ -271,6 +318,20 @@ export default function MarketIntelligenceTerminal({
 
     return () => window.clearTimeout(timer);
   }, [loadTickerDetail, selectedTicker]);
+
+  useEffect(() => {
+    const cleanSymbol = String(selectedStock || "").trim().toUpperCase();
+
+    if (cleanSymbol && cleanSymbol !== selectedTicker) {
+      const timer = window.setTimeout(() => {
+        setSelectedTicker(cleanSymbol);
+      }, 0);
+
+      return () => window.clearTimeout(timer);
+    }
+
+    return undefined;
+  }, [selectedStock, selectedTicker]);
 
   const activeRows = useMemo(() => {
     const rows = movers?.[activeMoverTab] || [];
@@ -319,12 +380,13 @@ export default function MarketIntelligenceTerminal({
     await loadDashboard();
   }
 
-  function openTicker(symbol) {
-    const cleanSymbol = String(symbol || "").trim().toUpperCase();
+  function openTicker(symbol, stock = null) {
+    const cleanSymbol = String(symbol || stock?.symbol || "").trim().toUpperCase();
     if (!cleanSymbol) return;
 
+    applyOptimisticTickerDetail(cleanSymbol, stock);
     setSelectedTicker(cleanSymbol);
-    selectMainSymbol?.(cleanSymbol);
+    selectMainSymbol?.(cleanSymbol, stock || null);
   }
 
   return (
@@ -462,7 +524,9 @@ export default function MarketIntelligenceTerminal({
                   <button
                     key={`${activeMoverTab}-${row.symbol}`}
                     type="button"
-                    onClick={() => openTicker(row.symbol)}
+                    data-market-mover-symbol={row.symbol}
+                    data-market-mover-selected={selected ? "true" : "false"}
+                    onClick={() => openTicker(row.symbol, row)}
                     style={{
                       width: "100%",
                       display: "grid",

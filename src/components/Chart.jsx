@@ -163,6 +163,7 @@ function Chart({
   const streamFrameRef = useRef(null);
   const lastStreamTickAtRef = useRef(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const [hadChartHistoryBeforeLoad, setHadChartHistoryBeforeLoad] = useState(false);
 
   const setStatus = useCallback((nextStatus) => {
     if (statusRef.current === nextStatus) return;
@@ -455,8 +456,10 @@ function Chart({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const hadHistory = candlesRef.current.length > 0;
+    setHadChartHistoryBeforeLoad(hadHistory);
     setIsHistoryLoading(true);
-    setStatus("LOADING");
+    setStatus(hadHistory ? "UPDATING" : "LOADING");
     let disposed = false;
 
     const chart = createChart(containerRef.current, {
@@ -838,7 +841,11 @@ function Chart({
             backdropFilter: "blur(8px)",
           }}
         >
-          Loading {chartSymbol}
+          <span style={{ color: "#d1d4dc" }}>{hadChartHistoryBeforeLoad ? "Updating" : "Loading"}</span>{" "}
+          {chartSymbol}
+          <span style={{ display: "block", marginTop: "2px", color: "#8a94a6", fontWeight: 700 }}>
+            {hadChartHistoryBeforeLoad ? "Keeping chart context active" : "Building chart history"}
+          </span>
         </div>
       )}
 

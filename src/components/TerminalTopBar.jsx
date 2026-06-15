@@ -165,11 +165,18 @@ export default function TerminalTopBar({
 
   const compactButton = (active = false) => ({
     ...buttonStyle(active),
-    height: "26px",
+    height: "25px",
     padding: "0 8px",
     fontSize: "10px",
     flexShrink: 0,
+    borderRadius: "5px",
+    boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.12)" : "none",
   });
+  const quietButton = {
+    opacity: 0.78,
+    background: "transparent",
+    borderColor: theme.borderSoft || theme.border,
+  };
   const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const isIntelligenceWorkspace = activeWorkspace === "intelligence";
   const showAdvancedControls = !compact && !isIntelligenceWorkspace;
@@ -201,22 +208,22 @@ export default function TerminalTopBar({
   return (
     <div
       style={{
-        minHeight: compact ? "52px" : "46px",
+        minHeight: compact ? "52px" : "42px",
         background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
         borderBottom: `1px solid ${theme.border}`,
         display: "flex",
         alignItems: "center",
-        padding: "0 10px",
-        gap: "8px",
+        padding: "0 8px",
+        gap: "7px",
         flexWrap: compact ? "wrap" : "nowrap",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035), 0 1px 0 rgba(0,0,0,0.45)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.025)",
         overflow: compact ? "visible" : "hidden",
       }}
     >
       <div
           style={{
           fontWeight: 900,
-          fontSize: "16px",
+          fontSize: "15px",
           whiteSpace: "nowrap",
           flexShrink: 0,
           color: theme.text,
@@ -230,7 +237,7 @@ export default function TerminalTopBar({
           display: "flex",
           alignItems: "center",
           gap: "6px",
-          padding: "4px 8px",
+          padding: "3px 7px",
           borderRadius: "999px",
           background: theme.panel3 || "rgba(255,255,255,0.03)",
           border: `1px solid ${theme.border}`,
@@ -244,7 +251,7 @@ export default function TerminalTopBar({
             height: "7px",
             borderRadius: "999px",
             background: marketColor,
-          boxShadow: `0 0 10px ${marketColor}`,
+          boxShadow: "none",
           }}
         />
         <span style={{ fontSize: "10px", color: marketColor, fontWeight: 900 }}>
@@ -272,7 +279,7 @@ export default function TerminalTopBar({
         style={{
           width: "1px",
           height: "22px",
-          background: theme.border,
+          background: theme.borderSoft || theme.border,
           flexShrink: 0,
         }}
       />
@@ -422,7 +429,7 @@ export default function TerminalTopBar({
           marginLeft: "auto",
           display: "flex",
           alignItems: "center",
-          gap: "8px",
+          gap: "7px",
           whiteSpace: "nowrap",
           minWidth: 0,
           overflow: "hidden",
@@ -447,7 +454,7 @@ export default function TerminalTopBar({
               height: "6px",
               borderRadius: "999px",
               background: statusColor(resolvedMarketDataLabel),
-              boxShadow: `0 0 8px ${statusColor(resolvedMarketDataLabel)}`,
+              boxShadow: "none",
             }}
           />
           {resolvedMarketDataLabel}
@@ -486,7 +493,7 @@ export default function TerminalTopBar({
               height: "6px",
               borderRadius: "999px",
               background: statusColor(resolvedBrokerLabel),
-              boxShadow: `0 0 8px ${statusColor(resolvedBrokerLabel)}`,
+              boxShadow: "none",
             }}
           />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "132px" }}>
@@ -511,25 +518,25 @@ export default function TerminalTopBar({
         )}
 
         {showUtilityControls && (
-        <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={compactButton(false)}>
+        <button onClick={() => setThemeMode(isDark ? "light" : "dark")} style={{ ...compactButton(false), ...quietButton }}>
           {isDark ? "Light" : "Dark"}
         </button>
         )}
 
         {showUtilityControls && (
-        <button onClick={saveWorkspaceToCloud} style={compactButton(Boolean(user))}>
+        <button onClick={saveWorkspaceToCloud} style={{ ...compactButton(Boolean(user)), ...(!user ? quietButton : {}) }}>
           Save
         </button>
         )}
 
         {showAdvancedControls && (
-        <button onClick={loadWorkspaceFromCloud} style={compactButton(false)}>
+        <button onClick={loadWorkspaceFromCloud} style={{ ...compactButton(false), ...quietButton }}>
           Load
         </button>
         )}
 
         {showAdvancedControls && (
-        <button onClick={resetWorkspace} style={compactButton(false)}>
+        <button onClick={resetWorkspace} style={{ ...compactButton(false), ...quietButton }}>
           Reset
         </button>
         )}

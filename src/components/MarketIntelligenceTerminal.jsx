@@ -96,6 +96,14 @@ function EmptyBlock({ theme, title, detail }) {
   );
 }
 
+function cleanMoverReason(text, symbol) {
+  return String(text || "")
+    .replace(new RegExp(`^${symbol}\\s+ranks\\s+because\\s+of\\s+`, "i"), `${symbol} is active on `)
+    .replace(new RegExp(`^${symbol}\\s+ranks\\s+because\\s+`, "i"), `${symbol} is active because `)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export default function MarketIntelligenceTerminal({
   theme,
   brokerApiUrl,
@@ -172,7 +180,7 @@ export default function MarketIntelligenceTerminal({
     if (!cleanSymbol || !stock) return;
 
     const scannerSummary =
-      stock.whyMoving ||
+      cleanMoverReason(stock.whyMoving, cleanSymbol) ||
       stock.catalyst ||
       `${cleanSymbol} was selected from the live mover tape. Loading backend catalyst intelligence.`;
 
@@ -405,7 +413,7 @@ export default function MarketIntelligenceTerminal({
           <div>
             <div style={{ color: theme.text, fontSize: "15px", fontWeight: 700 }}>AI Market Intelligence</div>
             <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
-              {movers?.provider || movers?.source || "Scanner engine"} / {movers?.fallback || movers?.degraded ? "Fallback ranking" : "Primary feed"} / {movers?.counts?.movers || 0} ranked
+              {movers?.provider || movers?.source || "Scanner engine"} / {movers?.fallback || movers?.degraded ? "Limited provider, ranked context" : "Primary feed"} / {movers?.counts?.movers || 0} ranked
             </div>
           </div>
           <button
@@ -566,7 +574,7 @@ export default function MarketIntelligenceTerminal({
                     </div>
                     {!compactLayout && (
                       <div style={{ color: theme.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {row.whyMoving || row.catalyst || "Scanner activity requires confirmation."}
+                        {cleanMoverReason(row.whyMoving, row.symbol) || row.catalyst || "Scanner activity requires confirmation."}
                       </div>
                     )}
                   </button>
@@ -865,7 +873,7 @@ export default function MarketIntelligenceTerminal({
         </section>
 
         <div style={{ color: movers?.degraded || movers?.fallback ? theme.amber : theme.muted, fontSize: "9px", fontWeight: 850 }}>
-          Source: {movers?.provider || movers?.source || "Pending"} / {movers?.fallback || movers?.degraded ? "Fallback mode" : "Primary feed"} / {formatAgeMs(movers?.cacheAgeMs)} / Updated {formatTime(movers?.updatedAt || lastUpdated)}
+          Source: {movers?.provider || movers?.source || "Pending"} / {movers?.fallback || movers?.degraded ? "Limited provider, context ranked" : "Primary feed"} / {formatAgeMs(movers?.cacheAgeMs)} / Updated {formatTime(movers?.updatedAt || lastUpdated)}
         </div>
       </aside>
     </div>

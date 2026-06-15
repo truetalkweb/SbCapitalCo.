@@ -147,6 +147,23 @@ export default function ProfessionalScanner({
     return { label: "Controlled", color: theme.green };
   }
 
+  function getRowSourceType(stock) {
+    const source = String(stock.source || stock.provider || stock.catalystType || "").toLowerCase();
+
+    if (stock.fallback || stock.degraded || source.includes("fallback") || source.includes("local")) return "Context";
+    if (source.includes("fmp") || source.includes("yahoo") || source.includes("questrade") || source.includes("scanner")) return "Provider";
+
+    return "Ranked";
+  }
+
+  function cleanWhyText(text, symbol) {
+    return String(text || "")
+      .replace(new RegExp(`^${symbol}\\s+ranks\\s+because\\s+of\\s+`, "i"), `${symbol} is active on `)
+      .replace(new RegExp(`^${symbol}\\s+ranks\\s+because\\s+`, "i"), `${symbol} is active because `)
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function getCatalystProfile(stock, move, relativeVolume, volume, gap) {
     const suppliedCatalyst = String(stock.catalyst || stock.news || stock.reason || stock.headline || "").trim();
 
@@ -203,10 +220,10 @@ export default function ProfessionalScanner({
     if (analysis.floatBucket === "Low Float") drivers.push("low-float profile");
 
     if (drivers.length) {
-      return `${stock.symbol} ranks because of ${drivers.slice(0, 3).join(", ")}.`;
+      return `${stock.symbol} is active on ${drivers.slice(0, 3).join(", ")}.`;
     }
 
-    return `${stock.symbol} ranks from a balanced scanner profile with valid price, volume, and movement data.`;
+    return `${stock.symbol} is on watch from a balanced scanner profile with valid price, volume, and movement data.`;
   }
 
   function analyzeStock(stock) {
@@ -311,6 +328,8 @@ export default function ProfessionalScanner({
       return true;
     })
     .sort((a, b) => b.analysis.rankScore - a.analysis.rankScore);
+  const providerRowCount = analyzedStocks.filter(({ stock }) => getRowSourceType(stock) !== "Context").length;
+  const contextRowCount = analyzedStocks.length - providerRowCount;
 
   function pickStock(stock) {
     selectMainSymbol(stock.symbol, stock);
@@ -400,7 +419,7 @@ export default function ProfessionalScanner({
             Scanner Engine
           </div>
           <div style={{ color: theme.muted, fontSize: "9px", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {statusDetail}
+            {statusDetail} / {providerRowCount} provider / {contextRowCount} context
           </div>
         </div>
         <div
@@ -415,7 +434,7 @@ export default function ProfessionalScanner({
             whiteSpace: "nowrap",
           }}
         >
-          {degraded ? sourceLabel : rawSourceLabel}
+          {degraded ? "LIMITED, CACHED" : rawSourceLabel}
         </div>
       </div>
 
@@ -518,7 +537,7 @@ export default function ProfessionalScanner({
           }}
           title={warnings[0] || "Primary movers are limited; backend fallback ranking is active."}
         >
-          {scannerVisibleWarning}
+            {scannerVisibleWarning} Provider rows stay ranked first; context rows are labeled separately.
         </div>
       )}
 
@@ -594,6 +613,9 @@ export default function ProfessionalScanner({
             const positive = analysis.signedMove >= 0;
             const isSelected = selectedScannerStock?.symbol === stock.symbol;
             const selectedBackground = "rgba(25,198,216,0.12)";
+            const rowSourceType = getRowSourceType(stock);
+            const isContextRow = rowSourceType === "Context";
+            const cleanWhy = cleanWhyText(analysis.whyMoving, stock.symbol);
 
             return (
               <div
@@ -607,7 +629,7 @@ export default function ProfessionalScanner({
                 onMouseLeave={(event) => {
                   event.currentTarget.style.background = isSelected ? selectedBackground : "transparent";
                 }}
-                title={analysis.whyMoving}
+                title={cleanWhy}
                 style={{
                   display: "grid",
                   gap: "5px",
@@ -616,14 +638,15 @@ export default function ProfessionalScanner({
                   cursor: "pointer",
                   fontSize: "10px",
                   transition: "all 0.15s ease",
-                  background: isSelected ? selectedBackground : "transparent",
+                  background: isSelected ? selectedBackground : isContextRow ? "rgba(245,184,75,0.025)" : "transparent",
+                  opacity: isContextRow ? 0.92 : 1,
                 }}
               >
                 <div style={scannerGridStyle}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ ...monoStyle, fontWeight: 800, color: theme.text }}>{stock.symbol}</div>
                     <div style={{ color: theme.muted, fontSize: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {analysis.tags.slice(0, 2).join(" / ") || analysis.catalyst.label}
+                      {rowSourceType} / {analysis.tags.slice(0, 1).join(" / ") || analysis.catalyst.label}
                     </div>
                   </div>
                   <div style={{ ...monoStyle, color: theme.text, fontWeight: 650, textAlign: "right" }}>
@@ -673,7 +696,7 @@ export default function ProfessionalScanner({
                   }}
                 >
                   <span style={{ color: theme.text, fontWeight: 850 }}>Why: </span>
-                  {analysis.whyMoving}
+                  {cleanWhy}
                 </div>
               </div>
             );

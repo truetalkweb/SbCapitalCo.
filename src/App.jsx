@@ -17,6 +17,7 @@ import {
 import TickerTape from "./components/TickerTape";
 import TerminalTopBar from "./components/TerminalTopBar";
 import ProductionHealthStrip from "./components/ProductionHealthStrip";
+import TerminalStatusBar from "./components/TerminalStatusBar";
 import TradingSidebar from "./components/TradingSidebar";
 import WorkspaceGrid from "./components/WorkspaceGrid";
 import RightTradingPanel from "./components/RightTradingPanel";
@@ -50,7 +51,6 @@ import {
   applyLiveQuote,
   buildTerminalSourceLabels,
   fetchWithTimeout,
-  getStatusColor,
 } from "./utils/marketUtils";
 import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatus";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
@@ -2948,23 +2948,10 @@ export default function App() {
         </div>
       )}
 
-      <div
-        className="terminal-status-bar"
-        style={{
-          height: "26px",
-          background: `linear-gradient(180deg, ${theme.panel}, ${theme.bg})`,
-          borderTop: `1px solid ${theme.border}`,
-          color: theme.muted,
-          fontSize: "10px",
-          display: "flex",
-          alignItems: "center",
-          gap: "0",
-          padding: "0 10px",
-          overflowX: "auto",
-          whiteSpace: "nowrap",
-        }}
->
-        {[
+      <TerminalStatusBar
+        theme={theme}
+        terminalMonoFont={terminalMonoFont}
+        rows={[
           ["Market Data", resolvedMarketDataStatusLabel],
           ["Backend", backendHealthLabel],
           ["Scanner", scannerSourceLabel],
@@ -2978,34 +2965,8 @@ export default function App() {
           ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
           ["Cloud", user ? user.email : "Local"],
           ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
-        ].map(([label, value]) => (
-          <span
-            key={label}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "5px",
-              padding: "0 8px",
-              minHeight: "18px",
-              borderRight: `1px solid ${theme.borderSoft || theme.border}`,
-            }}
-          >
-            <span style={{ color: theme.faint || theme.muted, fontWeight: 800 }}>
-              {label}:
-            </span>
-            <span
-              style={{
-                color: getStatusColor(value, theme),
-                fontFamily: terminalMonoFont,
-                fontVariantNumeric: "tabular-nums",
-                fontWeight: 850,
-              }}
-            >
-              {value}
-            </span>
-          </span>
-        ))}
-      </div>
+        ]}
+      />
 
       <Suspense fallback={null}>
         <CommandPalette

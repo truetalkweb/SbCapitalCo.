@@ -21,8 +21,8 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
         display: "inline-flex",
         alignItems: "center",
         gap: "6px",
-        minHeight: "20px",
-        padding: "0 8px",
+        minHeight: "19px",
+        padding: "0 7px",
         borderRight: `1px solid ${theme.borderSoft || theme.border}`,
         whiteSpace: "nowrap",
       }}
@@ -33,7 +33,7 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
           height: "6px",
           borderRadius: "999px",
           background: dotColor,
-          boxShadow: `0 0 8px ${dotColor}`,
+          boxShadow: "none",
           flexShrink: 0,
         }}
       />
@@ -74,16 +74,16 @@ export default function ProductionHealthStrip({
   return (
     <div
       style={{
-        minHeight: "26px",
+        minHeight: "23px",
         display: "flex",
         alignItems: "center",
         gap: 0,
-        padding: "0 8px",
-        background: theme.panel2,
+        padding: "0 7px",
+        background: theme.panel,
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         overflowX: "auto",
         whiteSpace: "nowrap",
-        fontSize: "10px",
+        fontSize: "9px",
       }}
     >
       <HealthCell
@@ -140,13 +140,13 @@ export default function ProductionHealthStrip({
           display: "inline-flex",
           alignItems: "center",
           gap: "5px",
-          height: "20px",
+          height: "19px",
           padding: "0 8px",
           borderRadius: "5px",
           border: `1px solid ${theme.borderSoft || theme.border}`,
           background: refreshing ? theme.panel3 : theme.panel,
           color: refreshing ? theme.muted : theme.text,
-          fontSize: "10px",
+          fontSize: "9px",
           fontWeight: 900,
           cursor: refreshing ? "wait" : "pointer",
           flexShrink: 0,

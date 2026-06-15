@@ -17,7 +17,7 @@ export function getCleanProviderMessage(message, fallback = "Provider limited. C
 
   if (!value) return fallback;
   if (/timeout|ECONNABORTED/i.test(value)) return "Questrade timeout. Token is persisted; retry shortly.";
-  if (/429|rate/i.test(value)) return "Provider limited. Cached/fallback data active.";
+  if (/429|rate|quota|cooling down/i.test(value)) return "Provider limited. Cached/fallback data active.";
   if (/restricted|subscription|plan/i.test(value)) return "Provider limited. Cached/fallback data active.";
   if (/news/i.test(value) && /limited|fallback|unavailable/i.test(value)) return "News provider limited. Showing available headlines.";
   if (/bad request/i.test(value)) return "Provider rejected the latest request. Cached/fallback data active.";

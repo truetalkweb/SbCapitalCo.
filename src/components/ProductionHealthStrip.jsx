@@ -63,6 +63,8 @@ export default function ProductionHealthStrip({
   scannerMessage,
   newsLabel,
   newsMessage,
+  aiLabel,
+  aiMessage,
   lastCheckedAt,
   onRefresh,
   refreshing = false,
@@ -112,6 +114,13 @@ export default function ProductionHealthStrip({
         label="News"
         value={newsLabel}
         detail={getCleanProviderMessage(newsMessage, "News provider limited. Showing available headlines.")}
+      />
+      <HealthCell
+        theme={theme}
+        terminalMonoFont={terminalMonoFont}
+        label="AI"
+        value={aiLabel || "AI PENDING"}
+        detail={getCleanProviderMessage(aiMessage, "Gemini intelligence status.")}
       />
       <HealthCell
         theme={theme}

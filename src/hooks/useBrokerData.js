@@ -50,19 +50,26 @@ export function useBrokerData(brokerApiUrl) {
     try {
       const [statusResponse, healthResponse] = await Promise.allSettled([
         axios.get(`${brokerApiUrl}/api/questrade/status`, { timeout: 6000 }),
-        axios.get(`${brokerApiUrl}/api/platform/health`, { timeout: 6000 }),
+        axios.get(`${brokerApiUrl}/api/health/deep`, { timeout: 7000 }),
       ]);
+      let resolvedHealthResponse = healthResponse;
+
+      if (healthResponse.status !== "fulfilled") {
+        resolvedHealthResponse = await Promise.allSettled([
+          axios.get(`${brokerApiUrl}/api/platform/health`, { timeout: 6000 }),
+        ]).then(([fallback]) => fallback);
+      }
       const response = statusResponse.status === "fulfilled" ? statusResponse.value : null;
 
-      if (healthResponse.status === "fulfilled") {
-        const healthData = healthResponse.value.data || null;
+      if (resolvedHealthResponse.status === "fulfilled") {
+        const healthData = resolvedHealthResponse.value.data || null;
 
         setPlatformHealth(healthData);
 
-        if (healthData?.broker?.sync) {
+        if (healthData?.broker?.sync || healthData?.questrade?.sync) {
           setBrokerSyncMeta((prev) => ({
             ...prev,
-            ...healthData.broker.sync,
+            ...(healthData.broker?.sync || healthData.questrade?.sync || {}),
           }));
         }
       }

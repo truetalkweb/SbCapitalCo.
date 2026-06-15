@@ -120,6 +120,13 @@ export default function ProductionHealthPanel({
       ? `SCANNER ${String(platformHealth.scanner.providerStatus.label).toUpperCase()}`
       : null);
   const scannerSource = String(scannerMeta?.source || platformHealth?.scanner?.source || "").toUpperCase();
+  const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || {};
+  const newsHealth = platformHealth?.news || platformHealth?.deepHealth?.news || {};
+  const aiLive = aiHealth.source === "gemini" && (aiHealth.live || aiHealth.providerLabel === "LIVE");
+  const aiLabel = aiLive
+    ? "GEMINI LIVE"
+    : aiHealth.label || (aiHealth.configured ? "AI DEGRADED" : "AI FALLBACK");
+  const newsLabel = newsHealth.label || "NEWS PENDING";
   const scannerLabel = scannerLoading
     ? "SCANNER LOADING"
     : scannerStatusLabel
@@ -198,6 +205,20 @@ export default function ProductionHealthPanel({
           scannerMeta?.cached ? "Cached response active." : "Cache state normal.",
           scannerWarning ? `Status: ${scannerWarning}` : "No scanner warning reported.",
         ].join(" ")}
+      />
+      <HealthRow
+        theme={theme}
+        label="News Feed"
+        value={newsLabel}
+        status={newsHealth.providerLimited || newsHealth.degraded || newsHealth.fallback ? "warn" : newsHealth.live ? "ok" : "info"}
+        detail={`Source: ${newsHealth.source || "Backend News"}. Cache: ${newsHealth.cacheSize || 0} entries. ${newsHealth.userMessage || "No raw provider errors exposed."}`}
+      />
+      <HealthRow
+        theme={theme}
+        label="AI Intelligence"
+        value={aiLabel}
+        status={aiLive ? "ok" : aiHealth.configured ? "warn" : "info"}
+        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. ${aiHealth.userMessage || aiHealth.lastError || "Gemini catalyst intelligence ready when data is available."}`}
       />
       <HealthRow
         theme={theme}

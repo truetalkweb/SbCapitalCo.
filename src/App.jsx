@@ -1877,6 +1877,15 @@ export default function App() {
   const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
   const resolvedMarketDataStatusLabel = qtrdHealth.label || marketDataStatusLabel;
   const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
+  const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || null;
+  const aiHealthLabel = aiHealth?.source === "gemini" && (aiHealth?.live || aiHealth?.providerLabel === "LIVE")
+    ? "GEMINI LIVE"
+    : aiHealth?.label
+      ? String(aiHealth.label).replace(/^AI /, "AI ")
+      : "AI PENDING";
+  const aiHealthMessage = aiHealth?.userMessage ||
+    aiHealth?.lastError ||
+    (aiHealth?.source ? `${aiHealth.source} intelligence provider.` : "Gemini intelligence status pending.");
   const rawScannerMessage = scannerMeta?.userMessage ||
     scannerMeta?.userWarnings?.[0] ||
     platformHealth?.scanner?.providerStatus?.userMessage ||
@@ -1999,6 +2008,8 @@ export default function App() {
         scannerMessage={resolvedScannerMessage}
         newsLabel={resolvedNewsStatusLabel}
         newsMessage={resolvedNewsMessage}
+        aiLabel={aiHealthLabel}
+        aiMessage={aiHealthMessage}
         lastCheckedAt={healthLastCheckedAt}
         onRefresh={handleRefreshProductionHealth}
         refreshing={healthRefreshing}

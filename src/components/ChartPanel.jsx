@@ -174,7 +174,6 @@ export default function ChartPanel({
           >
             {editableSymbol && typeof setSymbol === "function" && (
               <ChartTickerInput
-                key={`${title}-${cleanChartSymbol}`}
                 value={cleanChartSymbol}
                 onCommit={commitChartSymbol}
                 theme={theme}

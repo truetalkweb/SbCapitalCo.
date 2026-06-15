@@ -236,7 +236,7 @@ export default function MarketIntelligenceTerminal({
         const detail = await response.json();
 
         setTickerDetail(detail);
-        setTickerIntelligence(detail.catalystIntelligence || detail.aiSummary || null);
+        setTickerIntelligence(detail.normalized?.intelligence || detail.catalystIntelligence || detail.aiSummary || null);
       } catch {
         setTickerDetail(null);
         setTickerIntelligence(null);
@@ -288,7 +288,8 @@ export default function MarketIntelligenceTerminal({
       .filter((item) => !selectedTicker || item.relatedTicker === selectedTicker)
       .slice(0, 8);
   }, [news, selectedTicker, tickerDetail]);
-  const activeIntelligence = tickerIntelligence || tickerDetail?.catalystIntelligence || tickerDetail?.aiSummary || null;
+  const normalizedTicker = tickerDetail?.normalized || null;
+  const activeIntelligence = tickerIntelligence || normalizedTicker?.intelligence || tickerDetail?.catalystIntelligence || tickerDetail?.aiSummary || null;
   const watchlistRows = watchlistIntelligence.length ? watchlistIntelligence : watchlist;
 
   async function addWatch(symbol) {
@@ -558,20 +559,20 @@ export default function MarketIntelligenceTerminal({
                       {selectedTicker}
                     </div>
                     <div style={{ color: theme.muted, fontSize: "10px", marginTop: "4px" }}>
-                      {tickerDetail?.companyName || "Active Equity"}
+                      {tickerDetail?.companyName || normalizedTicker?.source || "Active Equity"}
                     </div>
                   </div>
                   <div style={{ textAlign: phoneLayout ? "left" : "right" }}>
                     <div style={{ ...monoStyle, color: theme.text, fontSize: "14px", fontWeight: 700 }}>
-                      {tickerDetail?.price ? `$${Number(tickerDetail.price).toFixed(2)}` : "Pending"}
+                      {normalizedTicker?.price || tickerDetail?.price ? `$${Number(normalizedTicker?.price || tickerDetail.price).toFixed(2)}` : "Pending"}
                     </div>
-                    <div style={{ ...monoStyle, color: parsePercent(tickerDetail?.change) >= 0 ? theme.green : theme.red, fontSize: "11px", fontWeight: 700 }}>
-                      {tickerDetail?.change || "Pending"}
+                    <div style={{ ...monoStyle, color: parsePercent(normalizedTicker?.change || tickerDetail?.change) >= 0 ? theme.green : theme.red, fontSize: "11px", fontWeight: 700 }}>
+                      {normalizedTicker?.change || tickerDetail?.change || "Pending"}
                     </div>
                   </div>
                 </div>
                 <div style={{ color: theme.muted, fontSize: "10px", lineHeight: "1.45", marginTop: "8px" }}>
-                  {activeIntelligence?.summary || tickerDetail?.catalyst || "Waiting for a confirmed catalyst."}
+                  {activeIntelligence?.summary || normalizedTicker?.catalyst || tickerDetail?.catalyst || "Waiting for a confirmed catalyst."}
                 </div>
                 {activeIntelligence && (
                   <div

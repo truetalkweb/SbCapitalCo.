@@ -3,8 +3,12 @@ import { Search } from "lucide-react";
 import { terminalMonoFont } from "../config/terminalConfig";
 
 export default function ChartTickerInput({ value, onCommit, theme, label }) {
-  const [draft, setDraft] = useState(value || "");
   const cleanValue = String(value || "").trim().toUpperCase();
+  const [draftState, setDraftState] = useState(() => ({
+    sourceValue: cleanValue,
+    draft: cleanValue,
+  }));
+  const draft = draftState.sourceValue === cleanValue ? draftState.draft : cleanValue;
   const cleanDraft = draft.trim().toUpperCase();
   const isValidDraft = useMemo(
     () => /^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(cleanDraft),
@@ -15,7 +19,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
     const clean = draft.trim().toUpperCase();
 
     if (!clean || !/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(clean)) {
-      setDraft(cleanValue);
+      setDraftState({ sourceValue: cleanValue, draft: cleanValue });
       return;
     }
 
@@ -23,7 +27,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
       onCommit(clean);
     }
 
-    setDraft(clean);
+    setDraftState({ sourceValue: clean, draft: clean });
   }, [cleanValue, draft, onCommit]);
 
   return (
@@ -50,7 +54,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
         value={draft}
         onChange={(event) => {
           const next = event.target.value.toUpperCase().replace(/[^A-Z0-9./:-]/g, "");
-          setDraft(next.slice(0, 14));
+          setDraftState({ sourceValue: cleanValue, draft: next.slice(0, 14) });
         }}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -61,7 +65,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
           }
 
           if (event.key === "Escape") {
-            setDraft(cleanValue);
+            setDraftState({ sourceValue: cleanValue, draft: cleanValue });
             event.currentTarget.blur();
           }
         }}

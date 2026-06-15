@@ -123,6 +123,7 @@ export default function ProductionHealthPanel({
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || {};
   const newsHealth = platformHealth?.news || platformHealth?.deepHealth?.news || {};
   const aiLive = aiHealth.source === "gemini" && (aiHealth.live || aiHealth.providerLabel === "LIVE");
+  const aiPersistentCache = aiHealth.persistentCache || {};
   const aiLabel = aiLive
     ? "GEMINI LIVE"
     : aiHealth.label || (aiHealth.configured ? "AI DEGRADED" : "AI FALLBACK");
@@ -218,7 +219,7 @@ export default function ProductionHealthPanel({
         label="AI Intelligence"
         value={aiLabel}
         status={aiLive ? "ok" : aiHealth.configured ? "warn" : "info"}
-        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. ${aiHealth.userMessage || aiHealth.lastError || "Gemini catalyst intelligence ready when data is available."}`}
+        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. Persistent cache: ${aiPersistentCache.enabled ? "Firestore" : "disabled"}${aiPersistentCache.lastHitAt ? `, last hit ${formatDateTime(aiPersistentCache.lastHitAt)}` : ""}. ${aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError || "Gemini catalyst intelligence ready when data is available."}`}
       />
       <HealthRow
         theme={theme}

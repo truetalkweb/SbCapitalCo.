@@ -1,5 +1,4 @@
 import { useState } from "react";
-import StockDetailCard from "./StockDetailCard";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { getScannerSourceType } from "../utils/marketUtils";
 
@@ -22,6 +21,7 @@ export default function ProfessionalScanner({
   const [priceBand, setPriceBand] = useState("Any");
   const [minRvol, setMinRvol] = useState("0");
   const [riskFilter, setRiskFilter] = useState("Any");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [renderedAt] = useState(() => Date.now());
   const monoStyle = {
     fontFamily: monoFont,
@@ -392,6 +392,16 @@ export default function ProfessionalScanner({
     fontWeight: 850,
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
   };
+  const compactActionButton = (active = false) => ({
+    height: "28px",
+    borderRadius: "5px",
+    border: active ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+    background: active ? theme.blue : theme.panel,
+    color: active ? "#ffffff" : theme.text,
+    cursor: "pointer",
+    fontSize: "10px",
+    fontWeight: 900,
+  });
   const scannerGridStyle = {
     display: "grid",
     gridTemplateColumns: "minmax(54px, 1fr) minmax(54px, 0.72fr) minmax(58px, 0.78fr) minmax(42px, 0.52fr) minmax(42px, 0.5fr) minmax(62px, 0.68fr)",
@@ -463,7 +473,7 @@ export default function ProfessionalScanner({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gridTemplateColumns: "1fr auto",
           gap: "5px",
           marginBottom: "6px",
           padding: "4px",
@@ -479,10 +489,21 @@ export default function ProfessionalScanner({
           style={{
             ...filterControlStyle,
             padding: "0 8px",
-            gridColumn: "1 / -1",
           }}
         />
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((value) => !value)}
+          style={{
+            ...compactActionButton(filtersOpen),
+            width: "70px",
+          }}
+        >
+          Filters
+        </button>
 
+        {filtersOpen && (
+        <>
         <select value={minMove} onChange={(event) => setMinMove(event.target.value)} title="Minimum move" style={filterControlStyle}>
           <option value="0">Any %</option>
           <option value="1">1%+</option>
@@ -521,6 +542,8 @@ export default function ProfessionalScanner({
           <option value="Elevated">Elevated</option>
           <option value="High">High</option>
         </select>
+        </>
+        )}
       </div>
 
       {degraded && (
@@ -542,33 +565,100 @@ export default function ProfessionalScanner({
       )}
 
       {detailStock && detailAnalysis && (
-        <div style={{ marginBottom: "8px" }}>
-          <StockDetailCard
-            ticker={detailStock.symbol}
-            stock={{
-              ...detailStock,
-              score10: detailAnalysis.score10,
-              score: detailAnalysis.score10,
-              gapPercent: detailAnalysis.gap,
-              relativeVolume: detailAnalysis.relativeVolume,
-              float: detailAnalysis.floatValue,
-              floatBucket: detailAnalysis.floatBucket,
-              priceRange: detailAnalysis.priceRange,
-              riskLabel: detailAnalysis.risk.label,
-              catalyst: detailAnalysis.catalyst.text,
-              catalystType: detailAnalysis.catalyst.label,
-              whyMoving: detailAnalysis.whyMoving,
-              intradayMovePercent: detailAnalysis.signedMove,
-              volumePercentOfAvg: detailAnalysis.relativeVolume * 100,
-              sourceType: detailAnalysis.sourceProfile.type,
-              sourceConfidence: detailAnalysis.sourceProfile.confidence,
-              sourceLabel,
-            }}
-            theme={theme}
-            watchStatus={Boolean(detailStock.watchStatus || detailStock.watched)}
-            onOpenChart={() => pickStock(detailStock)}
-            onToggleWatch={() => addSymbolToWatchlist(detailStock.symbol)}
-          />
+        <div
+          style={{
+            marginBottom: "8px",
+            padding: "8px",
+            background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "7px",
+          }}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                <span style={{ ...monoStyle, color: theme.text, fontSize: "15px", fontWeight: 850 }}>
+                  {detailStock.symbol}
+                </span>
+                <span
+                  style={{
+                    color: detailAnalysis.sourceProfile.confidence === "High" ? theme.green : theme.amber,
+                    border: `1px solid ${(detailAnalysis.sourceProfile.confidence === "High" ? theme.green : theme.amber)}55`,
+                    borderRadius: "999px",
+                    padding: "2px 6px",
+                    fontSize: "8px",
+                    fontWeight: 950,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {detailAnalysis.sourceProfile.confidence}
+                </span>
+              </div>
+              <div
+                style={{
+                  marginTop: "5px",
+                  color: theme.muted,
+                  fontSize: "10px",
+                  lineHeight: 1.35,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {detailAnalysis.whyMoving}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", minWidth: "74px" }}>
+              <div style={{ ...monoStyle, color: theme.text, fontSize: "13px", fontWeight: 850 }}>
+                ${Number(detailStock.price || 0).toFixed(2)}
+              </div>
+              <div
+                style={{
+                  ...monoStyle,
+                  color: detailAnalysis.signedMove >= 0 ? theme.green : theme.red,
+                  fontSize: "11px",
+                  fontWeight: 850,
+                  marginTop: "3px",
+                }}
+              >
+                {detailAnalysis.signedMove >= 0 ? "+" : ""}
+                {detailAnalysis.signedMove.toFixed(2)}%
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "5px", marginTop: "8px" }}>
+            {[
+              ["Vol", formatCompactNumber(detailAnalysis.volume)],
+              ["RVOL", `${detailAnalysis.relativeVolume.toFixed(1)}x`],
+              ["Score", `${detailAnalysis.score10}/10`],
+              ["Risk", detailAnalysis.risk.label],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  background: "rgba(255,255,255,0.018)",
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: "5px",
+                  padding: "5px",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>{label}</div>
+                <div style={{ ...monoStyle, color: label === "Risk" ? detailAnalysis.risk.color : theme.text, fontSize: "10px", fontWeight: 850, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "8px" }}>
+            <button onClick={() => pickStock(detailStock)} style={compactActionButton(true)}>
+              Open Chart
+            </button>
+            <button onClick={() => addSymbolToWatchlist(detailStock.symbol)} style={compactActionButton(false)}>
+              Watch
+            </button>
+          </div>
         </div>
       )}
 

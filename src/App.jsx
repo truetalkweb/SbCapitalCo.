@@ -73,7 +73,6 @@ const ShortcutsPanel = lazy(() => import("./components/ShortcutsPanel"));
 const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
 const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
 const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
-const StockDetailCard = lazy(() => import("./components/StockDetailCard"));
 
 const coreRightTabs = new Set(["intel", "health", "alerts"]);
 const advancedWorkspaceIds = new Set(["broker", "replay", "journal", "portfolio", "settings"]);
@@ -1926,7 +1925,7 @@ export default function App() {
         .slice(0, 4),
     [news, selectedStock]
   );
-  const showAccountCloudInLeftDock = advancedMode || activeWorkspace === "settings";
+  const showAccountCloudInLeftDock = activeWorkspace === "settings";
 
   useEffect(() => {
     saveSetting("sb_advanced_mode", advancedMode);
@@ -1975,6 +1974,16 @@ export default function App() {
   }
 
   function renderIntelligenceDock() {
+    const dockPrice = Number(selectedDockStock?.price || selectedStockData?.price || 0);
+    const dockChange = String(selectedDockStock?.changePercent || selectedDockStock?.change || selectedStockData?.change || "0%");
+    const dockMove = Number(String(dockChange).replace("%", "")) || 0;
+    const dockRisk = selectedDockStock?.riskLabel || selectedDockStock?.risk || "Context";
+    const dockCatalyst =
+      selectedTickerNews[0]?.headline ||
+      selectedDockStock?.catalyst ||
+      selectedDockStock?.whyMoving ||
+      "Monitoring chart, scanner, and headline context.";
+
     return (
       <div style={{ display: "grid", gap: "10px" }}>
         <div
@@ -2053,22 +2062,102 @@ export default function App() {
           </div>
         </div>
 
-        <Suspense fallback={<LoadingPanel theme={theme} label="Loading ticker detail" height="220px" />}>
-          <StockDetailCard
-            ticker={selectedStock}
-            stock={selectedDockStock}
-            theme={theme}
-            watchStatus={hasSelectedInWatchlist}
-            onOpenChart={selectMainSymbol}
-            onToggleWatch={(symbol) => {
-              if (liveStocks.some((stock) => stock.symbol === symbol)) {
-                removeWatchlistSymbol(symbol);
-              } else {
-                addSymbolToWatchlist(symbol);
-              }
-            }}
-          />
-        </Suspense>
+        <div
+          style={{
+            background: theme.panel2,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "8px",
+            padding: "10px",
+          }}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", gap: "7px", alignItems: "center", minWidth: 0 }}>
+                <span style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "18px", fontWeight: 900 }}>
+                  {selectedStock}
+                </span>
+                <span
+                  style={{
+                    color: hasSelectedInWatchlist ? theme.green : theme.cyan,
+                    border: `1px solid ${(hasSelectedInWatchlist ? theme.green : theme.cyan)}55`,
+                    borderRadius: "999px",
+                    padding: "2px 6px",
+                    fontSize: "8px",
+                    fontWeight: 950,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {hasSelectedInWatchlist ? "Watching" : "Selected"}
+                </span>
+              </div>
+              <div
+                style={{
+                  marginTop: "7px",
+                  color: theme.muted,
+                  fontSize: "10.5px",
+                  lineHeight: 1.4,
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {dockCatalyst}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", minWidth: "78px" }}>
+              <div style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "15px", fontWeight: 900 }}>
+                ${dockPrice.toFixed(2)}
+              </div>
+              <div style={{ fontFamily: terminalMonoFont, color: dockMove >= 0 ? theme.green : theme.red, fontSize: "11px", fontWeight: 900, marginTop: "4px" }}>
+                {dockMove >= 0 ? "+" : ""}
+                {dockMove.toFixed(2)}%
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px", marginTop: "10px" }}>
+            {[
+              ["Data", selectedDataConfidence.confidence],
+              ["Source", selectedDataConfidence.scanner?.label || "Scanner"],
+              ["Risk", dockRisk],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: "6px",
+                  padding: "6px",
+                  background: theme.panel,
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>{label}</div>
+                <div style={{ fontFamily: terminalMonoFont, color: label === "Data" && value === "High" ? theme.green : label === "Risk" ? theme.amber : theme.text, fontSize: "10px", fontWeight: 850, marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "7px", marginTop: "10px" }}>
+            <button onClick={() => selectMainSymbol(selectedStock)} style={{ ...buttonStyle(true), height: "29px" }}>
+              Open Chart
+            </button>
+            <button
+              onClick={() => {
+                if (liveStocks.some((stock) => stock.symbol === selectedStock)) {
+                  removeWatchlistSymbol(selectedStock);
+                } else {
+                  addSymbolToWatchlist(selectedStock);
+                }
+              }}
+              style={{ ...buttonStyle(false), height: "29px" }}
+            >
+              {hasSelectedInWatchlist ? "Watching" : "Watch"}
+            </button>
+          </div>
+        </div>
 
         <div
           style={{

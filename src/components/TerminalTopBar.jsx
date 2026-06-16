@@ -194,6 +194,12 @@ export default function TerminalTopBar({
     (mainChartStatus === "QTRD" || mainChartStatus === "LIVE" ? "CHART QTRD" : mainChartStatus === "SIM" ? "CHART SIM" : `CHART ${mainChartStatus || "PENDING"}`);
   const resolvedBrokerLabel = brokerStateLabel || (brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED");
   const resolvedModeLabel = modeStatusLabel || "PAPER MODE";
+  const marketDateLabel = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 
   function statusColor(label) {
     const value = String(label || "").toUpperCase();
@@ -222,68 +228,75 @@ export default function TerminalTopBar({
   return (
     <div
       style={{
-        minHeight: compact ? "52px" : "42px",
-        background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
-        borderBottom: `1px solid ${theme.border}`,
+        minHeight: compact ? "64px" : "74px",
+        background: "linear-gradient(180deg, #07090d 0%, #090d14 100%)",
+        borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         display: "flex",
         alignItems: "center",
-        padding: "0 8px",
-        gap: "7px",
+        padding: compact ? "8px" : "0 12px",
+        gap: compact ? "8px" : "10px",
         flexWrap: compact ? "wrap" : "nowrap",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.025)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035), 0 10px 28px rgba(0,0,0,0.22)",
         overflow: compact ? "visible" : "hidden",
       }}
     >
       <div
-          style={{
-          fontWeight: 900,
-          fontSize: "15px",
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-          color: theme.text,
-        }}
-      >
-        SbCapital<span style={{ color: theme.cyan || theme.blue }}>Co.</span>
-      </div>
-
-      <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "6px",
-          padding: "3px 7px",
-          borderRadius: "999px",
-          background: theme.panel3 || "rgba(255,255,255,0.03)",
-          border: `1px solid ${theme.border}`,
+          gap: "10px",
           whiteSpace: "nowrap",
           flexShrink: 0,
+          minWidth: compact ? "100%" : "206px",
         }}
       >
-        <span
+        <div
           style={{
-            width: "7px",
-            height: "7px",
-            borderRadius: "999px",
-            background: marketColor,
-          boxShadow: "none",
+            width: "30px",
+            height: "30px",
+            borderRadius: "9px",
+            display: "grid",
+            placeItems: "center",
+            color: "#061018",
+            background: `linear-gradient(135deg, ${theme.cyan || theme.blue}, ${theme.green})`,
+            fontSize: "12px",
+            fontWeight: 950,
+            boxShadow: "0 0 0 1px rgba(255,255,255,0.12), 0 10px 24px rgba(0,200,150,0.12)",
           }}
-        />
-        <span style={{ fontSize: "10px", color: marketColor, fontWeight: 900 }}>
-          NYSE {marketStatus}
-        </span>
-        <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 700, fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>
-          {nyTime} ET
-        </span>
+        >
+          SB
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "#f8fafc", fontWeight: 950, fontSize: "20px", lineHeight: 1 }}>
+            SB <span style={{ color: theme.cyan || theme.blue }}>Terminal</span>
+          </div>
+          <div style={{ color: theme.muted, fontSize: "10px", fontWeight: 850, marginTop: "5px" }}>
+            AI market intelligence
+          </div>
+        </div>
       </div>
 
       <div
         style={{
           position: "relative",
-          width: compact ? "100%" : "190px",
-          minWidth: compact ? "160px" : "170px",
+          width: compact ? "100%" : "238px",
+          minWidth: compact ? "190px" : "214px",
           flexShrink: 0,
         }}
       >
+        <span
+          style={{
+            position: "absolute",
+            left: "13px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: theme.muted,
+            fontSize: "14px",
+            pointerEvents: "none",
+          }}
+        >
+          &#8981;
+        </span>
         <input
           key={selectedSymbol}
           defaultValue={selectedSymbol || ""}
@@ -301,22 +314,73 @@ export default function TerminalTopBar({
           placeholder="Search ticker"
           style={{
             width: "100%",
-            height: "28px",
-            background: theme.panel2,
+            height: "46px",
+            background: "rgba(255,255,255,0.045)",
             border: `1px solid ${theme.borderSoft || theme.border}`,
             color: theme.text,
-            borderRadius: "6px",
-            padding: "0 10px",
+            borderRadius: "12px",
+            padding: "0 14px 0 37px",
             fontFamily: monoFont,
-            fontSize: "11px",
+            fontSize: "13px",
             fontWeight: 850,
             outline: "none",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
           }}
         />
       </div>
 
-      <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
+      {!compact && (
+      <div
+        style={{
+          height: "46px",
+          display: "flex",
+          alignItems: "center",
+          gap: "9px",
+          padding: "0 10px",
+          borderRadius: "12px",
+          background: "rgba(255,255,255,0.035)",
+          border: `1px solid ${theme.borderSoft || theme.border}`,
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            width: "28px",
+            height: "28px",
+            borderRadius: "999px",
+            display: "grid",
+            placeItems: "center",
+            color: "#04100c",
+            fontSize: "13px",
+            fontWeight: 950,
+            background: marketColor,
+            boxShadow: `0 0 22px ${marketColor}35`,
+          }}
+        />
+        <div>
+          <div style={{ fontSize: "12px", color: marketColor, fontWeight: 950 }}>
+            Market {marketStatus.toLowerCase()}
+          </div>
+          <div style={{ fontSize: "11px", color: theme.muted, fontWeight: 800, marginTop: "2px" }}>
+            {marketDateLabel} - <span style={{ fontFamily: monoFont }}>{nyTime} ET</span>
+          </div>
+        </div>
+      </div>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          gap: "6px",
+          alignItems: "center",
+          flexShrink: 0,
+          padding: "4px",
+          background: "rgba(255,255,255,0.03)",
+          border: `1px solid ${theme.borderSoft || theme.border}`,
+          borderRadius: "10px",
+        }}
+      >
         {workspaceViews
           .filter((view) => ["charts", "scanner", "watchlist", "intelligence"].includes(view.id))
           .map((view) => (

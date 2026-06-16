@@ -281,12 +281,13 @@ export default function App() {
   const isPhoneTerminal = viewportWidth <= 700;
 
   const theme = {
-    bg: isDark ? "#05070d" : "#eef3f8",
-    panel: isDark ? "#0d121c" : "#ffffff",
-    panel2: isDark ? "#111827" : "#f7f9fc",
-    panel3: isDark ? "#151d2a" : "#eef3f8",
-    border: isDark ? "#263142" : "#d7dde8",
-    borderSoft: isDark ? "#1a2433" : "#e4e9f1",
+    bg: isDark ? "#040507" : "#eef3f8",
+    panel: isDark ? "#0a0e15" : "#ffffff",
+    panel2: isDark ? "#0f141d" : "#f7f9fc",
+    panel3: isDark ? "#141b27" : "#eef3f8",
+    card: isDark ? "#0b1018" : "#ffffff",
+    border: isDark ? "#242c38" : "#d7dde8",
+    borderSoft: isDark ? "#182130" : "#e4e9f1",
     text: isDark ? "#e7ecf3" : "#1d2733",
     muted: isDark ? "#8a95a8" : "#697386",
     faint: isDark ? "#5f6b7e" : "#8a93a3",
@@ -1818,8 +1819,8 @@ export default function App() {
     activeWorkspace === "alerts";
   const showLeftDockPanel = showLeftDock && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
-  const sidebarPanelSize = isPhoneTerminal ? 15 : 4;
-  const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 30;
+  const sidebarPanelSize = isPhoneTerminal ? 15 : isCompactTerminal ? 8 : 13;
+  const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 28;
   const workspaceDefaultSize =
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
 
@@ -2238,7 +2239,7 @@ export default function App() {
     <div
       style={{
         height: "100vh",
-        background: theme.bg,
+        background: "radial-gradient(circle at 38% -12%, rgba(25,198,216,0.08), transparent 28%), #040507",
         color: theme.text,
         overflow: "hidden",
         display: "flex",
@@ -2317,12 +2318,12 @@ export default function App() {
         style={{
           flex: "1 1 auto",
           minHeight: 0,
-          padding: "6px",
-          gap: "6px",
+          padding: "8px",
+          gap: "8px",
           overflow: "hidden",
         }}
       >
-        <Panel id="sidebar-panel" order={1} defaultSize={sidebarPanelSize} minSize={sidebarPanelSize} maxSize={isPhoneTerminal ? 15 : 6}>
+        <Panel id="sidebar-panel" order={1} defaultSize={sidebarPanelSize} minSize={sidebarPanelSize} maxSize={isPhoneTerminal ? 15 : isCompactTerminal ? 10 : 15}>
           <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}

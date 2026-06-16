@@ -5,15 +5,15 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
     <div
       className="terminal-status-bar"
       style={{
-        height: "24px",
-        background: theme.bg,
+        height: "22px",
+        background: `linear-gradient(180deg, ${theme.panel || theme.bg}, ${theme.bg})`,
         borderTop: `1px solid ${theme.borderSoft || theme.border}`,
         color: theme.muted,
         fontSize: "9px",
         display: "flex",
         alignItems: "center",
         gap: 0,
-        padding: "0 8px",
+        padding: "0 6px",
         overflowX: "auto",
         whiteSpace: "nowrap",
       }}
@@ -25,12 +25,12 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
             display: "inline-flex",
             alignItems: "center",
             gap: "5px",
-            padding: "0 7px",
-            minHeight: "17px",
+            padding: "0 8px",
+            minHeight: "16px",
             borderRight: `1px solid ${theme.borderSoft || theme.border}`,
           }}
         >
-          <span style={{ color: theme.faint || theme.muted, fontWeight: 800 }}>
+          <span style={{ color: theme.faint || theme.muted, fontWeight: 850, textTransform: "uppercase" }}>
             {label}:
           </span>
           <span

@@ -3167,21 +3167,31 @@ export default function App() {
       <TerminalStatusBar
         theme={theme}
         terminalMonoFont={terminalMonoFont}
-        rows={[
-          ["Market Data", resolvedMarketDataStatusLabel],
-          ["Backend", backendHealthLabel],
-          ["Scanner", scannerSourceLabel],
-          ["News", resolvedNewsStatusLabel],
-          ["Broker", brokerSourceLabel],
-          ["Mode", modeSourceLabel],
-          ["Chart", mainChartSourceLabel],
-          ["Main", selectedStock],
-          ["Secondary", secondarySymbol],
-          ["Layout", `${layoutMode} Chart`],
-          ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
-          ["Cloud", user ? user.email : "Local"],
-          ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
-        ]}
+        rows={
+          advancedMode
+            ? [
+                ["Data", resolvedMarketDataStatusLabel],
+                ["Backend", backendHealthLabel],
+                ["Scanner", scannerSourceLabel],
+                ["News", resolvedNewsStatusLabel],
+                ["Broker", brokerSourceLabel],
+                ["Mode", modeSourceLabel],
+                ["Chart", mainChartSourceLabel],
+                ["Main", selectedStock],
+                ["Secondary", secondarySymbol],
+                ["Layout", `${layoutMode} Chart`],
+                ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
+                ["Cloud", user ? user.email : "Local"],
+                ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
+              ]
+            : [
+                ["Data", resolvedMarketDataStatusLabel],
+                ["Scanner", scannerSourceLabel],
+                ["News", resolvedNewsStatusLabel],
+                ["Main", selectedStock],
+                ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
+              ]
+        }
       />
 
       <Suspense fallback={null}>

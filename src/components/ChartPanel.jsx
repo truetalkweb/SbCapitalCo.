@@ -49,6 +49,7 @@ export default function ChartPanel({
   setMainReplayData,
   replayTrades,
   brokerApiUrl,
+  advancedMode = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
   const cleanChartSymbol = String(symbol || "").trim().toUpperCase();
@@ -228,10 +229,12 @@ export default function ChartPanel({
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
           }}
         >
+          {advancedMode && (
           <button style={toolButtonStyle} title="Crosshair">
             <Crosshair size={14} style={toolIconStyle} />
             {!isPhoneChart && "Crosshair"}
           </button>
+          )}
           <button
             style={toolButtonStyle}
             onClick={() => setShowIndicators(!showIndicators)}
@@ -240,22 +243,28 @@ export default function ChartPanel({
             <SlidersHorizontal size={14} style={toolIconStyle} />
             {!isPhoneChart && "Indicators"}
           </button>
+          {advancedMode && (
           <button style={toolButtonStyle} title="Draw">
             <PencilLine size={14} style={toolIconStyle} />
             {!isPhoneChart && "Draw"}
           </button>
+          )}
+          {advancedMode && (
           <button style={toolButtonStyle} onClick={takeScreenshot} title="Screenshot">
             <Camera size={14} style={toolIconStyle} />
             {!isPhoneChart && "Screenshot"}
           </button>
+          )}
           <button style={toolButtonStyle} onClick={toggleFullscreen} title="Fullscreen">
             <Maximize2 size={14} style={toolIconStyle} />
             {!isPhoneChart && "Fullscreen"}
           </button>
+          {advancedMode && (
           <button style={toolButtonStyle} title="Settings">
             <Settings size={14} style={toolIconStyle} />
             {!isPhoneChart && "Settings"}
           </button>
+          )}
 
           {showIndicators && (
             <div

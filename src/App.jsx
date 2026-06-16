@@ -1968,6 +1968,7 @@ export default function App() {
         setMainReplayData={setMainReplayData}
         replayTrades={replayTrades}
         brokerApiUrl={BROKER_API_URL}
+        advancedMode={advancedMode}
       />
     );
   }

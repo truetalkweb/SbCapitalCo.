@@ -80,21 +80,31 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
       setNewsLoading(true);
 
       try {
-        const symbolResponse = await fetchWithTimeout(
-          `${brokerApiUrl}/api/news/${encodeURIComponent(selectedStock)}?limit=${limit}`,
-          8000
-        );
+        let rows = [];
+        let meta = { ...DEFAULT_NEWS_META };
+        const providerWarnings = [];
 
-        if (!symbolResponse.ok) throw new Error("Symbol news unavailable");
+        try {
+          const symbolResponse = await fetchWithTimeout(
+            `${brokerApiUrl}/api/news/${encodeURIComponent(selectedStock)}?limit=${limit}`,
+            8000
+          );
 
-        const symbolPayload = await symbolResponse.json();
-        let rows = Array.isArray(symbolPayload.news) ? symbolPayload.news : [];
-        let meta = symbolPayload;
+          if (!symbolResponse.ok) throw new Error(`Ticker news HTTP ${symbolResponse.status}`);
+
+          const symbolPayload = await symbolResponse.json();
+          rows = Array.isArray(symbolPayload.news) ? symbolPayload.news : [];
+          meta = symbolPayload;
+        } catch (error) {
+          providerWarnings.push(error.message || "Ticker news unavailable");
+        }
 
         if (rows.length < 6) {
-          const marketResponse = await fetchWithTimeout(`${brokerApiUrl}/api/news?limit=${limit}`, 8000);
+          try {
+            const marketResponse = await fetchWithTimeout(`${brokerApiUrl}/api/news?limit=${limit}`, 8000);
 
-          if (marketResponse.ok) {
+            if (!marketResponse.ok) throw new Error(`Market news HTTP ${marketResponse.status}`);
+
             const marketPayload = await marketResponse.json();
             const marketRows = Array.isArray(marketPayload.news) ? marketPayload.news : [];
 
@@ -102,13 +112,20 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
             meta = rows.length
               ? {
                   ...marketPayload,
-                  source: `${symbolPayload.source || "Ticker News"} + Market`,
+                  source: `${meta.source || "Ticker News"} + Market`,
                   providerWarnings: [
-                    ...(symbolPayload.providerWarnings || []),
+                    ...(meta.providerWarnings || []),
                     ...(marketPayload.providerWarnings || []),
+                    ...providerWarnings,
+                  ],
+                  userWarnings: [
+                    ...(meta.userWarnings || []),
+                    ...(marketPayload.userWarnings || []),
                   ],
                 }
               : meta;
+          } catch (error) {
+            providerWarnings.push(error.message || "Market news unavailable");
           }
         }
 
@@ -122,7 +139,14 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
           const nextNews = normalizedRows.length ? normalizedRows : createMarketNewsFallback(selectedStock);
 
           setNews(nextNews);
-          setNewsMeta(buildNewsMeta(meta, nextNews));
+          setNewsMeta(buildNewsMeta({
+            ...meta,
+            providerWarnings: [
+              ...(meta.providerWarnings || []),
+              ...providerWarnings,
+            ],
+            warning: meta.warning || providerWarnings[0] || null,
+          }, nextNews));
         }
       } catch {
         if (!cancelled()) {

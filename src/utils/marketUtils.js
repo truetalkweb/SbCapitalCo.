@@ -24,15 +24,16 @@ export function normalizePanelNewsItem(item, index, selectedSymbol) {
 
   if (!headline) return null;
 
-  const source = item.source || "Market News";
+  const rawSource = String(item.source || "Market News");
+  const source = rawSource.replace(/\s+Fallback$/i, "").trim();
   const fallback = Boolean(item.fallback || item.degraded) ||
-    String(source).toLowerCase().includes("fallback") ||
-    String(source).toLowerCase().includes("scanner");
+    rawSource.toLowerCase().includes("fallback") ||
+    rawSource.toLowerCase().includes("scanner");
 
   return {
     id: item.id || `${selectedSymbol || "MARKET"}-${index}-${headline.slice(0, 32)}`,
     time: formatNewsTime(item.timestamp || item.publishedDate || item.datetime || item.time),
-    source,
+    source: fallback && source.toLowerCase().includes("scanner") ? "Scanner Catalyst" : source,
     text: headline,
     url: item.url || null,
     relatedTicker: item.relatedTicker || selectedSymbol,

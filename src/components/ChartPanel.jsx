@@ -163,13 +163,15 @@ export default function ChartPanel({
 
           <div
             style={{
-              display: "flex",
+              display: isPhoneChart ? "flex" : "grid",
+              gridTemplateColumns: isPhoneChart ? undefined : "auto auto",
               gap: "8px",
               alignItems: "center",
               flexWrap: "wrap",
               justifyContent: isPhoneChart ? "flex-start" : "flex-end",
               marginLeft: isPhoneChart ? 0 : "auto",
               minWidth: 0,
+              width: isPhoneChart ? "100%" : "auto",
             }}
           >
             {editableSymbol && typeof setSymbol === "function" && (

@@ -10,6 +10,8 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
   }));
   const draft = draftState.sourceValue === cleanValue ? draftState.draft : cleanValue;
   const cleanDraft = draft.trim().toUpperCase();
+  const [commitErrorSource, setCommitErrorSource] = useState("");
+  const showCommitError = commitErrorSource === cleanValue;
   const isValidDraft = useMemo(
     () => /^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(cleanDraft),
     [cleanDraft]
@@ -20,14 +22,21 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
 
     if (!clean || !/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(clean)) {
       setDraftState({ sourceValue: cleanValue, draft: cleanValue });
+      setCommitErrorSource(clean ? cleanValue : "");
       return;
     }
 
-    if (clean !== cleanValue) {
-      onCommit(clean);
-    }
+    try {
+      if (clean !== cleanValue) {
+        onCommit(clean);
+      }
 
-    setDraftState({ sourceValue: clean, draft: clean });
+      setDraftState({ sourceValue: clean, draft: clean });
+      setCommitErrorSource("");
+    } catch {
+      setDraftState({ sourceValue: cleanValue, draft: cleanValue });
+      setCommitErrorSource(cleanValue);
+    }
   }, [cleanValue, draft, onCommit]);
 
   return (
@@ -55,6 +64,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
         onChange={(event) => {
           const next = event.target.value.toUpperCase().replace(/[^A-Z0-9./:-]/g, "");
           setDraftState({ sourceValue: cleanValue, draft: next.slice(0, 14) });
+          setCommitErrorSource("");
         }}
         onBlur={commit}
         onKeyDown={(event) => {
@@ -70,13 +80,13 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
           }
         }}
         placeholder="Ticker"
-        title={isValidDraft || !cleanDraft ? "Chart ticker" : "Use letters, numbers, dot, slash, colon, or dash."}
+        title={showCommitError ? "Ticker change was rejected. Try a valid listed symbol." : isValidDraft || !cleanDraft ? "Chart ticker" : "Use letters, numbers, dot, slash, colon, or dash."}
         style={{
           width: "100%",
           height: "26px",
           padding: "0 9px 0 28px",
           background: theme.panel,
-          border: `1px solid ${!isValidDraft && cleanDraft ? theme.red : theme.borderSoft || theme.border}`,
+          border: `1px solid ${showCommitError || (!isValidDraft && cleanDraft) ? theme.red : theme.borderSoft || theme.border}`,
           borderRadius: "6px",
           color: theme.text,
           outline: "none",

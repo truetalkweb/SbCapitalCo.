@@ -71,14 +71,28 @@ export default function MarketNewsPanel({
           paddingBottom: "6px",
         }}
       >
-        <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950, textTransform: "uppercase" }}>
-          Market News
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950, textTransform: "uppercase" }}>
+            Market News
+          </div>
+          <div
+            style={{
+              marginTop: "2px",
+              color: theme.muted,
+              fontSize: "9px",
+              fontWeight: 800,
+              fontFamily: terminalMonoFont,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {selectedStock || "MARKET"} / backend feed
+          </div>
         </div>
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "7px",
+            gap: "8px",
             minWidth: 0,
             color: statusColor,
             fontSize: "9px",
@@ -98,7 +112,7 @@ export default function MarketNewsPanel({
           <span style={{ fontFamily: terminalMonoFont, whiteSpace: "nowrap" }}>
             {statusLabel}
           </span>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: theme.muted }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: theme.muted, maxWidth: "240px" }}>
             {visibleMessage || newsMeta.source || "Backend News"}
           </span>
         </div>
@@ -122,15 +136,15 @@ export default function MarketNewsPanel({
                 rel={item.url ? "noreferrer" : undefined}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "76px minmax(78px, 110px) minmax(0, 1fr) 72px",
-                  gap: "12px",
+                  gridTemplateColumns: "minmax(58px, 74px) minmax(70px, 104px) minmax(0, 1fr) minmax(46px, 70px)",
+                  gap: "10px",
                   alignItems: "start",
                   color: theme.text,
                   textDecoration: "none",
                   borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-                  padding: "8px 4px",
+                  padding: "9px 5px",
                   fontSize: "12px",
-                  lineHeight: "1.38",
+                  lineHeight: "1.42",
                   cursor: item.url ? "pointer" : "default",
                   transition: "background 0.15s ease",
                 }}
@@ -157,9 +171,9 @@ export default function MarketNewsPanel({
                   style={{
                     fontFamily: terminalMonoFont,
                     fontVariantNumeric: "tabular-nums",
-                    color: item.fallback ? theme.amber : theme.muted,
+                    color: item.fallback ? theme.amber : theme.faint || theme.muted,
                     fontSize: "10px",
-                    fontWeight: 850,
+                    fontWeight: item.fallback ? 850 : 750,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -173,13 +187,18 @@ export default function MarketNewsPanel({
                     color: item.url ? theme.text : theme.muted,
                     fontFamily: '"Roboto", system-ui, sans-serif',
                     fontSize: "12px",
-                    fontWeight: 650,
+                    fontWeight: item.url ? 700 : 650,
                     whiteSpace: "normal",
                     overflowWrap: "anywhere",
                   }}
                   title={item.summary || item.text}
                 >
                   {item.text}
+                  {item.url && (
+                    <span style={{ color: theme.blue, fontSize: "10px", fontWeight: 800 }}>
+                      {" "}OPEN
+                    </span>
+                  )}
                 </div>
                 <div
                   style={{

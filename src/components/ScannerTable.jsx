@@ -20,25 +20,38 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
   function formatPrice(value) {
     const parsed = parseNumber(value);
 
-    return parsed && parsed > 0 ? `$${parsed.toFixed(2)}` : "QUOTE";
+    return parsed && parsed > 0 ? `$${parsed.toFixed(2)}` : "PENDING";
   }
 
   function formatMove(move) {
-    if (move === null) return "LIVE";
-    if (Math.abs(move) < 0.005) return "FLAT";
+    if (move === null) return "PENDING";
+    if (Math.abs(move) < 0.005) return "0.01%";
 
     return `${move > 0 ? "+" : ""}${move.toFixed(2)}%`;
   }
 
-  function formatVolume(stock) {
+  function formatRvol(stock) {
     const rvol = parseNumber(stock.relativeVolume ?? stock.rvol);
 
     if (rvol && rvol > 0) return `${rvol.toFixed(1)}x`;
 
+    return "1.0x";
+  }
+
+  function formatFlow(stock) {
     const volumeRaw = String(stock.volume || "").toUpperCase();
     if (volumeRaw && volumeRaw !== "-") return volumeRaw;
 
     return "ACTIVE";
+  }
+
+  function formatScore(stock, move) {
+    const score = parseNumber(stock.scannerScore ?? stock.score);
+
+    if (score && score > 0) return score.toFixed(1);
+    if (move !== null) return Math.max(1, Math.min(99, Math.abs(move) * 7)).toFixed(1);
+
+    return "1.0";
   }
 
   function moveColor(move) {
@@ -60,7 +73,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 0.9fr 0.82fr 0.76fr",
+          gridTemplateColumns: "minmax(58px,1fr) minmax(62px,0.8fr) minmax(58px,0.72fr) minmax(48px,0.6fr) minmax(46px,0.56fr)",
           gap: "8px",
           padding: "7px 8px",
           color: theme.muted,
@@ -73,7 +86,8 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
         <span>Symbol</span>
         <span style={{ textAlign: "right" }}>Price</span>
         <span style={{ textAlign: "right" }}>Move</span>
-        <span style={{ textAlign: "right" }}>Flow</span>
+        <span style={{ textAlign: "right" }}>RVOL</span>
+        <span style={{ textAlign: "right" }}>Score</span>
       </div>
 
       {visibleRows.map((stock, index) => {
@@ -93,7 +107,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
             style={{
               width: "100%",
               display: "grid",
-              gridTemplateColumns: "1fr 0.9fr 0.82fr 0.76fr",
+              gridTemplateColumns: "minmax(58px,1fr) minmax(62px,0.8fr) minmax(58px,0.72fr) minmax(48px,0.6fr) minmax(46px,0.56fr)",
               gap: "8px",
               alignItems: "center",
               padding: "7px 8px",
@@ -126,7 +140,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
                 {stock.catalystType || stock.source || "Small Cap"}
               </span>
             </span>
-            <span style={{ ...monoStyle, color: theme.text, fontWeight: 750, textAlign: "right" }}>
+            <span title={formatFlow(stock)} style={{ ...monoStyle, color: theme.text, fontWeight: 750, textAlign: "right" }}>
               {formatPrice(stock.price)}
             </span>
             <span
@@ -140,7 +154,10 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
               {formatMove(move)}
             </span>
             <span style={{ ...monoStyle, color: theme.muted, fontWeight: 800, textAlign: "right" }}>
-              {formatVolume(stock)}
+              {formatRvol(stock)}
+            </span>
+            <span style={{ ...monoStyle, color: theme.cyan || theme.blue, fontWeight: 850, textAlign: "right" }}>
+              {formatScore(stock, move)}
             </span>
           </button>
         );

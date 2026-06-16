@@ -29,6 +29,7 @@ export function normalizePanelNewsItem(item, index, selectedSymbol) {
   const fallback = Boolean(item.fallback || item.degraded) ||
     rawSource.toLowerCase().includes("fallback") ||
     rawSource.toLowerCase().includes("scanner");
+  const sourceType = getNewsSourceType({ source: rawSource, fallback, url: item.url });
 
   return {
     id: item.id || `${selectedSymbol || "MARKET"}-${index}-${headline.slice(0, 32)}`,
@@ -39,6 +40,120 @@ export function normalizePanelNewsItem(item, index, selectedSymbol) {
     relatedTicker: item.relatedTicker || selectedSymbol,
     summary: item.summary || "",
     fallback,
+    sourceType,
+  };
+}
+
+export function getNewsSourceType({ source = "", fallback = false, url = null } = {}) {
+  const value = String(source || "").toLowerCase();
+
+  if (fallback || value.includes("scanner")) return "Scanner Catalyst";
+  if (value.includes("fallback") || value.includes("local")) return "Fallback";
+  if (url && (value.includes("yahoo") || value.includes("finnhub") || value.includes("fmp"))) return "Real Article";
+  if (url) return "Article";
+
+  return "Market Context";
+}
+
+export function getScannerSourceType(stock = {}) {
+  const source = String(stock.source || stock.provider || stock.catalystType || "").toLowerCase();
+
+  if (stock.fallback || stock.degraded || source.includes("fallback") || source.includes("local")) {
+    return { type: "Scanner Context", confidence: "Limited" };
+  }
+  if (source.includes("yahoo") || stock.latestNews?.url || stock.newsUrl) {
+    return { type: "News Linked", confidence: "High" };
+  }
+  if (source.includes("fmp") || source.includes("questrade")) {
+    return { type: "Provider Data", confidence: "Medium" };
+  }
+  if (source.includes("scanner")) {
+    return { type: "Ranked Scan", confidence: "Medium" };
+  }
+
+  return { type: "Market Context", confidence: "Limited" };
+}
+
+export function formatSourceFreshness(value) {
+  const parsed = value ? new Date(value).getTime() : 0;
+
+  if (!parsed || Number.isNaN(parsed)) return "Pending";
+
+  const ageMs = Math.max(0, Date.now() - parsed);
+
+  if (ageMs < 60_000) return "Live";
+  if (ageMs < 3_600_000) return `${Math.round(ageMs / 60_000)}m ago`;
+  if (ageMs < 86_400_000) return `${Math.round(ageMs / 3_600_000)}h ago`;
+
+  return `${Math.round(ageMs / 86_400_000)}d ago`;
+}
+
+function getConfidenceRank(value) {
+  if (value === "High") return 3;
+  if (value === "Medium") return 2;
+  return 1;
+}
+
+function lowestConfidence(...values) {
+  return values.filter(Boolean).reduce((lowest, value) => (
+    getConfidenceRank(value) < getConfidenceRank(lowest) ? value : lowest
+  ), "High");
+}
+
+export function buildDataConfidence({
+  selectedStock = "",
+  selectedStockData = null,
+  qtrdHealth = null,
+  newsMeta = {},
+  scannerMeta = {},
+} = {}) {
+  const quoteSource = String(selectedStockData?.source || qtrdHealth?.label || "Quote Pending");
+  const quoteLabel = selectedStockData?.delayed || /DELAYED|PENDING|SIM|DEGRADED/i.test(quoteSource)
+    ? quoteSource
+    : /QTRD|QUESTRADE|LIVE/i.test(quoteSource)
+      ? "Questrade Quote"
+      : quoteSource;
+  const quoteConfidence = /LIVE|QTRD|QUESTRADE/i.test(quoteLabel) && !/DELAYED|PENDING|DEGRADED/i.test(quoteLabel)
+    ? "High"
+    : /DELAYED|REST|BACKEND|SIM/i.test(quoteLabel)
+      ? "Medium"
+      : "Limited";
+  const newsLabel = newsMeta?.source || newsMeta?.providerStatus?.source || "News Pending";
+  const newsConfidence = newsMeta?.degraded || (newsMeta?.fallbackRows > 0 && newsMeta?.fallbackRows === newsMeta?.rowCount)
+    ? "Limited"
+    : newsMeta?.providerStatus?.providerLimited
+      ? "Medium"
+      : newsMeta?.source
+        ? "High"
+        : "Limited";
+  const scannerLabel = scannerMeta?.source || scannerMeta?.provider || "Scanner Pending";
+  const scannerConfidence = scannerMeta?.fallback || scannerMeta?.degraded
+    ? "Limited"
+    : scannerMeta?.cached
+      ? "Medium"
+      : scannerMeta?.source
+        ? "High"
+        : "Limited";
+  const updatedCandidates = [
+    selectedStockData?.lastUpdated,
+    newsMeta?.updatedAt,
+    newsMeta?.backendTime,
+    scannerMeta?.updatedAt,
+    scannerMeta?.lastSuccessAt,
+  ]
+    .map((value) => (value ? new Date(value).getTime() : 0))
+    .filter((value) => value && !Number.isNaN(value));
+  const lastUpdated = updatedCandidates.length ? new Date(Math.max(...updatedCandidates)).toISOString() : null;
+  const confidence = lowestConfidence(quoteConfidence, newsConfidence, scannerConfidence);
+
+  return {
+    symbol: String(selectedStock || selectedStockData?.symbol || "").toUpperCase() || "MARKET",
+    confidence,
+    lastUpdated,
+    lastUpdatedLabel: formatSourceFreshness(lastUpdated),
+    quote: { label: quoteLabel, confidence: quoteConfidence },
+    news: { label: newsLabel, confidence: newsConfidence },
+    scanner: { label: scannerLabel, confidence: scannerConfidence },
   };
 }
 

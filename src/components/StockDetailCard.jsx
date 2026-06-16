@@ -159,7 +159,7 @@ function buildStockDetailData(ticker, source = {}) {
   const watchStatus = Boolean(source.watchStatus || source.watched);
   const whyMoving = String(
     source.whyMoving ||
-      `${symbol} is active because price movement, relative volume, and session range are confirming the scanner signal.`
+      `${symbol} is active because price movement, relative volume, and session range are visible in the scanner data.`
   ).trim();
 
   return {
@@ -181,6 +181,9 @@ function buildStockDetailData(ticker, source = {}) {
     watchStatus,
     sector: profile.sector,
     riskLabel: riskScore >= 8 ? "High" : riskScore >= 5 ? "Elevated" : "Controlled",
+    sourceType: source.sourceType || "Market Context",
+    sourceConfidence: source.sourceConfidence || "Limited",
+    sourceLabel: source.sourceLabel || source.source || "Scanner",
   };
 }
 
@@ -212,6 +215,8 @@ export default function StockDetailCard({
   const positive = data.changePercent > 0;
   const riskColor =
     data.riskLabel === "High" ? palette.red : data.riskLabel === "Elevated" ? palette.amber : palette.green;
+  const sourceConfidenceColor =
+    data.sourceConfidence === "High" ? palette.green : data.sourceConfidence === "Medium" ? palette.amber : palette.red;
   const keyDrivers = [
     Math.abs(data.intradayMovePercent) >= 0.05
       ? `${data.intradayMovePercent > 0 ? "Up" : "Down"} ${Math.abs(data.intradayMovePercent).toFixed(2)}% intraday`
@@ -293,6 +298,20 @@ export default function StockDetailCard({
             >
               {data.watchStatus ? "WATCHING" : "SCAN"}
             </span>
+            <span
+              title={`${data.sourceType} / ${data.sourceLabel}`}
+              style={{
+                border: `1px solid ${sourceConfidenceColor}55`,
+                color: sourceConfidenceColor,
+                background: `${sourceConfidenceColor}12`,
+                borderRadius: "999px",
+                padding: "2px 6px",
+                fontSize: "9px",
+                fontWeight: 950,
+              }}
+            >
+              {data.sourceConfidence}
+            </span>
           </div>
           <div style={{ marginTop: "5px", color: palette.muted, fontSize: "10.5px", fontWeight: 750 }}>
             {data.sector} detail
@@ -351,7 +370,7 @@ export default function StockDetailCard({
       >
         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "center" }}>
           <b style={{ color: palette.text, fontSize: "10px", fontWeight: 950, textTransform: "uppercase" }}>
-            Scan Brief
+            Signal Brief
           </b>
           <span style={{ ...monoStyle, color: riskColor, fontSize: "10px", fontWeight: 800 }}>
             Risk {data.riskLabel}
@@ -385,9 +404,12 @@ export default function StockDetailCard({
           </div>
           <div>
             <div style={{ color: palette.green, fontSize: "9px", fontWeight: 900, textTransform: "uppercase" }}>
-              Why Moving
+              Observed Drivers
             </div>
             <div style={{ marginTop: "3px", color: palette.muted }}>{data.whyMoving}</div>
+          </div>
+          <div style={{ color: palette.muted, fontSize: "9.5px" }}>
+            Source: <span style={{ color: sourceConfidenceColor, ...monoStyle }}>{data.sourceType}</span>. Treat limited signals as context until a real article, quote, and tape confirmation line up.
           </div>
         </div>
       </div>

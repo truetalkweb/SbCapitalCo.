@@ -1,6 +1,7 @@
 import { useState } from "react";
 import StockDetailCard from "./StockDetailCard";
 import { getCleanProviderMessage } from "../utils/healthStatus";
+import { getScannerSourceType } from "../utils/marketUtils";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -147,15 +148,6 @@ export default function ProfessionalScanner({
     return { label: "Controlled", color: theme.green };
   }
 
-  function getRowSourceType(stock) {
-    const source = String(stock.source || stock.provider || stock.catalystType || "").toLowerCase();
-
-    if (stock.fallback || stock.degraded || source.includes("fallback") || source.includes("local")) return "Context";
-    if (source.includes("fmp") || source.includes("yahoo") || source.includes("questrade") || source.includes("scanner")) return "Provider";
-
-    return "Ranked";
-  }
-
   function cleanWhyText(text, symbol) {
     return String(text || "")
       .replace(new RegExp(`^${symbol}\\s+ranks\\s+because\\s+of\\s+`, "i"), `${symbol} is active on `)
@@ -177,7 +169,7 @@ export default function ProfessionalScanner({
     if (move >= 8 && relativeVolume >= 3) {
       return {
         label: "Momentum",
-        text: `${stock.symbol} is moving on confirmed momentum and elevated relative volume.`,
+        text: `${stock.symbol} is active on observed momentum and elevated relative volume.`,
       };
     }
 
@@ -191,7 +183,7 @@ export default function ProfessionalScanner({
     if (move >= 3 && volume >= 1_000_000) {
       return {
         label: "Volume",
-        text: `${stock.symbol} is moving on institutional-level tape activity.`,
+        text: `${stock.symbol} is active on unusually heavy tape activity.`,
       };
     }
 
@@ -251,6 +243,7 @@ export default function ProfessionalScanner({
       : null;
     const risk = backendRisk || getRiskProfile({ move, relativeVolume, floatValue, price });
     const catalyst = getCatalystProfile(stock, move, relativeVolume, volume, gap);
+    const sourceProfile = getScannerSourceType(stock);
     const backendScore = Number(stock.scannerScore || 0);
     const calculatedScore = Math.min(
       99,
@@ -264,7 +257,13 @@ export default function ProfessionalScanner({
           (risk.label === "High" ? 4 : 0)
       )
     );
-    const rankScore = backendScore > 0 ? Math.min(99, backendScore) : calculatedScore;
+    const rawRankScore = backendScore > 0 ? Math.min(99, backendScore) : calculatedScore;
+    const weakSignal = move < 1 && relativeVolume < 1.2 && !["Catalyst", "News"].includes(catalyst.label);
+    const rankScore = sourceProfile.confidence === "Limited"
+      ? Math.min(rawRankScore, weakSignal ? 48 : 72)
+      : sourceProfile.confidence === "Medium"
+        ? Math.min(rawRankScore, weakSignal ? 58 : 88)
+        : rawRankScore;
     const floatBucket = stock.floatBucket || getFloatBucket(floatValue);
     const analysis = {
       signedMove,
@@ -279,6 +278,7 @@ export default function ProfessionalScanner({
       relativeVolume,
       risk,
       catalyst,
+      sourceProfile,
       score: rankScore.toFixed(1),
       score10: Math.min(10, Math.max(1, Math.round(rankScore / 10))),
       rankScore,
@@ -328,7 +328,7 @@ export default function ProfessionalScanner({
       return true;
     })
     .sort((a, b) => b.analysis.rankScore - a.analysis.rankScore);
-  const providerRowCount = analyzedStocks.filter(({ stock }) => getRowSourceType(stock) !== "Context").length;
+  const providerRowCount = analyzedStocks.filter(({ stock }) => getScannerSourceType(stock).confidence !== "Limited").length;
   const contextRowCount = analyzedStocks.length - providerRowCount;
 
   function pickStock(stock) {
@@ -560,6 +560,9 @@ export default function ProfessionalScanner({
               whyMoving: detailAnalysis.whyMoving,
               intradayMovePercent: detailAnalysis.signedMove,
               volumePercentOfAvg: detailAnalysis.relativeVolume * 100,
+              sourceType: detailAnalysis.sourceProfile.type,
+              sourceConfidence: detailAnalysis.sourceProfile.confidence,
+              sourceLabel,
             }}
             theme={theme}
             watchStatus={Boolean(detailStock.watchStatus || detailStock.watched)}
@@ -613,9 +616,15 @@ export default function ProfessionalScanner({
             const positive = analysis.signedMove >= 0;
             const isSelected = selectedScannerStock?.symbol === stock.symbol;
             const selectedBackground = "rgba(25,198,216,0.12)";
-            const rowSourceType = getRowSourceType(stock);
-            const isContextRow = rowSourceType === "Context";
+            const rowSourceProfile = analysis.sourceProfile || getScannerSourceType(stock);
+            const rowSourceType = rowSourceProfile.type;
+            const isContextRow = rowSourceProfile.confidence === "Limited";
             const cleanWhy = cleanWhyText(analysis.whyMoving, stock.symbol);
+            const confidenceColor = rowSourceProfile.confidence === "High"
+              ? theme.green
+              : rowSourceProfile.confidence === "Medium"
+                ? theme.amber
+                : theme.red;
 
             return (
               <div
@@ -646,7 +655,7 @@ export default function ProfessionalScanner({
                   <div style={{ minWidth: 0 }}>
                     <div style={{ ...monoStyle, fontWeight: 800, color: theme.text }}>{stock.symbol}</div>
                     <div style={{ color: theme.muted, fontSize: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {rowSourceType} / {analysis.tags.slice(0, 1).join(" / ") || analysis.catalyst.label}
+                      {rowSourceType} / {rowSourceProfile.confidence} / {analysis.tags.slice(0, 1).join(" / ") || analysis.catalyst.label}
                     </div>
                   </div>
                   <div style={{ ...monoStyle, color: theme.text, fontWeight: 650, textAlign: "right" }}>
@@ -669,7 +678,7 @@ export default function ProfessionalScanner({
                   <div style={{ ...monoStyle, color: analysis.relativeVolume >= 2 ? theme.green : theme.muted, fontWeight: 800, textAlign: "right" }}>
                     {analysis.relativeVolume.toFixed(1)}x
                   </div>
-                  <div style={{ ...monoStyle, color: theme.cyan || theme.blue, fontWeight: 850, textAlign: "right" }}>
+                  <div style={{ ...monoStyle, color: confidenceColor, fontWeight: 850, textAlign: "right" }}>
                     {analysis.score}
                   </div>
                   <div

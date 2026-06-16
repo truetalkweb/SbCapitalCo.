@@ -32,6 +32,7 @@ export default function MarketNewsPanel({
   newsLoading,
   newsMeta,
   selectedStock,
+  dataConfidence,
   theme,
   terminalMonoFont,
 }) {
@@ -46,6 +47,50 @@ export default function MarketNewsPanel({
     newsMeta.warning,
     ...(newsMeta.providerWarnings || []),
   ].filter(Boolean).join("; ") || newsMeta.source;
+  const confidenceColor =
+    dataConfidence?.confidence === "High"
+      ? theme.green
+      : dataConfidence?.confidence === "Medium"
+        ? theme.amber
+        : theme.red;
+
+  function confidencePill(label, value, confidence) {
+    const color = confidence === "High" ? theme.green : confidence === "Medium" ? theme.amber : theme.red;
+
+    return (
+      <span
+        title={`${label}: ${value || "Pending"} / ${confidence || "Limited"}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+          minWidth: 0,
+          color: theme.text,
+          background: "rgba(255,255,255,0.025)",
+          border: `1px solid ${theme.borderSoft || theme.border}`,
+          borderRadius: "999px",
+          padding: "3px 6px",
+          fontSize: "9px",
+          fontWeight: 850,
+        }}
+      >
+        <span style={{ color: theme.muted }}>{label}</span>
+        <span
+          style={{
+            color,
+            fontFamily: terminalMonoFont,
+            fontVariantNumeric: "tabular-nums",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            maxWidth: "92px",
+          }}
+        >
+          {confidence || "Limited"}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <div
@@ -118,6 +163,50 @@ export default function MarketNewsPanel({
         </div>
       </div>
 
+      {dataConfidence && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            minWidth: 0,
+            overflow: "hidden",
+            padding: "2px 0 5px",
+            borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+          }}
+        >
+          <span
+            title={`Selected ticker data confidence: ${dataConfidence.confidence}`}
+            style={{
+              color: confidenceColor,
+              fontFamily: terminalMonoFont,
+              fontVariantNumeric: "tabular-nums",
+              fontSize: "9px",
+              fontWeight: 950,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {dataConfidence.symbol} DATA {dataConfidence.confidence.toUpperCase()}
+          </span>
+          {confidencePill("Quote", dataConfidence.quote?.label, dataConfidence.quote?.confidence)}
+          {confidencePill("News", dataConfidence.news?.label, dataConfidence.news?.confidence)}
+          {confidencePill("Scan", dataConfidence.scanner?.label, dataConfidence.scanner?.confidence)}
+          <span
+            style={{
+              marginLeft: "auto",
+              color: theme.muted,
+              fontFamily: terminalMonoFont,
+              fontVariantNumeric: "tabular-nums",
+              fontSize: "9px",
+              fontWeight: 800,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Updated {dataConfidence.lastUpdatedLabel}
+          </span>
+        </div>
+      )}
+
       {newsLoading ? (
         <LoadingPanel theme={theme} label="Loading news" height="100%" />
       ) : news.length === 0 ? (
@@ -127,6 +216,12 @@ export default function MarketNewsPanel({
           {news.map((item) => {
             const NewsRow = item.url ? "a" : "div";
             const sourceLabel = item.fallback ? item.source || "Fallback" : item.source;
+            const sourceType = item.sourceType || (item.fallback ? "Scanner Catalyst" : item.url ? "Real Article" : "Market Context");
+            const sourceColor = sourceType === "Real Article" || sourceType === "Article"
+              ? theme.green
+              : sourceType === "Market Context"
+                ? theme.amber
+                : theme.red;
 
             return (
               <NewsRow
@@ -136,7 +231,7 @@ export default function MarketNewsPanel({
                 rel={item.url ? "noreferrer" : undefined}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(58px, 74px) minmax(70px, 104px) minmax(0, 1fr) minmax(46px, 70px)",
+                  gridTemplateColumns: "minmax(58px, 74px) minmax(70px, 104px) minmax(82px, 110px) minmax(0, 1fr) minmax(46px, 70px)",
                   gap: "10px",
                   alignItems: "start",
                   color: theme.text,
@@ -181,6 +276,23 @@ export default function MarketNewsPanel({
                   title={sourceLabel}
                 >
                   {sourceLabel}
+                </div>
+                <div
+                  style={{
+                    justifySelf: "start",
+                    color: sourceColor,
+                    border: `1px solid ${sourceColor}40`,
+                    background: `${sourceColor}12`,
+                    borderRadius: "999px",
+                    padding: "2px 6px",
+                    fontSize: "9px",
+                    fontWeight: 900,
+                    whiteSpace: "nowrap",
+                    fontFamily: terminalMonoFont,
+                  }}
+                  title={sourceType}
+                >
+                  {sourceType}
                 </div>
                 <div
                   style={{

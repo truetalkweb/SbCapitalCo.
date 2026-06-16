@@ -52,6 +52,7 @@ function buildNewsMeta(meta, normalizedRows) {
     providerStatus: meta.providerStatus || null,
     backendTime: meta.backendTime || null,
     fallbackRows,
+    rowCount: normalizedRows.length,
   };
 }
 

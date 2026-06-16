@@ -48,6 +48,7 @@ import { useTerminalWorkspace } from "./hooks/useTerminalWorkspace";
 import { useTerminalSymbols } from "./hooks/useTerminalSymbols";
 import {
   applyLiveQuote,
+  buildDataConfidence,
   buildTerminalSourceLabels,
   fetchWithTimeout,
 } from "./utils/marketUtils";
@@ -1888,6 +1889,17 @@ export default function App() {
     scannerMeta?.backendTime ||
     newsMeta?.updatedAt ||
     scannerMeta?.updatedAt;
+  const selectedDataConfidence = useMemo(
+    () =>
+      buildDataConfidence({
+        selectedStock,
+        selectedStockData,
+        qtrdHealth,
+        newsMeta,
+        scannerMeta,
+      }),
+    [newsMeta, qtrdHealth, scannerMeta, selectedStock, selectedStockData]
+  );
 
   function renderChartPanel(chartProps) {
     return (
@@ -2390,6 +2402,7 @@ export default function App() {
               newsLoading={newsLoading}
               newsMeta={newsMeta}
               selectedStock={selectedStock}
+              dataConfidence={selectedDataConfidence}
               theme={theme}
               terminalMonoFont={terminalMonoFont}
             />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, Search, Star } from "lucide-react";
+import { getNewsSourceType } from "../utils/marketUtils";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -700,9 +701,12 @@ export default function MarketIntelligenceTerminal({
                   <div style={{ marginTop: "8px", display: "grid", gap: "4px" }}>
                     {activeIntelligence.whyMoving.slice(0, 3).map((reason, index) => (
                       <div key={`${selectedTicker}-why-${index}`} style={{ color: theme.muted, fontSize: "10px", lineHeight: 1.35 }}>
-                        <span style={{ color: theme.cyan || theme.blue, fontWeight: 900 }}>Why:</span> {reason}
+                        <span style={{ color: theme.cyan || theme.blue, fontWeight: 900 }}>Driver:</span> {reason}
                       </div>
                     ))}
+                    <div style={{ color: theme.faint || theme.muted, fontSize: "9px", lineHeight: 1.35 }}>
+                      Catalyst intelligence is a ranked interpretation of available news and scanner context, not confirmation by itself.
+                    </div>
                   </div>
                 )}
               </div>
@@ -711,6 +715,16 @@ export default function MarketIntelligenceTerminal({
             {(selectedNews.length ? selectedNews : news.slice(0, 8)).map((item) => {
               const summary = summaries[item.id] || item.aiSummary;
               const color = sentimentColor(theme, summary?.sentiment);
+              const sourceType = getNewsSourceType({
+                source: item.source,
+                fallback: item.fallback,
+                url: item.url,
+              });
+              const sourceTypeColor = sourceType === "Real Article" || sourceType === "Article"
+                ? theme.green
+                : sourceType === "Market Context"
+                  ? theme.amber
+                  : theme.red;
 
               return (
                 <article
@@ -744,6 +758,20 @@ export default function MarketIntelligenceTerminal({
                     </button>
                     <span style={{ ...monoStyle, color: theme.muted, fontSize: "9px", fontWeight: 500 }}>
                       {formatTime(item.timestamp)} / {item.source}
+                    </span>
+                    <span
+                      style={{
+                        ...monoStyle,
+                        color: sourceTypeColor,
+                        border: `1px solid ${sourceTypeColor}40`,
+                        background: `${sourceTypeColor}12`,
+                        borderRadius: "999px",
+                        padding: "2px 6px",
+                        fontSize: "8px",
+                        fontWeight: 800,
+                      }}
+                    >
+                      {sourceType}
                     </span>
                   </div>
                   <div style={{ color: theme.text, fontSize: "11px", fontWeight: 700, lineHeight: "1.35" }}>

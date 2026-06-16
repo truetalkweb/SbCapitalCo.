@@ -2286,6 +2286,8 @@ export default function App() {
         compact={isCompactTerminal}
         advancedMode={advancedMode}
         setAdvancedMode={setAdvancedMode}
+        selectedSymbol={selectedStock}
+        onSymbolCommit={selectMainSymbol}
       />
 
       <TickerTape

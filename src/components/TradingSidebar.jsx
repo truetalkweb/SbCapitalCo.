@@ -11,15 +11,15 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { id: "intelligence", label: "Intel", icon: Brain },
   { id: "charts", label: "Charts", icon: BarChart3 },
   { id: "scanner", label: "Scanner", icon: Search },
   { id: "watchlist", label: "Watchlist", icon: Star },
+  { id: "intelligence", label: "Intel", icon: Brain },
   { id: "alerts", label: "Alerts", icon: Bell },
   { id: "broker", label: "Broker", icon: DollarSign, advanced: true },
   { id: "replay", label: "Replay", icon: Play, advanced: true },
   { id: "journal", label: "Journal", icon: BookOpen, advanced: true },
-  { id: "settings", label: "Settings", icon: Settings },
+  { id: "settings", label: "Settings", icon: Settings, advanced: true },
 ];
 
 export default function Tradingsidebar({
@@ -33,12 +33,12 @@ export default function Tradingsidebar({
   return (
     <aside
       style={{
-        width: "60px",
-        minWidth: "60px",
-        maxWidth: "60px",
+        width: "58px",
+        minWidth: "58px",
+        maxWidth: "58px",
         height: "100%",
-        background: "linear-gradient(180deg, #060a12, #03050a)",
-        borderRight: "1px solid #202a3a",
+        background: "linear-gradient(180deg, #070b13, #03050a)",
+        borderRight: "1px solid rgba(38,49,66,0.72)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -93,8 +93,8 @@ export default function Tradingsidebar({
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          paddingTop: "8px",
-          gap: "3px",
+          paddingTop: "10px",
+          gap: "5px",
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
@@ -111,13 +111,11 @@ export default function Tradingsidebar({
               onClick={() => setActiveWorkspace(item.id)}
               style={{
                 width: "100%",
-                height: "46px",
+                height: "42px",
                 border: "none",
-                borderLeft: active
-                  ? "3px solid #19c6d8"
-                  : "3px solid transparent",
+                borderLeft: active ? "2px solid #19c6d8" : "2px solid transparent",
                 background: active
-                  ? "linear-gradient(90deg, rgba(25,198,216,0.18), transparent)"
+                  ? "linear-gradient(90deg, rgba(25,198,216,0.16), rgba(25,198,216,0.02))"
                   : "transparent",
                 color: active ? "#19c6d8" : "#8a95a8",
                 display: "flex",

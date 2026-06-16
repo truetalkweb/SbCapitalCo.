@@ -133,6 +133,8 @@ export default function TerminalTopBar({
   compact = false,
   advancedMode = false,
   setAdvancedMode,
+  selectedSymbol,
+  onSymbolCommit,
 }) {
   const now = new Date();
 
@@ -207,6 +209,16 @@ export default function TerminalTopBar({
     return theme.muted;
   }
 
+  function commitSymbol(value) {
+    const cleanSymbol = String(value || "").trim().toUpperCase();
+
+    if (!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(cleanSymbol)) {
+      return;
+    }
+
+    onSymbolCommit?.(cleanSymbol);
+  }
+
   return (
     <div
       style={{
@@ -262,6 +274,46 @@ export default function TerminalTopBar({
         <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 700, fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>
           {nyTime} ET
         </span>
+      </div>
+
+      <div
+        style={{
+          position: "relative",
+          width: compact ? "100%" : "190px",
+          minWidth: compact ? "160px" : "170px",
+          flexShrink: 0,
+        }}
+      >
+        <input
+          key={selectedSymbol}
+          defaultValue={selectedSymbol || ""}
+          onChange={(event) => {
+            event.currentTarget.value = event.currentTarget.value.toUpperCase();
+          }}
+          onBlur={(event) => commitSymbol(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              commitSymbol(event.currentTarget.value);
+              event.currentTarget.blur();
+            }
+          }}
+          aria-label="Global ticker search"
+          placeholder="Search ticker"
+          style={{
+            width: "100%",
+            height: "28px",
+            background: theme.panel2,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            color: theme.text,
+            borderRadius: "6px",
+            padding: "0 10px",
+            fontFamily: monoFont,
+            fontSize: "11px",
+            fontWeight: 850,
+            outline: "none",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+          }}
+        />
       </div>
 
       <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>

@@ -1926,6 +1926,7 @@ export default function App() {
         .slice(0, 4),
     [news, selectedStock]
   );
+  const showAccountCloudInLeftDock = advancedMode || activeWorkspace === "settings";
 
   useEffect(() => {
     saveSetting("sb_advanced_mode", advancedMode);
@@ -2260,7 +2261,7 @@ export default function App() {
               ? "Trading Journal"
               : activeWorkspace === "settings"
               ? "Workspace Settings"
-              : "Watchlist + Scanner"
+              : "Scanner + Watchlist"
           )}
 
           {activeWorkspace === "journal" && (
@@ -2309,6 +2310,29 @@ export default function App() {
 
           {activeWorkspace !== "journal" && (
           <>
+          {sectionHeader("scanner", "Scanner", scannerLoading ? "Loading" : String(scannerStocks.length))}
+
+          {leftSectionsOpen.scanner && (
+            <Suspense fallback={<LoadingPanel theme={theme} label="Loading scanner" height="120px" />}>
+              {scannerLoading ? (
+                <LoadingPanel theme={theme} label="Loading scanner" height="120px" />
+              ) : (
+                <ProfessionalScanner
+                  theme={theme}
+                  scannerTab={scannerTab}
+                  setScannerTab={setScannerTab}
+                  scannerStocks={scannerStocks}
+                  scannerMeta={scannerMeta}
+                  selectMainSymbol={selectMainSymbol}
+                  selectedScannerStock={selectedScannerStock}
+                  addSymbolToWatchlist={addSymbolToWatchlist}
+                />
+              )}
+            </Suspense>
+          )}
+
+          {sectionHeader("watchlist", "Watchlist", String(liveStocks.length))}
+
           <div style={{ position: "relative", marginBottom: "6px" }}>
             <Search
               size={14}
@@ -2329,7 +2353,7 @@ export default function App() {
               placeholder="AAPL, MSFT, SPY..."
               style={{
                 width: "100%",
-                padding: "8px 8px 8px 28px",
+                padding: "7px 8px 7px 28px",
                 background: theme.panel2,
                 border: `1px solid ${theme.border}`,
                 color: theme.text,
@@ -2381,12 +2405,16 @@ export default function App() {
               alignItems: "center",
               justifyContent: "center",
               gap: "6px",
+              height: "28px",
+              marginBottom: "7px",
             }}
           >
-            <Plus size={14} />
+            <Plus size={12} />
             <span>Add Symbol</span>
           </button>
 
+          {showAccountCloudInLeftDock && (
+          <>
           {sectionHeader("account", "Account + Cloud", user ? "Signed in" : "Local")}
 
           {leftSectionsOpen.account && (user ? (
@@ -2476,8 +2504,8 @@ export default function App() {
               </div>
             </div>
           ))}
-
-          {sectionHeader("watchlist", "Watchlist", String(liveStocks.length))}
+          </>
+          )}
 
           {leftSectionsOpen.watchlist && liveStocks.length === 0 && (
             emptyState("Watchlist is empty", "Add a symbol above to start tracking live quotes.")
@@ -2523,27 +2551,6 @@ export default function App() {
               </button>
             </div>
           ))}
-
-          {sectionHeader("scanner", "Scanner", scannerLoading ? "Loading" : String(scannerStocks.length))}
-
-          {leftSectionsOpen.scanner && (
-            <Suspense fallback={<LoadingPanel theme={theme} label="Loading scanner" height="120px" />}>
-              {scannerLoading ? (
-                <LoadingPanel theme={theme} label="Loading scanner" height="120px" />
-              ) : (
-                <ProfessionalScanner
-                  theme={theme}
-                  scannerTab={scannerTab}
-                  setScannerTab={setScannerTab}
-                  scannerStocks={scannerStocks}
-                  scannerMeta={scannerMeta}
-                  selectMainSymbol={selectMainSymbol}
-                  selectedScannerStock={selectedScannerStock}
-                  addSymbolToWatchlist={addSymbolToWatchlist}
-                />
-              )}
-            </Suspense>
-          )}
 
           {sectionHeader("movers", "Small Cap Movers", String(liveSmallCapMovers.length))}
 

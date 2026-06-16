@@ -7,6 +7,7 @@ const defaultLeftSectionsOpen = {
   scanner: true,
   movers: false,
 };
+const focusedTerminalMigrationKey = "sb_focused_terminal_workspace_v1";
 
 export function useTerminalWorkspace({
   layoutPresets,
@@ -16,27 +17,32 @@ export function useTerminalWorkspace({
   setReplayMode,
   setReplayPlaying,
 }) {
+  const useFocusedDefault =
+    !requestedPreset &&
+    !requestedPresetId &&
+    !loadSetting(focusedTerminalMigrationKey, false);
+
   const [activeWorkspace, setActiveWorkspace] = useState(() =>
-    requestedPreset?.activeWorkspace || loadSetting("sb_active_workspace", "intelligence")
+    requestedPreset?.activeWorkspace || (useFocusedDefault ? "charts" : loadSetting("sb_active_workspace", "charts"))
   );
   const [layoutMode, setLayoutMode] = useState(() =>
-    requestedPreset?.layoutMode || loadSetting("sb_layout_mode", "2")
+    requestedPreset?.layoutMode || (useFocusedDefault ? "1" : loadSetting("sb_layout_mode", "1"))
   );
   const [gridMode, setGridMode] = useState(() =>
     requestedPreset?.gridMode || loadSetting("sb_grid_mode", "2")
   );
   const [syncCharts, setSyncCharts] = useState(() =>
-    requestedPreset?.syncCharts ?? loadSetting("sb_sync_charts", false)
+    requestedPreset?.syncCharts ?? (useFocusedDefault ? false : loadSetting("sb_sync_charts", false))
   );
   const [leftSectionsOpen, setLeftSectionsOpen] = useState(() => ({
     ...defaultLeftSectionsOpen,
     ...loadSetting("sb_left_sections_open", {}),
   }));
   const [rightTab, setRightTab] = useState(() =>
-    requestedMobileDockTab || requestedPreset?.rightTab || loadSetting("sb_right_tab", "order")
+    requestedMobileDockTab || requestedPreset?.rightTab || (useFocusedDefault ? "intel" : loadSetting("sb_right_tab", "intel"))
   );
   const [activePreset, setActivePreset] = useState(() =>
-    requestedPresetId || loadSetting("sb_active_preset", "intelligence")
+    requestedPresetId || (useFocusedDefault ? "intelligence" : loadSetting("sb_active_preset", "intelligence"))
   );
   const [mobileDockOpen, setMobileDockOpen] = useState(Boolean(requestedMobileDockTab));
 
@@ -78,12 +84,12 @@ export function useTerminalWorkspace({
   }, []);
 
   const resetWorkspaceLayout = useCallback(() => {
-    setActiveWorkspace("intelligence");
+    setActiveWorkspace("charts");
     setLayoutMode("1");
     setGridMode("2");
     setActivePreset("intelligence");
     setSyncCharts(false);
-    setRightTab("order");
+    setRightTab("intel");
     setLeftSectionsOpen(defaultLeftSectionsOpen);
     setMobileDockOpen(false);
   }, []);
@@ -101,6 +107,7 @@ export function useTerminalWorkspace({
   }, []);
 
   useEffect(() => {
+    saveSetting(focusedTerminalMigrationKey, true);
     saveSetting("sb_layout_mode", layoutMode);
     saveSetting("sb_grid_mode", gridMode);
     saveSetting("sb_active_preset", activePreset);

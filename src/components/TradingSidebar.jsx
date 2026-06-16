@@ -15,10 +15,10 @@ const NAV_ITEMS = [
   { id: "charts", label: "Charts", icon: BarChart3 },
   { id: "scanner", label: "Scanner", icon: Search },
   { id: "watchlist", label: "Watchlist", icon: Star },
-  { id: "broker", label: "Broker", icon: DollarSign },
-  { id: "replay", label: "Replay", icon: Play },
-  { id: "journal", label: "Journal", icon: BookOpen },
   { id: "alerts", label: "Alerts", icon: Bell },
+  { id: "broker", label: "Broker", icon: DollarSign, advanced: true },
+  { id: "replay", label: "Replay", icon: Play, advanced: true },
+  { id: "journal", label: "Journal", icon: BookOpen, advanced: true },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -26,7 +26,10 @@ export default function Tradingsidebar({
   activeWorkspace,
   setActiveWorkspace,
   brokerConnected,
+  advancedMode = false,
 }) {
+  const visibleItems = NAV_ITEMS.filter((item) => advancedMode || !item.advanced);
+
   return (
     <aside
       style={{
@@ -97,7 +100,7 @@ export default function Tradingsidebar({
           overflowX: "hidden",
         }}
       >
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const active = activeWorkspace === item.id;
 

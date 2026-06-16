@@ -70,6 +70,7 @@ export const workspaceViews = [
 ];
 
 export const rightPanelTabs = [
+  { id: "intel", label: "Intel" },
   { id: "order", label: "Order" },
   { id: "broker", label: "Broker" },
   { id: "risk", label: "Risk" },
@@ -84,12 +85,12 @@ export const rightPanelTabs = [
 export const layoutPresets = {
   intelligence: {
     label: "Market Intel",
-    activeWorkspace: "intelligence",
+    activeWorkspace: "charts",
     layoutMode: "1",
     gridMode: "2",
     syncCharts: false,
     replayMode: false,
-    rightTab: "health",
+    rightTab: "intel",
   },
   day: {
     label: "Day Trading",
@@ -134,7 +135,7 @@ export const layoutPresets = {
     gridMode: "2",
     syncCharts: false,
     replayMode: false,
-    rightTab: "order",
+    rightTab: "intel",
   },
   journal: {
     label: "Journal Review",

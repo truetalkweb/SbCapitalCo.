@@ -73,6 +73,10 @@ const ShortcutsPanel = lazy(() => import("./components/ShortcutsPanel"));
 const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
 const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
 const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
+const StockDetailCard = lazy(() => import("./components/StockDetailCard"));
+
+const coreRightTabs = new Set(["intel", "health", "alerts"]);
+const advancedWorkspaceIds = new Set(["broker", "replay", "journal", "portfolio", "settings"]);
 
 function getRequestedPresetId() {
   if (typeof window === "undefined") return null;
@@ -166,6 +170,9 @@ export default function App() {
   );
   const [activityLog, setActivityLog] = useState(() =>
     loadSetting("sb_activity_log", [])
+  );
+  const [advancedMode, setAdvancedMode] = useState(() =>
+    loadSetting("sb_advanced_mode", false)
   );
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1900,6 +1907,41 @@ export default function App() {
       }),
     [newsMeta, qtrdHealth, scannerMeta, selectedStock, selectedStockData]
   );
+  const visibleRightPanelTabs = useMemo(
+    () => rightPanelTabs.filter((tab) => advancedMode || coreRightTabs.has(tab.id)),
+    [advancedMode]
+  );
+  const selectedDockStock = selectedScannerStock?.symbol === selectedStock
+    ? selectedScannerStock
+    : selectedStockData;
+  const hasSelectedInWatchlist = liveStocks.some((stock) => stock.symbol === selectedStock);
+  const selectedTickerNews = useMemo(
+    () =>
+      news
+        .filter((item) => {
+          const relatedTicker = String(item.relatedTicker || item.symbol || "").toUpperCase();
+          const headline = String(item.headline || "").toUpperCase();
+          return relatedTicker === selectedStock || headline.includes(selectedStock);
+        })
+        .slice(0, 4),
+    [news, selectedStock]
+  );
+
+  useEffect(() => {
+    saveSetting("sb_advanced_mode", advancedMode);
+  }, [advancedMode]);
+
+  useEffect(() => {
+    if (!advancedMode && advancedWorkspaceIds.has(activeWorkspace)) {
+      setActiveWorkspace("charts");
+    }
+  }, [activeWorkspace, advancedMode, setActiveWorkspace]);
+
+  useEffect(() => {
+    if (!visibleRightPanelTabs.some((tab) => tab.id === rightTab)) {
+      setRightTab("intel");
+    }
+  }, [rightTab, setRightTab, visibleRightPanelTabs]);
 
   function renderChartPanel(chartProps) {
     return (
@@ -1927,6 +1969,177 @@ export default function App() {
         replayTrades={replayTrades}
         brokerApiUrl={BROKER_API_URL}
       />
+    );
+  }
+
+  function renderIntelligenceDock() {
+    return (
+      <div style={{ display: "grid", gap: "10px" }}>
+        <div
+          style={{
+            background: theme.panel2,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "8px",
+            padding: "10px",
+          }}
+        >
+          <div style={{ color: theme.text, fontSize: "12px", fontWeight: 950 }}>
+            {selectedStock} Market Intelligence
+          </div>
+          <div style={{ marginTop: "4px", color: theme.muted, fontSize: "10px", lineHeight: 1.45 }}>
+            Selected ticker context, catalyst tape, and data confidence. Live trading locked; broker execution stays behind Advanced.
+          </div>
+          <div
+            style={{
+              marginTop: "8px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              border: `1px solid ${theme.amber}55`,
+              borderRadius: "999px",
+              padding: "4px 8px",
+              color: theme.amber,
+              background: "rgba(245,184,75,0.08)",
+              fontSize: "9px",
+              fontWeight: 950,
+              textTransform: "uppercase",
+              fontFamily: terminalMonoFont,
+            }}
+          >
+            Live Trading Locked
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "9px" }}>
+            {[
+              ["Quote", selectedDataConfidence.quote?.label || "Pending", selectedDataConfidence.quote?.confidence],
+              ["News", selectedDataConfidence.news?.label || "Pending", selectedDataConfidence.news?.confidence],
+              ["Scanner", selectedDataConfidence.scanner?.label || "Pending", selectedDataConfidence.scanner?.confidence],
+              ["Broker", qtrdHealth.tokenPersisted ? "Token Stored" : "Live Locked", qtrdHealth.confidence || "Limited"],
+            ].map(([label, value, confidence]) => {
+              const color = confidence === "High" ? theme.green : confidence === "Medium" ? theme.amber : theme.muted;
+
+              return (
+                <div
+                  key={label}
+                  style={{
+                    border: `1px solid ${theme.borderSoft || theme.border}`,
+                    borderRadius: "6px",
+                    padding: "7px",
+                    background: theme.panel,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 900, textTransform: "uppercase" }}>
+                    {label}
+                  </div>
+                  <div
+                    style={{
+                      color,
+                      fontSize: "10px",
+                      fontWeight: 800,
+                      marginTop: "3px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      fontFamily: terminalMonoFont,
+                    }}
+                  >
+                    {value}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading ticker detail" height="220px" />}>
+          <StockDetailCard
+            ticker={selectedStock}
+            stock={selectedDockStock}
+            theme={theme}
+            watchStatus={hasSelectedInWatchlist}
+            onOpenChart={selectMainSymbol}
+            onToggleWatch={(symbol) => {
+              if (liveStocks.some((stock) => stock.symbol === symbol)) {
+                removeWatchlistSymbol(symbol);
+              } else {
+                addSymbolToWatchlist(symbol);
+              }
+            }}
+          />
+        </Suspense>
+
+        <div
+          style={{
+            background: theme.panel2,
+            border: `1px solid ${theme.borderSoft || theme.border}`,
+            borderRadius: "8px",
+            padding: "10px",
+          }}
+        >
+          <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950, textTransform: "uppercase" }}>
+            Catalyst Tape
+          </div>
+          <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
+            {(selectedTickerNews.length ? selectedTickerNews : news.slice(0, 4)).map((item, index) => {
+              const hasUrl = Boolean(item.url);
+              const content = (
+                <>
+                  <div
+                    style={{
+                      color: theme.text,
+                      fontSize: "11px",
+                      fontWeight: 750,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {item.headline}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: "4px",
+                      display: "flex",
+                      gap: "6px",
+                      color: theme.muted,
+                      fontSize: "9px",
+                      fontFamily: terminalMonoFont,
+                    }}
+                  >
+                    <span>{item.relatedTicker || selectedStock}</span>
+                    <span>{item.source || "News"}</span>
+                  </div>
+                </>
+              );
+
+              return hasUrl ? (
+                <a
+                  key={item.id || `${item.headline}-${index}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    textDecoration: "none",
+                    display: "block",
+                    borderTop: index === 0 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+                    paddingTop: index === 0 ? 0 : "8px",
+                  }}
+                >
+                  {content}
+                </a>
+              ) : (
+                <div
+                  key={item.id || `${item.headline}-${index}`}
+                  style={{
+                    borderTop: index === 0 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+                    paddingTop: index === 0 ? 0 : "8px",
+                  }}
+                >
+                  {content}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -1980,6 +2193,8 @@ export default function App() {
         buttonStyle={buttonStyle}
         user={user}
         compact={isCompactTerminal}
+        advancedMode={advancedMode}
+        setAdvancedMode={setAdvancedMode}
       />
 
       <TickerTape
@@ -2019,6 +2234,7 @@ export default function App() {
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
           brokerConnected={brokerConnected}
+          advancedMode={advancedMode}
           brokerStatus={brokerStatus}
         />
         </Panel>
@@ -2419,7 +2635,7 @@ export default function App() {
                   overflowY: "auto",
                 })}
               >
-                {panelTitle("Trading Console")}
+                {panelTitle(advancedMode ? "Advanced Console" : "Market Intelligence")}
 
                 <div
                   style={{
@@ -2433,7 +2649,7 @@ export default function App() {
                     borderRadius: "8px",
                   }}
                 >
-                  {rightPanelTabs.map((tab) => (
+                  {visibleRightPanelTabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setRightTab(tab.id)}
@@ -2455,6 +2671,8 @@ export default function App() {
                 </div>
 
                 <Suspense fallback={<LoadingPanel theme={theme} label="Loading trading panels" height="180px" />}>
+                  {rightTab === "intel" && renderIntelligenceDock()}
+
                   {rightTab === "order" && (
                     <OrderTicket
                       theme={theme}

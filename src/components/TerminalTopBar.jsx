@@ -131,6 +131,8 @@ export default function TerminalTopBar({
   buttonStyle,
   user,
   compact = false,
+  advancedMode = false,
+  setAdvancedMode,
 }) {
   const now = new Date();
 
@@ -179,9 +181,9 @@ export default function TerminalTopBar({
   };
   const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const isIntelligenceWorkspace = activeWorkspace === "intelligence";
-  const showAdvancedControls = !compact && !isIntelligenceWorkspace;
+  const showAdvancedControls = advancedMode && !compact;
   const showChartControls = !isIntelligenceWorkspace;
-  const showUtilityControls = !isIntelligenceWorkspace;
+  const showUtilityControls = advancedMode && !isIntelligenceWorkspace;
   const resolvedMarketDataLabel =
     marketDataStatusLabel ||
     (wsStatus === "LIVE" ? "QTRD LIVE" : wsStatus === "BACKEND" ? "QTRD PENDING" : `QTRD ${wsStatus || "PENDING"}`);
@@ -263,7 +265,9 @@ export default function TerminalTopBar({
       </div>
 
       <div style={{ display: "flex", gap: "5px", alignItems: "center", flexShrink: 0 }}>
-        {workspaceViews.slice(0, 4).map((view) => (
+        {workspaceViews
+          .filter((view) => ["charts", "scanner", "watchlist", "intelligence"].includes(view.id))
+          .map((view) => (
           <button
             key={view.id}
             onClick={() => setActiveWorkspace(view.id)}
@@ -274,7 +278,7 @@ export default function TerminalTopBar({
         ))}
       </div>
 
-      {showAdvancedControls && (
+      {advancedMode && !compact && (
       <div
         style={{
           width: "1px",
@@ -384,6 +388,7 @@ export default function TerminalTopBar({
           2 Charts
         </button>
 
+        {showAdvancedControls && (
         <button
           onClick={() => {
             setLayoutMode("2");
@@ -393,7 +398,9 @@ export default function TerminalTopBar({
         >
           Grid 2
         </button>
+        )}
 
+        {showAdvancedControls && (
         <button
           onClick={() => {
             setLayoutMode("2");
@@ -403,20 +410,21 @@ export default function TerminalTopBar({
         >
           Grid 4
         </button>
+        )}
 
-        {!compact && (
+        {showAdvancedControls && (
           <button onClick={() => setSyncCharts(!syncCharts)} style={compactButton(syncCharts)}>
             Sync {syncCharts ? "On" : "Off"}
           </button>
         )}
 
-        {!compact && (
+        {showAdvancedControls && (
           <button onClick={() => setReplayMode(!replayMode)} style={compactButton(replayMode)}>
             Replay {replayMode ? "On" : "Off"}
           </button>
         )}
 
-        {!compact && (
+        {showAdvancedControls && (
         <button onClick={resetReplay} style={compactButton(false)}>
           Reset Replay
         </button>
@@ -500,6 +508,19 @@ export default function TerminalTopBar({
             {resolvedBrokerLabel}
           </span>
         </span>
+        )}
+
+        {!compact && setAdvancedMode && (
+        <button
+          onClick={() => setAdvancedMode(!advancedMode)}
+          style={{
+            ...compactButton(advancedMode),
+            ...(!advancedMode ? quietButton : {}),
+          }}
+          title={advancedMode ? "Hide execution, replay, DOM, and workspace tools" : "Show advanced trading/replay/workspace tools"}
+        >
+          Advanced {advancedMode ? "On" : "Off"}
+        </button>
         )}
 
         {showUtilityControls && (

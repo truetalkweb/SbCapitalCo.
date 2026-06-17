@@ -244,34 +244,14 @@ export default function TerminalTopBar({
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "10px",
           whiteSpace: "nowrap",
           flexShrink: 0,
-          minWidth: compact ? "100%" : "206px",
+          minWidth: compact ? "100%" : "154px",
         }}
       >
-        <div
-          style={{
-            width: "30px",
-            height: "30px",
-            borderRadius: "9px",
-            display: "grid",
-            placeItems: "center",
-            color: "#061018",
-            background: `linear-gradient(135deg, ${theme.cyan || theme.blue}, ${theme.green})`,
-            fontSize: "12px",
-            fontWeight: 950,
-            boxShadow: "0 0 0 1px rgba(255,255,255,0.12), 0 10px 24px rgba(0,200,150,0.12)",
-          }}
-        >
-          SB
-        </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#f8fafc", fontWeight: 950, fontSize: "20px", lineHeight: 1 }}>
+          <div style={{ color: "#f8fafc", fontWeight: 900, fontSize: "20px", lineHeight: 1, letterSpacing: "-0.01em" }}>
             SB <span style={{ color: theme.cyan || theme.blue }}>Terminal</span>
-          </div>
-          <div style={{ color: theme.muted, fontSize: "10px", fontWeight: 850, marginTop: "5px" }}>
-            AI market intelligence
           </div>
         </div>
       </div>

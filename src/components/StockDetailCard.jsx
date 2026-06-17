@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
-const sansFont = '"Roboto", Arial, sans-serif';
+const sansFont = '"Inter", Arial, sans-serif';
 
 const tickerProfiles = {
   AAPL: {

@@ -297,7 +297,7 @@ export default function MarketNewsPanel({
                 <div
                   style={{
                     color: item.url ? theme.text : theme.muted,
-                    fontFamily: '"Roboto", system-ui, sans-serif',
+                    fontFamily: '"Inter", system-ui, sans-serif',
                     fontSize: "12px",
                     fontWeight: item.url ? 700 : 650,
                     whiteSpace: "normal",

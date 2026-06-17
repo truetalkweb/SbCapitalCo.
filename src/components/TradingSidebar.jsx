@@ -34,8 +34,8 @@ export default function Tradingsidebar({
     <aside
       style={{
         width: "100%",
-        minWidth: "176px",
-        maxWidth: "228px",
+        minWidth: 0,
+        maxWidth: "none",
         height: "100%",
         background: "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)",
         borderRight: "1px solid rgba(55,65,81,0.42)",

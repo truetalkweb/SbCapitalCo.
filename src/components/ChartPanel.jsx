@@ -13,6 +13,7 @@ import {
   formatChartSourceStatus,
   formatQuoteSourceStatus,
 } from "../utils/marketUtils";
+import { CHART_INDICATORS, normalizeIndicatorState } from "../indicators/chartIndicators";
 
 const Chart = lazy(() => import("./Chart"));
 
@@ -36,10 +37,8 @@ export default function ChartPanel({
   timeframeButtonStyle,
   showIndicators,
   setShowIndicators,
-  showEMA9,
-  setShowEMA9,
-  showEMA20,
-  setShowEMA20,
+  indicators,
+  setIndicators,
   takeScreenshot,
   toggleFullscreen,
   chartAreaRef,
@@ -52,6 +51,7 @@ export default function ChartPanel({
   advancedMode = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
+  const chartIndicators = normalizeIndicatorState(indicators);
   const cleanChartSymbol = String(symbol || "").trim().toUpperCase();
   const commitChartSymbol = (nextSymbol) => {
     const clean = String(nextSymbol || "").trim().toUpperCase();
@@ -91,6 +91,15 @@ export default function ChartPanel({
     fontSize: "10px",
   };
   const toolIconStyle = { flexShrink: 0, color: theme.faint || theme.muted };
+  const toggleIndicator = (indicatorId) => {
+    setIndicators?.((current) => {
+      const next = normalizeIndicatorState(current);
+      return {
+        ...next,
+        [indicatorId]: !next[indicatorId],
+      };
+    });
+  };
 
   return (
     <div
@@ -275,28 +284,45 @@ export default function ChartPanel({
                 background: theme.panel2,
                 border: `1px solid ${theme.border}`,
                 borderRadius: "6px",
-                padding: "10px",
+                padding: "8px",
                 zIndex: 20,
-                width: "150px",
+                width: "170px",
+                display: "grid",
+                gap: "6px",
+                boxShadow: "0 18px 36px rgba(0,0,0,0.36)",
               }}
             >
-              <label style={{ display: "block", marginBottom: "8px" }}>
-                <input
-                  type="checkbox"
-                  checked={showEMA9}
-                  onChange={() => setShowEMA9(!showEMA9)}
-                />{" "}
-                EMA 9
-              </label>
-
-              <label>
-                <input
-                  type="checkbox"
-                  checked={showEMA20}
-                  onChange={() => setShowEMA20(!showEMA20)}
-                />{" "}
-                EMA 20
-              </label>
+              {CHART_INDICATORS.map((indicator) => (
+                <label
+                  key={indicator.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    minHeight: "24px",
+                    color: theme.text,
+                    fontSize: "11px",
+                    fontWeight: 850,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(chartIndicators[indicator.id])}
+                    onChange={() => toggleIndicator(indicator.id)}
+                  />
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "999px",
+                      background: indicator.color,
+                      boxShadow: `0 0 0 1px ${theme.borderSoft || theme.border}`,
+                    }}
+                  />
+                  {indicator.label}
+                </label>
+              ))}
             </div>
           )}
         </div>
@@ -320,8 +346,7 @@ export default function ChartPanel({
               allSymbols.find((item) => item.symbol === cleanChartSymbol)?.lastUpdated ||
               initialLivePulse
             }
-            showEMA9={showEMA9}
-            showEMA20={showEMA20}
+            indicators={chartIndicators}
             onStatusChange={onStatusChange}
             replayMode={replayMode && !secondary}
             replayIndex={replayIndex}

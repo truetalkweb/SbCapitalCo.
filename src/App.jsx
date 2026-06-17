@@ -54,6 +54,10 @@ import {
 } from "./utils/marketUtils";
 import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatus";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
+import {
+  getDefaultIndicatorState,
+  normalizeIndicatorState,
+} from "./indicators/chartIndicators";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 
 const ProfessionalScanner = lazy(() => import("./components/ProfessionalScanner"));
@@ -145,11 +149,12 @@ export default function App() {
   );
 
   const [showIndicators, setShowIndicators] = useState(false);
-  const [showEMA9, setShowEMA9] = useState(() =>
-    loadSetting("sb_show_ema9", true)
-  );
-  const [showEMA20, setShowEMA20] = useState(() =>
-    loadSetting("sb_show_ema20", true)
+  const [chartIndicators, setChartIndicators] = useState(() =>
+    normalizeIndicatorState({
+      ...loadSetting("sb_chart_indicators", {}),
+      ema9: loadSetting("sb_show_ema9", true),
+      ema20: loadSetting("sb_show_ema20", true),
+    })
   );
   const [scannerTab, setScannerTab] = useState(() =>
     loadSetting("sb_scanner_tab", "Gainers")
@@ -532,8 +537,7 @@ export default function App() {
       riskPerTrade,
       marketRegion,
       themeMode,
-      showEMA9,
-      showEMA20,
+      chartIndicators,
       scannerTab,
       replayMode,
       replaySpeed,
@@ -568,8 +572,7 @@ export default function App() {
       riskPerTrade,
       marketRegion,
       themeMode,
-      showEMA9,
-      showEMA20,
+      chartIndicators,
       scannerTab,
       replayMode,
       replaySpeed,
@@ -605,8 +608,17 @@ export default function App() {
     if (typeof data.riskPerTrade !== "undefined") setRiskPerTrade(data.riskPerTrade);
     if (data.marketRegion) setMarketRegion(data.marketRegion);
     if (data.themeMode) setThemeMode(data.themeMode);
-    if (typeof data.showEMA9 === "boolean") setShowEMA9(data.showEMA9);
-    if (typeof data.showEMA20 === "boolean") setShowEMA20(data.showEMA20);
+    if (data.chartIndicators) {
+      setChartIndicators(normalizeIndicatorState(data.chartIndicators));
+    } else if (typeof data.showEMA9 === "boolean" || typeof data.showEMA20 === "boolean") {
+      setChartIndicators((current) =>
+        normalizeIndicatorState({
+          ...current,
+          ...(typeof data.showEMA9 === "boolean" ? { ema9: data.showEMA9 } : {}),
+          ...(typeof data.showEMA20 === "boolean" ? { ema20: data.showEMA20 } : {}),
+        })
+      );
+    }
     if (data.scannerTab) setScannerTab(data.scannerTab);
     if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
     if (typeof data.replaySpeed !== "undefined") setReplaySpeed(data.replaySpeed);
@@ -916,7 +928,7 @@ export default function App() {
         label: showIndicators ? "Hide Indicators Menu" : "Show Indicators Menu",
         detail: "Toggle chart indicator controls",
         group: "Chart",
-        keywords: "ema indicators chart",
+        keywords: "ema vwap indicators chart",
         onRun: () => setShowIndicators((value) => !value),
       },
       ...presetActions,
@@ -947,6 +959,7 @@ export default function App() {
       "sb_grid_mode",
       "sb_theme_mode",
       "sb_market_region",
+      "sb_chart_indicators",
       "sb_show_ema9",
       "sb_show_ema20",
       "sb_scanner_tab",
@@ -979,8 +992,7 @@ export default function App() {
     setSecondaryTimeframe("5m");
     setThemeMode("dark");
     setMarketRegion("us");
-    setShowEMA9(true);
-    setShowEMA20(true);
+    setChartIndicators(getDefaultIndicatorState());
     setScannerTab("Gainers");
     setOrders([]);
     setPositions({});
@@ -1636,8 +1648,7 @@ export default function App() {
     saveSetting("sb_secondary_timeframe", secondaryTimeframe);
     saveSetting("sb_theme_mode", themeMode);
     saveSetting("sb_market_region", marketRegion);
-    saveSetting("sb_show_ema9", showEMA9);
-    saveSetting("sb_show_ema20", showEMA20);
+    saveSetting("sb_chart_indicators", chartIndicators);
     saveSetting("sb_scanner_tab", scannerTab);
     saveSetting("sb_orders", orders);
     saveSetting("sb_positions", positions);
@@ -1655,8 +1666,7 @@ export default function App() {
     secondaryTimeframe,
     themeMode,
     marketRegion,
-    showEMA9,
-    showEMA20,
+    chartIndicators,
     scannerTab,
     orders,
     positions,
@@ -1962,10 +1972,8 @@ export default function App() {
         timeframeButtonStyle={timeframeButtonStyle}
         showIndicators={showIndicators}
         setShowIndicators={setShowIndicators}
-        showEMA9={showEMA9}
-        setShowEMA9={setShowEMA9}
-        showEMA20={showEMA20}
-        setShowEMA20={setShowEMA20}
+        indicators={chartIndicators}
+        setIndicators={setChartIndicators}
         takeScreenshot={takeScreenshot}
         toggleFullscreen={toggleFullscreen}
         chartAreaRef={chartAreaRef}

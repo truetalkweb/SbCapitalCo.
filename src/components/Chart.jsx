@@ -6,6 +6,7 @@ import {
   LineSeries,
   CrosshairMode,
 } from "lightweight-charts";
+import { CHART_INDICATORS } from "../indicators/chartIndicators";
 import { marketDataService } from "../services/marketDataService";
 
 const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
@@ -23,23 +24,6 @@ function bucketTime(timestamp, timeframe) {
   const seconds = getTimeframeSeconds(timeframe);
   return Math.floor(timestamp / seconds) * seconds;
 }
-
-function calculateEMA(data, period) {
-  if (!data.length) return [];
-
-  const multiplier = 2 / (period + 1);
-  let ema = data[0].close;
-
-  return data.map((candle) => {
-    ema = (candle.close - ema) * multiplier + ema;
-
-    return {
-      time: candle.time,
-      value: Number(ema.toFixed(2)),
-    };
-  });
-}
-
 
 function formatVolume(volume) {
   const value = Number(volume || 0);
@@ -128,8 +112,7 @@ function Chart({
   timeframe,
   livePrice,
   livePulse = null,
-  showEMA9 = true,
-  showEMA20 = true,
+  indicators = {},
   onStatusChange,
   replayMode = false,
   replayIndex = null,
@@ -143,8 +126,7 @@ function Chart({
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
-  const ema9Ref = useRef(null);
-  const ema20Ref = useRef(null);
+  const indicatorSeriesRef = useRef({});
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
@@ -198,11 +180,13 @@ function Chart({
   }, [replayIndex, replayMode]);
 
   const updateIndicators = useCallback((source = getVisibleCandles()) => {
-    if (!ema9Ref.current || !ema20Ref.current) return;
+    CHART_INDICATORS.forEach((indicator) => {
+      const series = indicatorSeriesRef.current[indicator.id];
+      if (!series) return;
 
-    ema9Ref.current.setData(showEMA9 ? calculateEMA(source, 9) : []);
-    ema20Ref.current.setData(showEMA20 ? calculateEMA(source, 20) : []);
-  }, [getVisibleCandles, showEMA9, showEMA20]);
+      series.setData(indicators[indicator.id] ? indicator.calculate(source) : []);
+    });
+  }, [getVisibleCandles, indicators]);
 
   const updateVolume = useCallback((source = getVisibleCandles()) => {
     if (!volumeSeriesRef.current) return;
@@ -554,28 +538,22 @@ function Chart({
       },
     });
 
-    const ema9Series = chart.addSeries(LineSeries, {
-      color: "#2196f3",
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: "EMA 9",
-    });
-
-    const ema20Series = chart.addSeries(LineSeries, {
-      color: "#f59e0b",
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      title: "EMA 20",
-    });
+    const indicatorSeries = CHART_INDICATORS.reduce((seriesById, indicator) => {
+      seriesById[indicator.id] = chart.addSeries(LineSeries, {
+        color: indicator.color,
+        lineWidth: indicator.lineWidth,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        title: indicator.label,
+      });
+      return seriesById;
+    }, {});
 
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
-    ema9Ref.current = ema9Series;
-    ema20Ref.current = ema20Series;
+    indicatorSeriesRef.current = indicatorSeries;
 
     chart.subscribeCrosshairMove((param) => {
       if (disposed) return;
@@ -707,8 +685,7 @@ function Chart({
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
-      ema9Ref.current = null;
-      ema20Ref.current = null;
+      indicatorSeriesRef.current = {};
       requestAnimationFrame(() => {
         try {
           chart.remove();
@@ -776,8 +753,7 @@ function Chart({
     replayMode,
     replayIndex,
     replayTrades,
-    showEMA9,
-    showEMA20,
+    indicators,
     updateIndicators,
     updateMarkers,
     updateVolume,
@@ -817,9 +793,14 @@ function Chart({
           {chartSymbol} - {timeframe}
         </div>
         <div>
-          EMA9 <span style={{ color: "#2196f3" }}>--</span> / EMA20{" "}
-          <span style={{ color: "#f59e0b" }}>--</span> / {" "}
-          <span style={{ color: "#a855f7" }}>---</span>
+          {CHART_INDICATORS.map((indicator, index) => (
+            <React.Fragment key={indicator.id}>
+              {index > 0 && " / "}
+              <span style={{ color: indicators[indicator.id] ? indicator.color : "#5f6b7a" }}>
+                {indicator.shortLabel}
+              </span>
+            </React.Fragment>
+          ))}
         </div>
       </div>
 

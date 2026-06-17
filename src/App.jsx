@@ -151,9 +151,6 @@ export default function App() {
   const [showEMA20, setShowEMA20] = useState(() =>
     loadSetting("sb_show_ema20", true)
   );
-  const [showICTScalpingSuite, setShowICTScalpingSuite] = useState(() =>
-    loadSetting("sb_show_ict_scalping_suite", false)
-  );
   const [scannerTab, setScannerTab] = useState(() =>
     loadSetting("sb_scanner_tab", "Gainers")
   );
@@ -537,7 +534,6 @@ export default function App() {
       themeMode,
       showEMA9,
       showEMA20,
-      showICTScalpingSuite,
       scannerTab,
       replayMode,
       replaySpeed,
@@ -574,7 +570,6 @@ export default function App() {
       themeMode,
       showEMA9,
       showEMA20,
-      showICTScalpingSuite,
       scannerTab,
       replayMode,
       replaySpeed,
@@ -612,7 +607,6 @@ export default function App() {
     if (data.themeMode) setThemeMode(data.themeMode);
     if (typeof data.showEMA9 === "boolean") setShowEMA9(data.showEMA9);
     if (typeof data.showEMA20 === "boolean") setShowEMA20(data.showEMA20);
-    if (typeof data.showICTScalpingSuite === "boolean") setShowICTScalpingSuite(data.showICTScalpingSuite);
     if (data.scannerTab) setScannerTab(data.scannerTab);
     if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
     if (typeof data.replaySpeed !== "undefined") setReplaySpeed(data.replaySpeed);
@@ -955,7 +949,6 @@ export default function App() {
       "sb_market_region",
       "sb_show_ema9",
       "sb_show_ema20",
-      "sb_show_ict_scalping_suite",
       "sb_scanner_tab",
       "sb_watchlist",
       "sb_orders",
@@ -988,7 +981,6 @@ export default function App() {
     setMarketRegion("us");
     setShowEMA9(true);
     setShowEMA20(true);
-    setShowICTScalpingSuite(false);
     setScannerTab("Gainers");
     setOrders([]);
     setPositions({});
@@ -1646,7 +1638,6 @@ export default function App() {
     saveSetting("sb_market_region", marketRegion);
     saveSetting("sb_show_ema9", showEMA9);
     saveSetting("sb_show_ema20", showEMA20);
-    saveSetting("sb_show_ict_scalping_suite", showICTScalpingSuite);
     saveSetting("sb_scanner_tab", scannerTab);
     saveSetting("sb_orders", orders);
     saveSetting("sb_positions", positions);
@@ -1666,7 +1657,6 @@ export default function App() {
     marketRegion,
     showEMA9,
     showEMA20,
-    showICTScalpingSuite,
     scannerTab,
     orders,
     positions,
@@ -1976,8 +1966,6 @@ export default function App() {
         setShowEMA9={setShowEMA9}
         showEMA20={showEMA20}
         setShowEMA20={setShowEMA20}
-        showICTScalpingSuite={showICTScalpingSuite}
-        setShowICTScalpingSuite={setShowICTScalpingSuite}
         takeScreenshot={takeScreenshot}
         toggleFullscreen={toggleFullscreen}
         chartAreaRef={chartAreaRef}

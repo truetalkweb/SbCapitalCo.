@@ -49,6 +49,80 @@ function formatVolume(volume) {
   return String(Math.round(value));
 }
 
+function calculateIctScalpingSuite(data) {
+  const candles = Array.isArray(data) ? data.filter((candle) =>
+    Number.isFinite(Number(candle.high)) &&
+    Number.isFinite(Number(candle.low)) &&
+    Number.isFinite(Number(candle.close))
+  ) : [];
+
+  if (candles.length < 20) return null;
+
+  const sessionCandles = candles.slice(-160);
+  const high = Math.max(...sessionCandles.map((candle) => Number(candle.high)));
+  const low = Math.min(...sessionCandles.map((candle) => Number(candle.low)));
+  const range = high - low;
+  const rows = 40;
+
+  if (!Number.isFinite(range) || range <= 0) return null;
+
+  const rowHeight = range / rows;
+  const buckets = Array.from({ length: rows }, () => 0);
+
+  sessionCandles.forEach((candle) => {
+    const candleHigh = Number(candle.high);
+    const candleLow = Number(candle.low);
+    const candleRange = Math.max(candleHigh - candleLow, rowHeight * 0.2);
+    const volume = Math.max(Number(candle.volume || 1), 1);
+
+    for (let index = 0; index < rows; index += 1) {
+      const rowLow = low + index * rowHeight;
+      const rowHigh = rowLow + rowHeight;
+      const overlap = Math.max(0, Math.min(candleHigh, rowHigh) - Math.max(candleLow, rowLow));
+
+      if (overlap > 0) {
+        buckets[index] += volume * (overlap / candleRange);
+      }
+    }
+  });
+
+  const maxVolume = Math.max(...buckets);
+  const totalVolume = buckets.reduce((sum, value) => sum + value, 0);
+
+  if (!maxVolume || !totalVolume) return null;
+
+  const pocIndex = buckets.findIndex((value) => value === maxVolume);
+  let valueAreaVolume = maxVolume;
+  let lowIndex = pocIndex;
+  let highIndex = pocIndex;
+  const targetVolume = totalVolume * 0.7;
+
+  while (valueAreaVolume < targetVolume && (lowIndex > 0 || highIndex < rows - 1)) {
+    const lowerCandidate = lowIndex > 0 ? buckets[lowIndex - 1] : -1;
+    const upperCandidate = highIndex < rows - 1 ? buckets[highIndex + 1] : -1;
+
+    if (upperCandidate >= lowerCandidate) {
+      highIndex += 1;
+      valueAreaVolume += Math.max(upperCandidate, 0);
+    } else {
+      lowIndex -= 1;
+      valueAreaVolume += Math.max(lowerCandidate, 0);
+    }
+  }
+
+  const recent = candles.slice(-80);
+  const recentHigh = Math.max(...recent.map((candle) => Number(candle.high)));
+  const recentLow = Math.min(...recent.map((candle) => Number(candle.low)));
+
+  return {
+    poc: Number((low + (pocIndex + 0.5) * rowHeight).toFixed(4)),
+    vah: Number((low + (highIndex + 1) * rowHeight).toFixed(4)),
+    val: Number((low + lowIndex * rowHeight).toFixed(4)),
+    resistance: Number(recentHigh.toFixed(4)),
+    support: Number(recentLow.toFixed(4)),
+  };
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -130,6 +204,7 @@ function Chart({
   livePulse = null,
   showEMA9 = true,
   showEMA20 = true,
+  showICTScalpingSuite = false,
   onStatusChange,
   replayMode = false,
   replayIndex = null,
@@ -145,6 +220,8 @@ function Chart({
   const volumeSeriesRef = useRef(null);
   const ema9Ref = useRef(null);
   const ema20Ref = useRef(null);
+  const ictPriceLinesRef = useRef([]);
+  const ictLevelsRef = useRef(null);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
@@ -203,6 +280,80 @@ function Chart({
     ema9Ref.current.setData(showEMA9 ? calculateEMA(source, 9) : []);
     ema20Ref.current.setData(showEMA20 ? calculateEMA(source, 20) : []);
   }, [getVisibleCandles, showEMA9, showEMA20]);
+
+  const clearIctSuite = useCallback(() => {
+    if (!candleSeriesRef.current) {
+      ictPriceLinesRef.current = [];
+      ictLevelsRef.current = null;
+      return;
+    }
+
+    ictPriceLinesRef.current.forEach((line) => {
+      try {
+        candleSeriesRef.current.removePriceLine(line);
+      } catch {
+        // Lightweight Charts can remove series during rapid layout changes.
+      }
+    });
+
+    ictPriceLinesRef.current = [];
+    ictLevelsRef.current = null;
+  }, []);
+
+  const updateIctSuite = useCallback((source = getVisibleCandles()) => {
+    if (!candleSeriesRef.current) return;
+
+    clearIctSuite();
+
+    if (!showICTScalpingSuite) return;
+
+    const levels = calculateIctScalpingSuite(source);
+    if (!levels) return;
+
+    ictLevelsRef.current = levels;
+    ictPriceLinesRef.current = [
+      candleSeriesRef.current.createPriceLine({
+        price: levels.poc,
+        color: "#ef5350",
+        lineWidth: 2,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "ICT POC",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.vah,
+        color: "#00c896",
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: "ICT VAH",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.val,
+        color: "#00c896",
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: "ICT VAL",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.resistance,
+        color: "#f5b84b",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "S/R High",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.support,
+        color: "#2d8cff",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "S/R Low",
+      }),
+    ];
+  }, [clearIctSuite, getVisibleCandles, showICTScalpingSuite]);
 
   const updateVolume = useCallback((source = getVisibleCandles()) => {
     if (!volumeSeriesRef.current) return;
@@ -307,6 +458,7 @@ function Chart({
 
       if (shouldUpdateIndicators) {
         updateIndicators(candlesRef.current);
+        updateIctSuite(candlesRef.current);
         lastIndicatorUpdateRef.current = now;
       }
     }
@@ -316,7 +468,7 @@ function Chart({
     } else if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED" && statusRef.current !== "QTRD" && statusRef.current !== "SIM") {
       setStatus("LIVE");
     }
-  }, [replayMode, setStatus, timeframe, updateIndicators]);
+  }, [replayMode, setStatus, timeframe, updateIctSuite, updateIndicators]);
 
   const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
@@ -352,10 +504,11 @@ function Chart({
       candleSeriesRef.current.update(updated);
       updateVolume(candlesRef.current);
       updateIndicators(candlesRef.current);
+      updateIctSuite(candlesRef.current);
     }
 
     setStatus(options.status || "LIVE");
-  }, [replayMode, setStatus, timeframe, updateIndicators, updateVolume]);
+  }, [replayMode, setStatus, timeframe, updateIctSuite, updateIndicators, updateVolume]);
 
   const runSmoothAnimation = useCallback(() => {
     if (animationFrameRef.current) return;
@@ -629,6 +782,7 @@ function Chart({
             updateVolume(backendCandles);
             if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(backendCandles);
             updateIndicators(backendCandles);
+            updateIctSuite(backendCandles);
             updateMarkers();
             chart.timeScale().fitContent();
             setStatus("QTRD");
@@ -654,6 +808,7 @@ function Chart({
         updateVolume(fallback);
         if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
         updateIndicators(fallback);
+        updateIctSuite(fallback);
         updateMarkers();
         chart.timeScale().fitContent();
         setStatus("SIM");
@@ -672,6 +827,7 @@ function Chart({
         updateVolume(fallback);
         if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
         updateIndicators(fallback);
+        updateIctSuite(fallback);
         updateMarkers();
         chart.timeScale().fitContent();
         setStatus("SIM");
@@ -709,6 +865,8 @@ function Chart({
       volumeSeriesRef.current = null;
       ema9Ref.current = null;
       ema20Ref.current = null;
+      ictPriceLinesRef.current = [];
+      ictLevelsRef.current = null;
       requestAnimationFrame(() => {
         try {
           chart.remove();
@@ -717,11 +875,12 @@ function Chart({
         }
       });
     };
-  }, [applyLivePrice, brokerApiUrl, chartSymbol, setStatus, timeframe, updateIndicators, updateMarkers, updateVolume]);
+  }, [applyLivePrice, brokerApiUrl, chartSymbol, setStatus, timeframe, updateIctSuite, updateIndicators, updateMarkers, updateVolume]);
 
   useEffect(() => {
     updateIndicators();
-  }, [updateIndicators]);
+    updateIctSuite();
+  }, [updateIctSuite, updateIndicators]);
 
   useEffect(() => {
     if (!livePrice || replayMode) return;
@@ -761,6 +920,7 @@ function Chart({
       candleSeriesRef.current.setData(candlesRef.current);
       updateVolume(candlesRef.current);
       updateIndicators(candlesRef.current);
+      updateIctSuite(candlesRef.current);
       updateMarkers();
       return;
     }
@@ -770,6 +930,7 @@ function Chart({
     candleSeriesRef.current.setData(visibleCandles);
     updateVolume(visibleCandles);
     updateIndicators(visibleCandles);
+    updateIctSuite(visibleCandles);
     updateMarkers();
   }, [
     getVisibleCandles,
@@ -778,6 +939,8 @@ function Chart({
     replayTrades,
     showEMA9,
     showEMA20,
+    showICTScalpingSuite,
+    updateIctSuite,
     updateIndicators,
     updateMarkers,
     updateVolume,

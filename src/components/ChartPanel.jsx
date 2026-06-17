@@ -40,6 +40,8 @@ export default function ChartPanel({
   setShowEMA9,
   showEMA20,
   setShowEMA20,
+  showICTScalpingSuite,
+  setShowICTScalpingSuite,
   takeScreenshot,
   toggleFullscreen,
   chartAreaRef,
@@ -277,10 +279,12 @@ export default function ChartPanel({
                 borderRadius: "6px",
                 padding: "10px",
                 zIndex: 20,
-                width: "150px",
+                width: "260px",
+                display: "grid",
+                gap: "8px",
               }}
             >
-              <label style={{ display: "block", marginBottom: "8px" }}>
+              <label style={{ display: "block" }}>
                 <input
                   type="checkbox"
                   checked={showEMA9}
@@ -296,6 +300,15 @@ export default function ChartPanel({
                   onChange={() => setShowEMA20(!showEMA20)}
                 />{" "}
                 EMA 20
+              </label>
+
+              <label style={{ display: "block", lineHeight: 1.35 }}>
+                <input
+                  type="checkbox"
+                  checked={showICTScalpingSuite}
+                  onChange={() => setShowICTScalpingSuite(!showICTScalpingSuite)}
+                />{" "}
+                ICT Scalping Suite + S/R Breaks [SbCapitalCo]
               </label>
             </div>
           )}
@@ -322,6 +335,7 @@ export default function ChartPanel({
             }
             showEMA9={showEMA9}
             showEMA20={showEMA20}
+            showICTScalpingSuite={showICTScalpingSuite}
             onStatusChange={onStatusChange}
             replayMode={replayMode && !secondary}
             replayIndex={replayIndex}

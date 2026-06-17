@@ -49,93 +49,57 @@ function formatVolume(volume) {
   return String(Math.round(value));
 }
 
-const ICT_SUITE_ROWS = 40;
-const ICT_SUITE_VALUE_AREA = 0.7;
-const ICT_SUITE_PROFILE_WIDTH_BARS = 60;
-const ICT_SUITE_PROFILE_OFFSET_BARS = 5;
-const ICT_SUITE_KEEP_PROFILES = 3;
+function calculateIctScalpingSuite(data) {
+  const candles = Array.isArray(data) ? data.filter((candle) =>
+    Number.isFinite(Number(candle.high)) &&
+    Number.isFinite(Number(candle.low)) &&
+    Number.isFinite(Number(candle.close))
+  ) : [];
 
-function getNySessionKey(timestamp) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(Number(timestamp) * 1000));
-  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const hour = Number(lookup.hour);
-  const minute = Number(lookup.minute);
+  if (candles.length < 20) return null;
 
-  return {
-    dateKey: `${lookup.year}-${lookup.month}-${lookup.day}`,
-    minuteOfDay: hour * 60 + minute,
-  };
-}
-
-function isIctSessionActive(timestamp) {
-  const { minuteOfDay } = getNySessionKey(timestamp);
-
-  return minuteOfDay >= 4 * 60 && minuteOfDay <= 20 * 60;
-}
-
-function buildIctProfile(sessionCandles, index) {
-  if (!sessionCandles.length) return null;
-
+  const sessionCandles = candles.slice(-160);
   const high = Math.max(...sessionCandles.map((candle) => Number(candle.high)));
   const low = Math.min(...sessionCandles.map((candle) => Number(candle.low)));
   const range = high - low;
+  const rows = 40;
 
   if (!Number.isFinite(range) || range <= 0) return null;
 
-  const rowHeight = range / ICT_SUITE_ROWS;
-  const rows = Array.from({ length: ICT_SUITE_ROWS }, (_, rowIndex) => ({
-    index: rowIndex,
-    low: low + rowIndex * rowHeight,
-    high: low + (rowIndex + 1) * rowHeight,
-    total: 0,
-    up: 0,
-    down: 0,
-  }));
+  const rowHeight = range / rows;
+  const buckets = Array.from({ length: rows }, () => 0);
 
   sessionCandles.forEach((candle) => {
     const candleHigh = Number(candle.high);
     const candleLow = Number(candle.low);
     const candleRange = Math.max(candleHigh - candleLow, rowHeight * 0.2);
     const volume = Math.max(Number(candle.volume || 1), 1);
-    const isUp = Number(candle.close) >= Number(candle.open);
 
-    rows.forEach((row) => {
-      const overlap = Math.max(0, Math.min(candleHigh, row.high) - Math.max(candleLow, row.low));
+    for (let index = 0; index < rows; index += 1) {
+      const rowLow = low + index * rowHeight;
+      const rowHigh = rowLow + rowHeight;
+      const overlap = Math.max(0, Math.min(candleHigh, rowHigh) - Math.max(candleLow, rowLow));
 
       if (overlap > 0) {
-        const volumePart = volume * (overlap / candleRange);
-        row.total += volumePart;
-        if (isUp) row.up += volumePart;
-        else row.down += volumePart;
+        buckets[index] += volume * (overlap / candleRange);
       }
-    });
+    }
   });
 
-  const maxVolume = Math.max(...rows.map((row) => row.total));
-  const sessionVolume = rows.reduce((sum, row) => sum + row.total, 0);
+  const maxVolume = Math.max(...buckets);
+  const totalVolume = buckets.reduce((sum, value) => sum + value, 0);
 
-  if (!maxVolume || !sessionVolume) return null;
+  if (!maxVolume || !totalVolume) return null;
 
-  const pocIndex = rows.reduce(
-    (bestIndex, row, rowIndex) => (row.total > rows[bestIndex].total ? rowIndex : bestIndex),
-    0
-  );
+  const pocIndex = buckets.findIndex((value) => value === maxVolume);
   let valueAreaVolume = maxVolume;
   let lowIndex = pocIndex;
   let highIndex = pocIndex;
-  const targetVolume = sessionVolume * ICT_SUITE_VALUE_AREA;
+  const targetVolume = totalVolume * 0.7;
 
-  while (valueAreaVolume < targetVolume && (lowIndex > 0 || highIndex < rows.length - 1)) {
-    const lowerCandidate = lowIndex > 0 ? rows[lowIndex - 1].total : -1;
-    const upperCandidate = highIndex < rows.length - 1 ? rows[highIndex + 1].total : -1;
+  while (valueAreaVolume < targetVolume && (lowIndex > 0 || highIndex < rows - 1)) {
+    const lowerCandidate = lowIndex > 0 ? buckets[lowIndex - 1] : -1;
+    const upperCandidate = highIndex < rows - 1 ? buckets[highIndex + 1] : -1;
 
     if (upperCandidate >= lowerCandidate) {
       highIndex += 1;
@@ -146,67 +110,17 @@ function buildIctProfile(sessionCandles, index) {
     }
   }
 
-  const pocPrice = low + (pocIndex + 0.5) * rowHeight;
-  const vahPrice = low + (highIndex + 1) * rowHeight;
-  const valPrice = low + lowIndex * rowHeight;
-  const touchedIndex = sessionCandles.findIndex((candle, candleIndex) =>
-    candleIndex > 0 && Number(candle.high) >= pocPrice && Number(candle.low) <= pocPrice
-  );
+  const recent = candles.slice(-80);
+  const recentHigh = Math.max(...recent.map((candle) => Number(candle.high)));
+  const recentLow = Math.min(...recent.map((candle) => Number(candle.low)));
 
   return {
-    id: `${sessionCandles[0].time}-${index}`,
-    startTime: sessionCandles[0].time,
-    endTime: sessionCandles[sessionCandles.length - 1].time,
-    high,
-    low,
-    maxVolume,
-    pocPrice,
-    vahPrice,
-    valPrice,
-    pocEndTime: touchedIndex > 0 ? sessionCandles[touchedIndex].time : null,
-    rows: rows.map((row) => ({
-      ...row,
-      inValueArea: row.index >= lowIndex && row.index <= highIndex,
-    })),
+    poc: Number((low + (pocIndex + 0.5) * rowHeight).toFixed(4)),
+    vah: Number((low + (highIndex + 1) * rowHeight).toFixed(4)),
+    val: Number((low + lowIndex * rowHeight).toFixed(4)),
+    resistance: Number(recentHigh.toFixed(4)),
+    support: Number(recentLow.toFixed(4)),
   };
-}
-
-function calculateIctSuiteProfiles(data) {
-  const candles = Array.isArray(data) ? data.filter((candle) =>
-    Number.isFinite(Number(candle.time)) &&
-    Number.isFinite(Number(candle.open)) &&
-    Number.isFinite(Number(candle.high)) &&
-    Number.isFinite(Number(candle.low)) &&
-    Number.isFinite(Number(candle.close))
-  ) : [];
-
-  if (candles.length < 20) return null;
-
-  const sessions = [];
-  let currentSession = [];
-  let currentDateKey = null;
-
-  candles.forEach((candle) => {
-    if (!isIctSessionActive(candle.time)) return;
-
-    const { dateKey } = getNySessionKey(candle.time);
-    if (currentDateKey && currentDateKey !== dateKey && currentSession.length) {
-      sessions.push(currentSession);
-      currentSession = [];
-    }
-
-    currentDateKey = dateKey;
-    currentSession.push(candle);
-  });
-
-  if (currentSession.length) sessions.push(currentSession);
-
-  const profiles = sessions
-    .slice(-ICT_SUITE_KEEP_PROFILES)
-    .map((sessionCandles, index) => buildIctProfile(sessionCandles, index))
-    .filter(Boolean);
-
-  return profiles.length ? profiles : null;
 }
 
 function escapeHtml(value) {
@@ -300,14 +214,14 @@ function Chart({
 }) {
   const chartSymbol = String(symbol || "").trim().toUpperCase() || "SPY";
   const containerRef = useRef(null);
-  const ictOverlayRef = useRef(null);
   const tooltipRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
   const ema9Ref = useRef(null);
   const ema20Ref = useRef(null);
-  const ictProfilesRef = useRef(null);
+  const ictPriceLinesRef = useRef([]);
+  const ictLevelsRef = useRef(null);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
@@ -368,118 +282,78 @@ function Chart({
   }, [getVisibleCandles, showEMA9, showEMA20]);
 
   const clearIctSuite = useCallback(() => {
-    ictProfilesRef.current = null;
-    if (ictOverlayRef.current) {
-      ictOverlayRef.current.innerHTML = "";
-    }
-  }, []);
-
-  const renderIctSuite = useCallback(() => {
-    const overlay = ictOverlayRef.current;
-    const chart = chartRef.current;
-    const candleSeries = candleSeriesRef.current;
-    const profiles = ictProfilesRef.current;
-
-    if (!overlay) return;
-    overlay.innerHTML = "";
-    if (!chart || !candleSeries || !showICTScalpingSuite || !profiles?.length) return;
-
-    const visibleCandles = getVisibleCandles();
-    const timeScale = chart.timeScale();
-    const width = overlay.clientWidth;
-    const height = overlay.clientHeight;
-    const timeCoordinates = visibleCandles
-      .map((candle) => timeScale.timeToCoordinate(candle.time))
-      .filter((coordinate) => Number.isFinite(coordinate));
-    const inferredBarSpacing = timeCoordinates.length > 1
-      ? Math.max(
-          3,
-          Math.min(
-            13,
-            Math.abs(timeCoordinates[timeCoordinates.length - 1] - timeCoordinates[timeCoordinates.length - 2])
-          )
-        )
-      : 8;
-    const offsetPx = ICT_SUITE_PROFILE_OFFSET_BARS * inferredBarSpacing;
-    const profileWidthPx = ICT_SUITE_PROFILE_WIDTH_BARS * inferredBarSpacing;
-
-    profiles.forEach((profile) => {
-      const endX = timeScale.timeToCoordinate(profile.endTime);
-      const startX = timeScale.timeToCoordinate(profile.startTime);
-      if (!Number.isFinite(endX)) return;
-
-      const xBase = Math.min(width - 8, Math.max(0, endX + offsetPx));
-
-      profile.rows.forEach((row) => {
-        if (!row.total) return;
-
-        const yTop = candleSeries.priceToCoordinate(row.high);
-        const yBottom = candleSeries.priceToCoordinate(row.low);
-        if (!Number.isFinite(yTop) || !Number.isFinite(yBottom)) return;
-
-        const rowHeight = Math.max(1, Math.abs(yBottom - yTop));
-        const rowWidth = Math.max(1, Math.round((row.total / profile.maxVolume) * profileWidthPx));
-        const clippedWidth = Math.max(1, Math.min(rowWidth, width - xBase - 2));
-        const box = document.createElement("div");
-        box.style.position = "absolute";
-        box.style.left = `${xBase}px`;
-        box.style.top = `${Math.min(yTop, yBottom)}px`;
-        box.style.width = `${clippedWidth}px`;
-        box.style.height = `${rowHeight}px`;
-        box.style.background = row.inValueArea ? "rgba(33, 150, 243, 0.34)" : "rgba(148, 163, 184, 0.18)";
-        box.style.border = "0";
-        overlay.appendChild(box);
-      });
-
-      const drawLine = (price, color, lineWidth, label, dashed = false, lineEndTime = null) => {
-        const y = candleSeries.priceToCoordinate(price);
-        if (!Number.isFinite(y)) return;
-
-        const lineStart = Number.isFinite(startX) ? Math.max(0, startX) : 0;
-        const touchX = lineEndTime ? timeScale.timeToCoordinate(lineEndTime) : null;
-        const lineEnd = Number.isFinite(touchX)
-          ? touchX
-          : Math.min(width - 8, xBase + profileWidthPx);
-        const line = document.createElement("div");
-        line.style.position = "absolute";
-        line.style.left = `${lineStart}px`;
-        line.style.top = `${y}px`;
-        line.style.width = `${Math.max(2, lineEnd - lineStart)}px`;
-        line.style.borderTop = `${lineWidth}px ${dashed ? "dashed" : "solid"} ${color}`;
-        line.style.opacity = "0.95";
-        overlay.appendChild(line);
-
-        const tag = document.createElement("div");
-        tag.textContent = `${label} ${Number(price).toFixed(2)}`;
-        tag.style.position = "absolute";
-        tag.style.left = `${Math.min(width - 92, lineEnd + 4)}px`;
-        tag.style.top = `${Math.max(0, Math.min(height - 18, y - 9))}px`;
-        tag.style.padding = "2px 5px";
-        tag.style.borderRadius = "4px";
-        tag.style.background = color;
-        tag.style.color = "#ffffff";
-        tag.style.fontSize = "10px";
-        tag.style.fontWeight = "900";
-        tag.style.lineHeight = "1";
-        tag.style.whiteSpace = "nowrap";
-        overlay.appendChild(tag);
-      };
-
-      drawLine(profile.pocPrice, "#ef5350", 2, "POC", false, profile.pocEndTime);
-      drawLine(profile.vahPrice, "#00c896", 1, "VAH", false);
-      drawLine(profile.valPrice, "#00c896", 1, "VAL", false);
-    });
-  }, [getVisibleCandles, showICTScalpingSuite]);
-
-  const updateIctSuite = useCallback((source = getVisibleCandles()) => {
-    if (!showICTScalpingSuite) {
-      clearIctSuite();
+    if (!candleSeriesRef.current) {
+      ictPriceLinesRef.current = [];
+      ictLevelsRef.current = null;
       return;
     }
 
-    ictProfilesRef.current = calculateIctSuiteProfiles(source);
-    renderIctSuite();
-  }, [clearIctSuite, getVisibleCandles, renderIctSuite, showICTScalpingSuite]);
+    ictPriceLinesRef.current.forEach((line) => {
+      try {
+        candleSeriesRef.current.removePriceLine(line);
+      } catch {
+        // Lightweight Charts can remove series during rapid layout changes.
+      }
+    });
+
+    ictPriceLinesRef.current = [];
+    ictLevelsRef.current = null;
+  }, []);
+
+  const updateIctSuite = useCallback((source = getVisibleCandles()) => {
+    if (!candleSeriesRef.current) return;
+
+    clearIctSuite();
+
+    if (!showICTScalpingSuite) return;
+
+    const levels = calculateIctScalpingSuite(source);
+    if (!levels) return;
+
+    ictLevelsRef.current = levels;
+    ictPriceLinesRef.current = [
+      candleSeriesRef.current.createPriceLine({
+        price: levels.poc,
+        color: "#ef5350",
+        lineWidth: 2,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "ICT POC",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.vah,
+        color: "#00c896",
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: "ICT VAH",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.val,
+        color: "#00c896",
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: true,
+        title: "ICT VAL",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.resistance,
+        color: "#f5b84b",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "S/R High",
+      }),
+      candleSeriesRef.current.createPriceLine({
+        price: levels.support,
+        color: "#2d8cff",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "S/R Low",
+      }),
+    ];
+  }, [clearIctSuite, getVisibleCandles, showICTScalpingSuite]);
 
   const updateVolume = useCallback((source = getVisibleCandles()) => {
     if (!volumeSeriesRef.current) return;
@@ -740,7 +614,6 @@ function Chart({
     setIsHistoryLoading(true);
     setStatus(hadHistory ? "UPDATING" : "LOADING");
     let disposed = false;
-    const overlayElement = ictOverlayRef.current;
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -885,13 +758,6 @@ function Chart({
       `;
     });
 
-    const refreshIctOverlay = () => {
-      if (disposed) return;
-      renderIctSuite();
-    };
-
-    chart.timeScale().subscribeVisibleTimeRangeChange(refreshIctOverlay);
-
     async function loadCandles() {
       try {
         const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
@@ -979,14 +845,12 @@ function Chart({
         width: containerRef.current.clientWidth,
         height: containerRef.current.clientHeight,
       });
-      renderIctSuite();
     });
 
     resizeObserver.observe(containerRef.current);
 
     return () => {
       disposed = true;
-      chart.timeScale().unsubscribeVisibleTimeRangeChange(refreshIctOverlay);
       resizeObserver.disconnect();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -1001,10 +865,8 @@ function Chart({
       volumeSeriesRef.current = null;
       ema9Ref.current = null;
       ema20Ref.current = null;
-      ictProfilesRef.current = null;
-      if (overlayElement) {
-        overlayElement.innerHTML = "";
-      }
+      ictPriceLinesRef.current = [];
+      ictLevelsRef.current = null;
       requestAnimationFrame(() => {
         try {
           chart.remove();
@@ -1013,7 +875,7 @@ function Chart({
         }
       });
     };
-  }, [applyLivePrice, brokerApiUrl, chartSymbol, renderIctSuite, setStatus, timeframe, updateIctSuite, updateIndicators, updateMarkers, updateVolume]);
+  }, [applyLivePrice, brokerApiUrl, chartSymbol, setStatus, timeframe, updateIctSuite, updateIndicators, updateMarkers, updateVolume]);
 
   useEffect(() => {
     updateIndicators();
@@ -1098,17 +960,6 @@ function Chart({
       }}
     >
       <div
-        ref={ictOverlayRef}
-        style={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 3,
-          pointerEvents: "none",
-          overflow: "hidden",
-        }}
-      />
-
-      <div
         style={{
           position: "absolute",
           top: "10px",
@@ -1131,7 +982,7 @@ function Chart({
         <div>
           EMA9 <span style={{ color: "#2196f3" }}>--</span> / EMA20{" "}
           <span style={{ color: "#f59e0b" }}>--</span> / {" "}
-          <span style={{ color: "#a855f7" }}>ICT Suite</span>
+          <span style={{ color: "#a855f7" }}>---</span>
         </div>
       </div>
 

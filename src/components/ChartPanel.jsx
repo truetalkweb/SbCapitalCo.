@@ -308,7 +308,7 @@ export default function ChartPanel({
                   checked={showICTScalpingSuite}
                   onChange={() => setShowICTScalpingSuite(!showICTScalpingSuite)}
                 />{" "}
-                ICT Suite
+                ICT Scalping Suite + S/R Breaks [SbCapitalCo]
               </label>
             </div>
           )}

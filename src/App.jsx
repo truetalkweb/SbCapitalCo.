@@ -1819,7 +1819,13 @@ export default function App() {
     activeWorkspace === "alerts";
   const showLeftDockPanel = showLeftDock && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
-  const sidebarPanelSize = isPhoneTerminal ? 15 : isCompactTerminal ? 8 : 13;
+  const sidebarPanelSize = isPhoneTerminal
+    ? 12
+    : viewportWidth >= 1600
+      ? 3
+      : isCompactTerminal
+        ? 5
+        : 4.2;
   const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 28;
   const workspaceDefaultSize =
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
@@ -2323,7 +2329,13 @@ export default function App() {
           overflow: "hidden",
         }}
       >
-        <Panel id="sidebar-panel" order={1} defaultSize={sidebarPanelSize} minSize={sidebarPanelSize} maxSize={isPhoneTerminal ? 15 : isCompactTerminal ? 10 : 15}>
+        <Panel
+          id="sidebar-panel"
+          order={1}
+          defaultSize={sidebarPanelSize}
+          minSize={sidebarPanelSize}
+          maxSize={isPhoneTerminal ? 12 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
+        >
           <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}

@@ -34,7 +34,7 @@ export default function Tradingsidebar({
     <aside
       style={{
         width: "100%",
-        minWidth: 0,
+        minWidth: "50px",
         maxWidth: "none",
         height: "100%",
         background: "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)",
@@ -48,12 +48,12 @@ export default function Tradingsidebar({
     >
       <div
         style={{
-          height: "74px",
+          height: "68px",
           width: "100%",
           display: "flex",
           alignItems: "center",
-          gap: "10px",
-          padding: "0 14px",
+          justifyContent: "center",
+          padding: "0",
           borderBottom: "1px solid rgba(55,65,81,0.42)",
           position: "relative",
           flexShrink: 0,
@@ -63,8 +63,8 @@ export default function Tradingsidebar({
           src="/sbcapitalco-logo.png"
           alt="SbCapitalCo"
           style={{
-            width: "38px",
-            height: "38px",
+            width: "32px",
+            height: "32px",
             borderRadius: "50%",
             objectFit: "cover",
             background: "#000",
@@ -73,37 +73,11 @@ export default function Tradingsidebar({
           }}
         />
 
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              color: "#f8fafc",
-              fontSize: "13px",
-              fontWeight: 950,
-              lineHeight: 1.1,
-              whiteSpace: "nowrap",
-            }}
-          >
-            SB Terminal
-          </div>
-          <div
-            style={{
-              color: brokerConnected ? "#00c896" : "#ef5350",
-              fontSize: "9px",
-              fontWeight: 900,
-              marginTop: "4px",
-              letterSpacing: "0.02em",
-              textTransform: "uppercase",
-            }}
-          >
-            {brokerConnected ? "Broker connected" : "Broker locked"}
-          </div>
-        </div>
-
         <span
           style={{
             position: "absolute",
-            right: "14px",
-            top: "20px",
+            right: "11px",
+            bottom: "17px",
             width: "8px",
             height: "8px",
             borderRadius: "50%",
@@ -119,56 +93,40 @@ export default function Tradingsidebar({
           width: "100%",
           display: "flex",
           flexDirection: "column",
-          padding: "14px 10px 10px",
-          gap: "4px",
+          alignItems: "center",
+          padding: "10px 6px",
+          gap: "6px",
           flex: 1,
           overflowY: "auto",
           overflowX: "hidden",
         }}
       >
-        {visibleItems.map((item, index) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const active = activeWorkspace === item.id;
-          const showGroup = index === 0 || visibleItems[index - 1]?.group !== item.group;
 
           return (
             <div key={item.id} style={{ display: "contents" }}>
-              {showGroup && (
-                <div
-                  style={{
-                    color: "#697386",
-                    fontSize: "10px",
-                    fontWeight: 900,
-                    padding: item.group === "Main" ? "0 8px 8px" : "13px 8px 7px",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  {item.group}
-                </div>
-              )}
             <button
               title={item.label}
+              aria-label={item.label}
               onClick={() => setActiveWorkspace(item.id)}
               style={{
-                width: "100%",
-                height: "42px",
-                border: `1px solid ${active ? "rgba(45,140,255,0.55)" : "transparent"}`,
+                width: "38px",
+                height: "38px",
+                border: `1px solid ${active ? "rgba(25,198,216,0.55)" : "transparent"}`,
                 background: active
-                  ? "linear-gradient(90deg, rgba(45,140,255,0.20), rgba(25,198,216,0.055))"
+                  ? "linear-gradient(180deg, rgba(45,140,255,0.20), rgba(25,198,216,0.08))"
                   : "transparent",
                 color: active ? "#f8fafc" : "#a0a8b8",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "flex-start",
-                gap: "10px",
-                padding: "0 10px",
+                justifyContent: "center",
+                padding: "0",
                 borderRadius: "10px",
                 cursor: "pointer",
                 transition: "all 0.16s ease",
                 flexShrink: 0,
-                fontSize: "13px",
-                fontWeight: active ? 950 : 800,
                 boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.08)" : "none",
               }}
               onMouseEnter={(e) => {
@@ -186,8 +144,8 @@ export default function Tradingsidebar({
             >
               <span
                 style={{
-                  width: "24px",
-                  height: "24px",
+                  width: "22px",
+                  height: "22px",
                   display: "grid",
                   placeItems: "center",
                   borderRadius: "7px",
@@ -196,27 +154,13 @@ export default function Tradingsidebar({
                   flexShrink: 0,
                 }}
               >
-                <Icon size={16} strokeWidth={active ? 2.45 : 2} />
+                <Icon size={15} strokeWidth={active ? 2.45 : 2} />
               </span>
-              <span>{item.label}</span>
             </button>
             </div>
           );
         })}
       </nav>
-
-      <div
-        style={{
-          padding: "10px 14px 14px",
-          borderTop: "1px solid rgba(55,65,81,0.35)",
-          color: "#697386",
-          fontSize: "10px",
-          fontWeight: 800,
-          lineHeight: 1.45,
-        }}
-      >
-        AI market desk
-      </div>
     </aside>
   );
 }

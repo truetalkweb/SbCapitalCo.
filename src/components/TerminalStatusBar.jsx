@@ -16,6 +16,7 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
         padding: "0 6px",
         overflowX: "auto",
         whiteSpace: "nowrap",
+        contain: "layout paint",
       }}
     >
       {rows.map(([label, value]) => (
@@ -39,6 +40,7 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
               fontFamily: terminalMonoFont,
               fontVariantNumeric: "tabular-nums",
               fontWeight: 850,
+              minWidth: "64px",
             }}
           >
             {value}

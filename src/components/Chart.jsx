@@ -224,6 +224,22 @@ function Chart({
     }
   }, [replayTrades]);
 
+  const updateVolumeRef = useRef(updateVolume);
+  const updateIndicatorsRef = useRef(updateIndicators);
+  const updateMarkersRef = useRef(updateMarkers);
+
+  useEffect(() => {
+    updateVolumeRef.current = updateVolume;
+  }, [updateVolume]);
+
+  useEffect(() => {
+    updateIndicatorsRef.current = updateIndicators;
+  }, [updateIndicators]);
+
+  useEffect(() => {
+    updateMarkersRef.current = updateMarkers;
+  }, [updateMarkers]);
+
   const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
 
@@ -407,6 +423,12 @@ function Chart({
     targetPriceRef.current = price;
     runSmoothAnimation();
   }, [rebaseLatestCandle, runSmoothAnimation]);
+
+  const applyLivePriceRef = useRef(applyLivePrice);
+
+  useEffect(() => {
+    applyLivePriceRef.current = applyLivePrice;
+  }, [applyLivePrice]);
 
   const queueStreamTick = useCallback((trade) => {
     const price = Number(trade?.p || trade?.price || 0);
@@ -604,16 +626,16 @@ function Chart({
             lastAppliedPriceRef.current = lastCandleRef.current.close;
 
             candleSeries.setData(backendCandles);
-            updateVolume(backendCandles);
+            updateVolumeRef.current(backendCandles);
             if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(backendCandles);
-            updateIndicators(backendCandles);
-            updateMarkers();
+            updateIndicatorsRef.current(backendCandles);
+            updateMarkersRef.current();
             chart.timeScale().fitContent();
             setStatus("QTRD");
             setIsHistoryLoading(false);
 
             if (lastLivePriceRef.current) {
-              applyLivePrice(lastLivePriceRef.current);
+              applyLivePriceRef.current(lastLivePriceRef.current);
             }
             return;
           }
@@ -629,10 +651,10 @@ function Chart({
         lastAppliedPriceRef.current = lastCandleRef.current.close;
 
         candleSeries.setData(fallback);
-        updateVolume(fallback);
+        updateVolumeRef.current(fallback);
         if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
-        updateIndicators(fallback);
-        updateMarkers();
+        updateIndicatorsRef.current(fallback);
+        updateMarkersRef.current();
         chart.timeScale().fitContent();
         setStatus("SIM");
         setIsHistoryLoading(false);
@@ -647,10 +669,10 @@ function Chart({
         lastAppliedPriceRef.current = lastCandleRef.current.close;
 
         candleSeries.setData(fallback);
-        updateVolume(fallback);
+        updateVolumeRef.current(fallback);
         if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
-        updateIndicators(fallback);
-        updateMarkers();
+        updateIndicatorsRef.current(fallback);
+        updateMarkersRef.current();
         chart.timeScale().fitContent();
         setStatus("SIM");
         setIsHistoryLoading(false);
@@ -694,7 +716,7 @@ function Chart({
         }
       });
     };
-  }, [applyLivePrice, brokerApiUrl, chartSymbol, setStatus, timeframe, updateIndicators, updateMarkers, updateVolume]);
+  }, [brokerApiUrl, chartSymbol, setStatus, timeframe]);
 
   useEffect(() => {
     updateIndicators();

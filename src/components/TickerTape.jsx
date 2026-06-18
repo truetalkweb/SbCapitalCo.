@@ -65,6 +65,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
         fontSize: "11px",
         fontFamily: monoFont,
         fontVariantNumeric: "tabular-nums",
+        contain: "layout paint",
       }}
     >
       <div
@@ -108,6 +109,8 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
             height: "100%",
             alignItems: "center",
             willChange: "transform",
+            transform: "translate3d(0,0,0)",
+            backfaceVisibility: "hidden",
           }}
         >
           {displayStocks.map((stock, index) => (

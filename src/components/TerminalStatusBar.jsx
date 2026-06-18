@@ -1,4 +1,4 @@
-import { getStatusColor } from "../utils/marketUtils";
+import { formatTerminalStatusLabel, getStatusColor } from "../utils/marketUtils";
 
 export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }) {
   return (
@@ -19,7 +19,10 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
         contain: "layout paint",
       }}
     >
-      {rows.map(([label, value]) => (
+      {rows.map(([label, value]) => {
+        const displayValue = formatTerminalStatusLabel(value);
+
+        return (
         <span
           key={label}
           style={{
@@ -28,10 +31,11 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
             gap: "5px",
             padding: "0 8px",
             minHeight: "16px",
+            minWidth: "118px",
             borderRight: `1px solid ${theme.borderSoft || theme.border}`,
           }}
         >
-          <span style={{ color: theme.faint || theme.muted, fontWeight: 850, textTransform: "uppercase" }}>
+          <span style={{ color: theme.faint || theme.muted, fontWeight: 850, textTransform: "uppercase", flexShrink: 0 }}>
             {label}:
           </span>
           <span
@@ -41,12 +45,16 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
               fontVariantNumeric: "tabular-nums",
               fontWeight: 850,
               minWidth: "64px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
+            title={String(value || "")}
           >
-            {value}
+            {displayValue}
           </span>
         </span>
-      ))}
+        );
+      })}
     </div>
   );
 }

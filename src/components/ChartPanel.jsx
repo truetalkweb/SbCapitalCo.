@@ -85,10 +85,11 @@ export default function ChartPanel({
     justifyContent: "center",
     gap: isPhoneChart ? 0 : "6px",
     padding: isPhoneChart ? "0" : "0 9px",
-    width: isPhoneChart ? "36px" : "auto",
+    width: isPhoneChart ? "36px" : "112px",
     background: theme.panel2,
     borderColor: theme.borderSoft || theme.border,
     fontSize: "10px",
+    flex: "0 0 auto",
   };
   const toolIconStyle = { flexShrink: 0, color: theme.faint || theme.muted };
   const toggleIndicator = (indicatorId) => {
@@ -133,55 +134,58 @@ export default function ChartPanel({
             flexWrap: "wrap",
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "8px", minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "88px 86px 74px", alignItems: "baseline", gap: "8px", minWidth: 0 }}>
               <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 900, textTransform: "uppercase" }}>{title}</span>
-              {livePrice && (
-                <span style={{ color: theme.text, fontSize: "11px", fontWeight: 900 }}>
-                  ${Number(livePrice).toFixed(2)}
-                </span>
-              )}
-              {quoteChange && (
-                <span style={{ color: quoteIsPositive ? theme.green : theme.red, fontSize: "10px", fontWeight: 900 }}>
-                  {quoteChange}
-                </span>
-              )}
+              <span style={{ color: livePrice ? theme.text : theme.muted, fontSize: "11px", fontWeight: 900, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
+                {livePrice ? `$${Number(livePrice).toFixed(2)}` : "QUOTE"}
+              </span>
+              <span style={{ color: quoteChange ? quoteIsPositive ? theme.green : theme.red : theme.muted, fontSize: "10px", fontWeight: 900, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
+                {quoteChange || "PENDING"}
+              </span>
             </div>
-            <div style={{ marginTop: "4px", fontSize: secondary ? "18px" : "22px", fontWeight: 950, lineHeight: 1 }}>
+            <div style={{ marginTop: "4px", fontSize: secondary ? "18px" : "22px", fontWeight: 950, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
               {cleanChartSymbol}
             </div>
-            <span
-              style={{
-                color: statusColor,
-                fontWeight: 900,
-                fontSize: "9px",
-              }}
-            >
-              {chartSourceLabel}
-            </span>
-            <span
-              style={{
-                marginLeft: "8px",
-                color: quoteStatusColor,
-                fontWeight: 900,
-                fontSize: "9px",
-              }}
-            >
-              {quoteSourceLabel}
-            </span>
+            <div style={{ display: "grid", gridTemplateColumns: "82px 82px", gap: "8px", marginTop: "4px" }}>
+              <span
+                style={{
+                  color: statusColor,
+                  fontWeight: 900,
+                  fontSize: "9px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {chartSourceLabel}
+              </span>
+              <span
+                style={{
+                  color: quoteStatusColor,
+                  fontWeight: 900,
+                  fontSize: "9px",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {quoteSourceLabel}
+              </span>
+            </div>
           </div>
 
           <div
             style={{
-              display: isPhoneChart ? "flex" : "grid",
-              gridTemplateColumns: isPhoneChart ? undefined : "auto auto",
-              gap: "8px",
+              display: "flex",
+              gap: "7px",
               alignItems: "center",
               flexWrap: "wrap",
               justifyContent: isPhoneChart ? "flex-start" : "flex-end",
               marginLeft: isPhoneChart ? 0 : "auto",
               minWidth: 0,
               width: isPhoneChart ? "100%" : "auto",
+              flex: isPhoneChart ? "1 1 auto" : "0 0 auto",
             }}
           >
             {editableSymbol && typeof setSymbol === "function" && (
@@ -197,12 +201,13 @@ export default function ChartPanel({
               style={{
                 display: "flex",
                 gap: "3px",
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
                 justifyContent: isPhoneChart ? "flex-start" : "center",
                 padding: "3px",
                 background: theme.panel,
                 border: `1px solid ${theme.borderSoft || theme.border}`,
                 borderRadius: "8px",
+                flex: "0 0 auto",
               }}
             >
               {["1m", "5m", "15m", "1H", "1D"].map((item) => (
@@ -232,10 +237,11 @@ export default function ChartPanel({
             gap: "4px",
             marginBottom: "0px",
             padding: "7px 10px",
-            flexWrap: "wrap",
+            flexWrap: "nowrap",
             position: "relative",
             background: theme.panel,
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+            overflowX: "auto",
           }}
         >
           {advancedMode && (

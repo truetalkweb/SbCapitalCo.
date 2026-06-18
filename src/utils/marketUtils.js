@@ -285,6 +285,37 @@ export function getStatusColor(label, theme) {
   return theme.muted;
 }
 
+export function formatTerminalStatusLabel(label) {
+  const value = String(label || "").trim();
+  const upper = value.toUpperCase();
+
+  if (!value) return "Pending";
+  if (upper.includes("PROVIDER LIMITED")) return "Provider Limited";
+  if (upper.includes("CACHED")) return "Cached";
+  if (upper.includes("FALLBACK")) return "Fallback";
+  if (upper.includes("BACKEND LIVE")) return "Backend Live";
+  if (upper.includes("BACKEND PENDING")) return "Backend Pending";
+  if (upper.includes("BROKER CONNECTED")) return "Broker Connected";
+  if (upper.includes("BROKER DISCONNECTED")) return "Broker Disconnected";
+  if (upper.includes("PAPER MODE")) return "Paper Mode";
+  if (upper.includes("HIST QTRD")) return "Hist QTRD";
+  if (upper.includes("CHART SIM")) return "Chart Sim";
+  if (upper.includes("CHART UPDATING")) return "Chart Updating";
+  if (upper.includes("CHART LOADING")) return "Chart Loading";
+  if (upper.includes("QUOTE DELAYED")) return "Quote Delayed";
+  if (upper.includes("QUOTE LIVE")) return "Quote Live";
+  if (upper.includes("QTRD LIVE")) return "QTRD Live";
+  if (upper.includes("QTRD PENDING")) return "QTRD Pending";
+  if (upper.includes("AI PENDING")) return "AI Pending";
+  if (upper.includes("GEMINI LIVE")) return "Gemini Live";
+  if (upper.includes("NEWS LIVE")) return "News Live";
+  if (upper.includes("SCANNER LIVE")) return "Scanner Live";
+
+  return value
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export function buildTerminalSourceLabels({
   liveQuotes = {},
   platformHealth = null,

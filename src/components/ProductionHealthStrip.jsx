@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { formatHealthTime, getCleanProviderMessage, getHealthLabelStatus } from "../utils/healthStatus";
-import { getStatusColor } from "../utils/marketUtils";
+import { formatTerminalStatusLabel, getStatusColor } from "../utils/marketUtils";
 
 function statusDotColor(status, theme) {
   if (status === "ok") return theme.green;
@@ -13,6 +13,8 @@ function statusDotColor(status, theme) {
 function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
   const resolvedStatus = status || getHealthLabelStatus(value);
   const dotColor = statusDotColor(resolvedStatus, theme);
+  const valueWidth = label === "Checked" ? "66px" : "128px";
+  const displayValue = formatTerminalStatusLabel(value);
 
   return (
     <span
@@ -25,6 +27,7 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
         padding: "0 7px",
         borderRight: `1px solid ${theme.borderSoft || theme.border}`,
         whiteSpace: "nowrap",
+        minWidth: label === "Checked" ? "138px" : "196px",
       }}
     >
       <span
@@ -46,9 +49,13 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
           fontFamily: terminalMonoFont,
           fontVariantNumeric: "tabular-nums",
           fontWeight: 900,
+          width: valueWidth,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
         }}
+        title={String(value || "")}
       >
-        {value}
+        {displayValue}
       </span>
     </span>
   );

@@ -44,7 +44,8 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
       style={{
         position: "relative",
         display: "block",
-        width: "clamp(118px, 13vw, 180px)",
+        width: "168px",
+        flex: "0 0 168px",
       }}
     >
       <Search
@@ -91,6 +92,7 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
           color: theme.text,
           outline: "none",
           fontFamily: terminalMonoFont,
+          fontVariantNumeric: "tabular-nums",
           fontSize: "12px",
           fontWeight: 850,
           textTransform: "uppercase",

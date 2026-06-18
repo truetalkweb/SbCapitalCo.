@@ -1,3 +1,5 @@
+import { formatTerminalStatusLabel } from "../utils/marketUtils";
+
 function getNyDateParts(date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
@@ -194,12 +196,36 @@ export default function TerminalTopBar({
     (mainChartStatus === "QTRD" || mainChartStatus === "LIVE" ? "CHART QTRD" : mainChartStatus === "SIM" ? "CHART SIM" : `CHART ${mainChartStatus || "PENDING"}`);
   const resolvedBrokerLabel = brokerStateLabel || (brokerConnected ? "BROKER CONNECTED" : "BROKER DISCONNECTED");
   const resolvedModeLabel = modeStatusLabel || "PAPER MODE";
+  const marketDataDisplayLabel = formatTerminalStatusLabel(resolvedMarketDataLabel);
+  const chartDisplayLabel = formatTerminalStatusLabel(resolvedChartLabel);
+  const brokerDisplayLabel = formatTerminalStatusLabel(resolvedBrokerLabel);
+  const modeDisplayLabel = formatTerminalStatusLabel(resolvedModeLabel);
   const marketDateLabel = now.toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     month: "short",
     day: "numeric",
     year: "numeric",
   });
+  const topStatusLaneStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    height: "18px",
+    minWidth: "118px",
+    maxWidth: "156px",
+    fontSize: "10px",
+    color: theme.muted,
+    fontWeight: 750,
+    flexShrink: 0,
+    fontFamily: monoFont,
+    fontVariantNumeric: "tabular-nums",
+    overflow: "hidden",
+  };
+  const topStatusValueStyle = {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
 
   function statusColor(label) {
     const value = String(label || "").toUpperCase();
@@ -343,7 +369,7 @@ export default function TerminalTopBar({
             Market {marketStatus.toLowerCase()}
           </div>
           <div style={{ fontSize: "11px", color: theme.muted, fontWeight: 800, marginTop: "2px" }}>
-            {marketDateLabel} - <span style={{ fontFamily: monoFont }}>{nyTime} ET</span>
+            {marketDateLabel} - <span style={{ display: "inline-block", minWidth: "74px", fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>{nyTime} ET</span>
           </div>
         </div>
       </div>
@@ -540,17 +566,7 @@ export default function TerminalTopBar({
         }}
       >
         <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "5px",
-            fontSize: "10px",
-            color: theme.muted,
-            fontWeight: 700,
-            flexShrink: 0,
-            fontFamily: monoFont,
-            fontVariantNumeric: "tabular-nums",
-          }}
+          style={topStatusLaneStyle}
         >
           <span
             style={{
@@ -561,35 +577,24 @@ export default function TerminalTopBar({
               boxShadow: "none",
             }}
           />
-          {resolvedMarketDataLabel}
+          <span style={topStatusValueStyle} title={resolvedMarketDataLabel}>{marketDataDisplayLabel}</span>
         </span>
 
         {showAdvancedControls && (
         <span
           style={{
+            ...topStatusLaneStyle,
             fontSize: "10px",
             color: statusColor(resolvedChartLabel),
-            fontWeight: 700,
-            fontFamily: monoFont,
-            fontVariantNumeric: "tabular-nums",
           }}
         >
-          {resolvedChartLabel}
+          <span style={topStatusValueStyle} title={resolvedChartLabel}>{chartDisplayLabel}</span>
         </span>
         )}
 
         {showUtilityControls && (
         <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "5px",
-            fontSize: "10px",
-            color: theme.muted,
-            fontWeight: 700,
-            fontFamily: monoFont,
-            fontVariantNumeric: "tabular-nums",
-          }}
+          style={topStatusLaneStyle}
         >
           <span
             style={{
@@ -600,8 +605,8 @@ export default function TerminalTopBar({
               boxShadow: "none",
             }}
           />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "132px" }}>
-            {resolvedBrokerLabel}
+          <span style={{ ...topStatusValueStyle, maxWidth: "132px" }} title={resolvedBrokerLabel}>
+            {brokerDisplayLabel}
           </span>
         </span>
         )}
@@ -622,15 +627,13 @@ export default function TerminalTopBar({
         {showUtilityControls && (
         <span
           style={{
+            ...topStatusLaneStyle,
+            minWidth: "86px",
             fontSize: "10px",
             color: statusColor(resolvedModeLabel),
-            fontWeight: 700,
-            fontFamily: monoFont,
-            fontVariantNumeric: "tabular-nums",
-            flexShrink: 0,
           }}
         >
-          {resolvedModeLabel}
+          <span style={topStatusValueStyle} title={resolvedModeLabel}>{modeDisplayLabel}</span>
         </span>
         )}
 

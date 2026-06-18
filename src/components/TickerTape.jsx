@@ -121,11 +121,11 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
               style={{
                 cursor: "pointer",
                 display: "inline-grid",
-                gridTemplateColumns: "minmax(46px, auto) minmax(58px, auto) minmax(54px, auto)",
+                gridTemplateColumns: "56px 74px 68px",
                 columnGap: "7px",
                 alignItems: "center",
                 color: theme.text,
-                minWidth: "154px",
+                width: "212px",
                 flex: "0 0 auto",
               }}
             >

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { getCleanProviderMessage } from "../utils/healthStatus";
-import { getScannerSourceType } from "../utils/marketUtils";
+import { formatTerminalStatusLabel, getScannerSourceType } from "../utils/marketUtils";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -353,7 +353,7 @@ export default function ProfessionalScanner({
   const userWarnings = Array.isArray(scannerMeta.userWarnings) ? scannerMeta.userWarnings.filter(Boolean) : [];
   const scannerVisibleWarning = getCleanProviderMessage(
     scannerMeta.userMessage || userWarnings[0] || warnings[0],
-    "Provider limited. Cached/fallback data active."
+    "Limited provider mode. Showing ranked cached and fallback context."
   );
   const providerLimited = Boolean(scannerMeta.providerStatus?.providerLimited) ||
     (degraded && warnings.some((warning) =>
@@ -375,10 +375,13 @@ export default function ProfessionalScanner({
             : degraded
               ? "SCANNER FALLBACK"
               : rawSourceLabel;
+  const displaySourceLabel = formatTerminalStatusLabel(sourceLabel);
   const statusDetail = [
-    sourceLabel,
+    displaySourceLabel,
     freshness,
     cacheAge,
+    providerRowCount ? `${providerRowCount} primary` : null,
+    contextRowCount ? `${contextRowCount} context` : null,
     scannerMeta.counts?.movers ? `${scannerMeta.counts.movers} ranked` : null,
   ].filter(Boolean).join(" / ");
   const filterControlStyle = {
@@ -404,8 +407,8 @@ export default function ProfessionalScanner({
   });
   const scannerGridStyle = {
     display: "grid",
-    gridTemplateColumns: "minmax(54px, 1fr) minmax(54px, 0.72fr) minmax(58px, 0.78fr) minmax(42px, 0.52fr) minmax(42px, 0.5fr) minmax(62px, 0.68fr)",
-    gap: "6px",
+    gridTemplateColumns: "minmax(62px, 1fr) 58px 58px 42px 58px",
+    gap: "5px",
     alignItems: "center",
   };
 
@@ -429,7 +432,7 @@ export default function ProfessionalScanner({
             Scanner Engine
           </div>
           <div style={{ color: theme.muted, fontSize: "9px", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {statusDetail} / {providerRowCount} provider / {contextRowCount} context
+            {statusDetail}
           </div>
         </div>
         <div
@@ -444,7 +447,7 @@ export default function ProfessionalScanner({
             whiteSpace: "nowrap",
           }}
         >
-          {degraded ? "LIMITED, CACHED" : rawSourceLabel}
+          {degraded ? "Limited Mode" : "Primary Feed"}
         </div>
       </div>
 
@@ -560,7 +563,7 @@ export default function ProfessionalScanner({
           }}
           title={warnings[0] || "Primary movers are limited; backend fallback ranking is active."}
         >
-            {scannerVisibleWarning} Provider rows stay ranked first; context rows are labeled separately.
+            {scannerVisibleWarning}
         </div>
       )}
 
@@ -679,8 +682,7 @@ export default function ProfessionalScanner({
         <div>Price</div>
         <div>Move</div>
         <div>RVOL</div>
-        <div>Score</div>
-        <div>Risk</div>
+        <div>Score/Risk</div>
       </div>
 
       <div style={{ maxHeight: "235px", overflowY: "auto" }}>
@@ -768,20 +770,35 @@ export default function ProfessionalScanner({
                   <div style={{ ...monoStyle, color: analysis.relativeVolume >= 2 ? theme.green : theme.muted, fontWeight: 800, textAlign: "right" }}>
                     {analysis.relativeVolume.toFixed(1)}x
                   </div>
-                  <div style={{ ...monoStyle, color: confidenceColor, fontWeight: 850, textAlign: "right" }}>
-                    {analysis.score}
-                  </div>
                   <div
                     style={{
-                      justifySelf: "end",
-                      padding: "2px 5px",
-                      borderRadius: "4px",
-                      background: `${analysis.risk.color}1f`,
-                      color: analysis.risk.color,
-                      fontWeight: 950,
+                      justifySelf: "stretch",
+                      display: "grid",
+                      gap: "1px",
+                      justifyItems: "end",
+                      minWidth: 0,
                     }}
                   >
-                    {analysis.risk.label}
+                    <span style={{ ...monoStyle, color: confidenceColor, fontWeight: 850, textAlign: "right" }}>
+                      {analysis.score}
+                    </span>
+                    <span
+                      title={`Risk ${analysis.risk.label}`}
+                      style={{
+                        maxWidth: "58px",
+                        padding: "1px 4px",
+                        borderRadius: "4px",
+                        background: `${analysis.risk.color}1f`,
+                        color: analysis.risk.color,
+                        fontSize: "8px",
+                        fontWeight: 950,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {analysis.risk.label}
+                    </span>
                   </div>
                 </div>
                 <div

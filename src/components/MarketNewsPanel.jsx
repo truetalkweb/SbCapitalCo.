@@ -1,6 +1,7 @@
 import LoadingPanel from "./LoadingPanel";
 import { getNewsStatusLabel } from "../hooks/useMarketNews";
 import { getCleanProviderMessage } from "../utils/healthStatus";
+import { formatTerminalStatusLabel } from "../utils/marketUtils";
 
 function getStatusColor(label, theme) {
   if (String(label).includes("FALLBACK") || String(label).includes("LIMITED") || String(label).includes("PENDING")) return theme.amber;
@@ -37,10 +38,11 @@ export default function MarketNewsPanel({
   terminalMonoFont,
 }) {
   const statusLabel = getNewsStatusLabel(newsMeta);
+  const displayStatusLabel = formatTerminalStatusLabel(statusLabel);
   const statusColor = getStatusColor(statusLabel, theme);
   const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
   const visibleMessage = rawVisibleMessage
-    ? getCleanProviderMessage(rawVisibleMessage, "News provider limited. Showing available headlines.")
+    ? getCleanProviderMessage(rawVisibleMessage, "Provider limited. Showing available headlines.")
     : null;
   const diagnosticsTitle = [
     visibleMessage,
@@ -155,7 +157,7 @@ export default function MarketNewsPanel({
             {news.length} rows
           </span>
           <span style={{ fontFamily: terminalMonoFont, whiteSpace: "nowrap" }}>
-            {statusLabel}
+            {displayStatusLabel}
           </span>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: theme.muted, maxWidth: "240px" }}>
             {visibleMessage || newsMeta.source || "Backend News"}

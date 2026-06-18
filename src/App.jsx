@@ -2629,18 +2629,47 @@ export default function App() {
               onClick={() => selectMainSymbol(stock.symbol)}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 24px",
-                gap: "5px",
+                gridTemplateColumns: "minmax(58px, 1fr) 68px 58px 24px",
+                gap: "6px",
                 alignItems: "center",
+                minHeight: "34px",
                 padding: "5px 0",
-                borderBottom: `1px solid ${theme.border}`,
+                borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
                 cursor: "pointer",
                 color: selectedStock === stock.symbol ? theme.blue : theme.text,
                 fontWeight: selectedStock === stock.symbol ? 900 : 500,
-                fontSize: "11px",
+                fontSize: "10px",
               }}
             >
-              <span>{stock.symbol}</span>
+              <span style={{ fontFamily: terminalMonoFont, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {stock.symbol}
+              </span>
+              <span style={{ fontFamily: terminalMonoFont, fontVariantNumeric: "tabular-nums", color: theme.text, textAlign: "right", fontWeight: 800 }}>
+                {Number(stock.price || 0) > 0 ? `$${Number(stock.price).toFixed(2)}` : "Quote"}
+              </span>
+              <span
+                style={{
+                  fontFamily: terminalMonoFont,
+                  fontVariantNumeric: "tabular-nums",
+                  color: Math.abs(Number.parseFloat(String(stock.change || "").replace("%", "").replace("+", "")) || 0) < 0.005
+                    ? theme.muted
+                    : String(stock.change || "").includes("-") ? theme.red : theme.green,
+                  textAlign: "right",
+                  fontWeight: 850,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {(() => {
+                  const parsed = Number.parseFloat(String(stock.change || "").replace("%", "").replace("+", ""));
+
+                  if (!Number.isFinite(parsed)) return stock.change || "Live";
+                  if (Math.abs(parsed) < 0.005) return "0.00%";
+
+                  return `${parsed > 0 ? "+" : ""}${parsed.toFixed(2)}%`;
+                })()}
+              </span>
               <button
                 onClick={(event) => {
                   event.stopPropagation();

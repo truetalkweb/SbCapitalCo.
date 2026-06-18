@@ -12,16 +12,17 @@ export function formatHealthTime(value) {
   });
 }
 
-export function getCleanProviderMessage(message, fallback = "Provider limited. Cached/fallback data active.") {
+export function getCleanProviderMessage(message, fallback = "Limited provider mode. Showing cached and fallback context.") {
   const value = String(message || "").trim();
 
   if (!value) return fallback;
-  if (/showing available provider|showing available headlines/i.test(value)) return value.length > 90 ? "Provider limited. Showing available headlines." : value;
-  if (/timeout|ECONNABORTED/i.test(value)) return "Questrade timeout. Token is persisted; retry shortly.";
-  if (/429|rate|quota|cooling down/i.test(value)) return "Provider limited. Cached/fallback data active.";
-  if (/restricted|subscription|plan/i.test(value)) return "Provider limited. Showing available headlines.";
+  if (/showing available provider/i.test(value)) return "Limited provider mode. Showing cached and fallback context.";
+  if (/showing available headlines/i.test(value)) return value.length > 90 ? "Provider limited. Showing available headlines." : value;
+  if (/timeout|ECONNABORTED/i.test(value)) return "Questrade timeout. Token is stored; retry shortly.";
+  if (/429|rate|quota|cooling down/i.test(value)) return "Limited provider mode. Showing cached and fallback context.";
+  if (/restricted|subscription|plan/i.test(value)) return "Limited provider mode. Showing cached and fallback context.";
   if (/news/i.test(value) && /limited|fallback|unavailable/i.test(value)) return "News provider limited. Showing available headlines.";
-  if (/bad request/i.test(value)) return "Provider rejected the latest request. Cached/fallback data active.";
+  if (/bad request/i.test(value)) return "Provider rejected the latest request. Showing cached and fallback context.";
 
   return value.length > 90 ? fallback : value;
 }

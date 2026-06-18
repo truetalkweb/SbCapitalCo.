@@ -6,6 +6,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
     fontVariantNumeric: "tabular-nums",
   };
   const visibleRows = rows.slice(0, 9);
+  const gridColumns = "minmax(58px, 1fr) 64px 62px 44px 48px";
 
   function parseNumber(value) {
     const parsed = Number.parseFloat(String(value ?? "").replace(/[$,%x,]/g, ""));
@@ -73,8 +74,8 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(58px,1fr) minmax(62px,0.8fr) minmax(58px,0.72fr) minmax(48px,0.6fr) minmax(46px,0.56fr)",
-          gap: "8px",
+          gridTemplateColumns: gridColumns,
+          gap: "6px",
           padding: "7px 8px",
           color: theme.muted,
           fontSize: "9px",
@@ -107,10 +108,11 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
             style={{
               width: "100%",
               display: "grid",
-              gridTemplateColumns: "minmax(58px,1fr) minmax(62px,0.8fr) minmax(58px,0.72fr) minmax(48px,0.6fr) minmax(46px,0.56fr)",
-              gap: "8px",
+              gridTemplateColumns: gridColumns,
+              gap: "6px",
               alignItems: "center",
-              padding: "7px 8px",
+              minHeight: "42px",
+              padding: "6px 8px",
               background: "transparent",
               border: "none",
               borderBottom:
@@ -137,7 +139,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {stock.catalystType || stock.source || "Small Cap"}
+                {stock.catalystType || (String(stock.source || "").includes("FMP") ? "Provider" : stock.source) || "Context"}
               </span>
             </span>
             <span title={formatFlow(stock)} style={{ ...monoStyle, color: theme.text, fontWeight: 750, textAlign: "right" }}>

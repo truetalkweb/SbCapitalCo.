@@ -3,6 +3,9 @@ export const BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://lo
 export const terminalMonoFont =
   '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
+export const terminalSansFont =
+  '"Roboto", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
 export const defaultStocks = [
   { symbol: "NVDA", price: 211.5, change: "+1.18%", volume: "6.25M" },
   { symbol: "AMD", price: 168.22, change: "+0.74%", volume: "2.46M" },

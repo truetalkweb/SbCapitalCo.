@@ -290,13 +290,19 @@ export function formatTerminalStatusLabel(label) {
   const upper = value.toUpperCase();
 
   if (!value) return "Pending";
+  if (upper.includes("LOCAL SCANNER FALLBACK")) return "Fallback Context";
+  if (upper.includes("SCANNER UNAVAILABLE")) return "Fallback Context";
+  if (upper.includes("SCANNER CONTEXT")) return "Fallback Context";
+  if (upper.includes("SCANNER CATALYST")) return "Fallback Context";
   if (upper.includes("PROVIDER LIMITED")) return "Provider Limited";
   if (upper.includes("CACHED")) return "Cached";
-  if (upper.includes("FALLBACK")) return "Fallback";
+  if (upper.includes("FALLBACK")) return "Fallback Context";
   if (upper.includes("BACKEND LIVE")) return "Backend Live";
   if (upper.includes("BACKEND PENDING")) return "Backend Pending";
   if (upper.includes("BROKER CONNECTED")) return "Broker Connected";
   if (upper.includes("BROKER DISCONNECTED")) return "Broker Disconnected";
+  if (upper.includes("TOKEN STORED")) return "Token Stored";
+  if (upper.includes("LIVE LOCKED")) return "Broker Locked";
   if (upper.includes("PAPER MODE")) return "Paper Mode";
   if (upper.includes("HIST QTRD")) return "Hist QTRD";
   if (upper.includes("CHART SIM")) return "Chart Sim";
@@ -304,11 +310,16 @@ export function formatTerminalStatusLabel(label) {
   if (upper.includes("CHART LOADING")) return "Chart Loading";
   if (upper.includes("QUOTE DELAYED")) return "Quote Delayed";
   if (upper.includes("QUOTE LIVE")) return "Quote Live";
+  if (upper.includes("QUESTRADE QUOTE")) return "Live Quote";
+  if (upper.includes("QUESTRADE")) return "Live Quote";
   if (upper.includes("QTRD LIVE")) return "QTRD Live";
   if (upper.includes("QTRD PENDING")) return "QTRD Pending";
   if (upper.includes("AI PENDING")) return "AI Pending";
   if (upper.includes("GEMINI LIVE")) return "Gemini Live";
   if (upper.includes("NEWS LIVE")) return "News Live";
+  if (upper.includes("YAHOO")) return "Market News";
+  if (upper.includes("FINNHUB")) return "Market News";
+  if (upper.includes("FMP")) return "Provider Data";
   if (upper.includes("SCANNER LIVE")) return "Scanner Live";
 
   return value

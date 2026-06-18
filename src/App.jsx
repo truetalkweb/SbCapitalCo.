@@ -34,6 +34,7 @@ import {
   popularSymbols,
   rightPanelTabs,
   terminalMonoFont,
+  terminalSansFont,
   workspaceViews,
 } from "./config/terminalConfig";
 import { useMarketData } from "./hooks/useMarketData";
@@ -51,6 +52,7 @@ import {
   buildDataConfidence,
   buildTerminalSourceLabels,
   fetchWithTimeout,
+  formatTerminalStatusLabel,
 } from "./utils/marketUtils";
 import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatus";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
@@ -1998,97 +2000,99 @@ export default function App() {
       selectedDockStock?.catalyst ||
       selectedDockStock?.whyMoving ||
       "Monitoring chart, scanner, and headline context.";
+    const confidenceColor = (confidence) => {
+      if (confidence === "High") return theme.green;
+      if (confidence === "Medium") return theme.amber;
+      return theme.muted;
+    };
+    const cleanStatus = (value) => formatTerminalStatusLabel(value || "Pending");
+    const rightPanelCardStyle = {
+      background: "rgba(12,18,29,0.84)",
+      border: `1px solid ${theme.borderSoft || theme.border}`,
+      borderRadius: "7px",
+      padding: "10px",
+      minWidth: 0,
+    };
+    const compactLabelStyle = {
+      color: theme.muted,
+      fontSize: "8.5px",
+      fontWeight: 800,
+      textTransform: "uppercase",
+      letterSpacing: 0,
+      fontFamily: terminalSansFont,
+    };
+    const compactValueStyle = {
+      marginTop: "3px",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontFamily: terminalMonoFont,
+      fontVariantNumeric: "tabular-nums",
+      fontSize: "10px",
+      fontWeight: 800,
+    };
+    const sourceRows = [
+      ["Quote", cleanStatus(selectedDataConfidence.quote?.label), selectedDataConfidence.quote?.confidence],
+      ["News", cleanStatus(selectedDataConfidence.news?.label), selectedDataConfidence.news?.confidence],
+      ["Scanner", cleanStatus(selectedDataConfidence.scanner?.label), selectedDataConfidence.scanner?.confidence],
+      ["Broker", qtrdHealth.tokenPersisted ? "Token Stored" : brokerConnected ? "Broker Connected" : "Broker Locked", brokerConnected ? "High" : qtrdHealth.tokenPersisted ? "Medium" : "Limited"],
+    ];
+    const dockScore = selectedDockStock?.score10 || selectedDockStock?.score || selectedDockStock?.scoreValue || "Limited";
+    const detailRows = [
+      ["Data", selectedDataConfidence.confidence],
+      ["Score", dockScore],
+      ["Risk", cleanStatus(dockRisk)],
+    ];
+    const tapeRows = (selectedTickerNews.length ? selectedTickerNews : news.slice(0, 5)).filter((item) =>
+      String(item?.headline || item?.summary || "").trim()
+    );
 
     return (
-      <div style={{ display: "grid", gap: "10px" }}>
-        <div
-          style={{
-            background: theme.panel2,
-            border: `1px solid ${theme.borderSoft || theme.border}`,
-            borderRadius: "8px",
-            padding: "10px",
-          }}
-        >
-          <div style={{ color: theme.text, fontSize: "12px", fontWeight: 950 }}>
-            {selectedStock} Market Intelligence
-          </div>
-          <div style={{ marginTop: "4px", color: theme.muted, fontSize: "10px", lineHeight: 1.45 }}>
-            Selected ticker context, catalyst tape, and data confidence. Live trading locked; broker execution stays behind Advanced.
-          </div>
-          <div
-            style={{
-              marginTop: "8px",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              border: `1px solid ${theme.amber}55`,
-              borderRadius: "999px",
-              padding: "4px 8px",
-              color: theme.amber,
-              background: "rgba(245,184,75,0.08)",
-              fontSize: "9px",
-              fontWeight: 950,
-              textTransform: "uppercase",
-              fontFamily: terminalMonoFont,
-            }}
-          >
-            Live Trading Locked
+      <div style={{ display: "grid", gap: "9px", fontFamily: terminalSansFont }}>
+        <div style={rightPanelCardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "baseline" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: theme.text, fontSize: "12px", fontWeight: 850 }}>
+                {selectedStock} Intelligence
+              </div>
+              <div style={{ color: theme.muted, fontSize: "9.5px", marginTop: "3px" }}>
+                Confidence {cleanStatus(selectedDataConfidence.confidence)} · Updated {selectedDataConfidence.lastUpdatedLabel}
+              </div>
+            </div>
+            <span
+              style={{
+                color: brokerConnected ? theme.green : theme.amber,
+                border: `1px solid ${(brokerConnected ? theme.green : theme.amber)}4d`,
+                borderRadius: "999px",
+                padding: "3px 7px",
+                background: brokerConnected ? "rgba(0,200,150,0.07)" : "rgba(245,184,75,0.07)",
+                fontSize: "8px",
+                fontWeight: 850,
+                textTransform: "uppercase",
+                fontFamily: terminalMonoFont,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {brokerConnected ? "Broker Connected" : "Broker Locked"}
+            </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "9px" }}>
-            {[
-              ["Quote", selectedDataConfidence.quote?.label || "Pending", selectedDataConfidence.quote?.confidence],
-              ["News", selectedDataConfidence.news?.label || "Pending", selectedDataConfidence.news?.confidence],
-              ["Scanner", selectedDataConfidence.scanner?.label || "Pending", selectedDataConfidence.scanner?.confidence],
-              ["Broker", qtrdHealth.tokenPersisted ? "Token Stored" : "Live Locked", qtrdHealth.confidence || "Limited"],
-            ].map(([label, value, confidence]) => {
-              const color = confidence === "High" ? theme.green : confidence === "Medium" ? theme.amber : theme.muted;
-
-              return (
-                <div
-                  key={label}
-                  style={{
-                    border: `1px solid ${theme.borderSoft || theme.border}`,
-                    borderRadius: "6px",
-                    padding: "7px",
-                    background: theme.panel,
-                    minWidth: 0,
-                  }}
-                >
-                  <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 900, textTransform: "uppercase" }}>
-                    {label}
-                  </div>
-                  <div
-                    style={{
-                      color,
-                      fontSize: "10px",
-                      fontWeight: 800,
-                      marginTop: "3px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      fontFamily: terminalMonoFont,
-                    }}
-                  >
-                    {value}
-                  </div>
+            {sourceRows.map(([label, value, confidence]) => (
+              <div key={label} style={{ minWidth: 0, padding: "6px 7px", borderRadius: "5px", background: "rgba(255,255,255,0.025)" }}>
+                <div style={compactLabelStyle}>{label}</div>
+                <div style={{ ...compactValueStyle, color: confidenceColor(confidence) }}>
+                  {value}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
 
-        <div
-          style={{
-            background: theme.panel2,
-            border: `1px solid ${theme.borderSoft || theme.border}`,
-            borderRadius: "8px",
-            padding: "10px",
-          }}
-        >
+        <div style={rightPanelCardStyle}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "10px", alignItems: "start" }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", gap: "7px", alignItems: "center", minWidth: 0 }}>
-                <span style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "18px", fontWeight: 900 }}>
+                <span style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "17px", fontWeight: 900 }}>
                   {selectedStock}
                 </span>
                 <span
@@ -2121,10 +2125,10 @@ export default function App() {
               </div>
             </div>
             <div style={{ textAlign: "right", minWidth: "78px" }}>
-              <div style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "15px", fontWeight: 900 }}>
+              <div style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "15px", fontWeight: 900, fontVariantNumeric: "tabular-nums" }}>
                 ${dockPrice.toFixed(2)}
               </div>
-              <div style={{ fontFamily: terminalMonoFont, color: dockMove >= 0 ? theme.green : theme.red, fontSize: "11px", fontWeight: 900, marginTop: "4px" }}>
+              <div style={{ fontFamily: terminalMonoFont, color: dockMove >= 0 ? theme.green : theme.red, fontSize: "11px", fontWeight: 900, marginTop: "4px", fontVariantNumeric: "tabular-nums" }}>
                 {dockMove >= 0 ? "+" : ""}
                 {dockMove.toFixed(2)}%
               </div>
@@ -2132,23 +2136,18 @@ export default function App() {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px", marginTop: "10px" }}>
-            {[
-              ["Data", selectedDataConfidence.confidence],
-              ["Source", selectedDataConfidence.scanner?.label || "Scanner"],
-              ["Risk", dockRisk],
-            ].map(([label, value]) => (
+            {detailRows.map(([label, value]) => (
               <div
                 key={label}
                 style={{
-                  border: `1px solid ${theme.borderSoft || theme.border}`,
                   borderRadius: "6px",
-                  padding: "6px",
-                  background: theme.panel,
+                  padding: "6px 7px",
+                  background: "rgba(255,255,255,0.025)",
                   minWidth: 0,
                 }}
               >
-                <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 900, textTransform: "uppercase" }}>{label}</div>
-                <div style={{ fontFamily: terminalMonoFont, color: label === "Data" && value === "High" ? theme.green : label === "Risk" ? theme.amber : theme.text, fontSize: "10px", fontWeight: 850, marginTop: "3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={compactLabelStyle}>{label}</div>
+                <div style={{ ...compactValueStyle, color: label === "Data" && value === "High" ? theme.green : label === "Risk" ? theme.amber : theme.text }}>
                   {value}
                 </div>
               </div>
@@ -2174,44 +2173,41 @@ export default function App() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: theme.panel2,
-            border: `1px solid ${theme.borderSoft || theme.border}`,
-            borderRadius: "8px",
-            padding: "10px",
-          }}
-        >
-          <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950, textTransform: "uppercase" }}>
-            Catalyst Tape
+        <div style={rightPanelCardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", alignItems: "center" }}>
+            <div style={{ color: theme.text, fontSize: "11px", fontWeight: 850, textTransform: "uppercase" }}>
+              Catalyst Tape
+            </div>
+            <div style={{ color: theme.muted, fontSize: "9px", fontFamily: terminalMonoFont }}>
+              {tapeRows.length} rows
+            </div>
           </div>
           <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
-            {(selectedTickerNews.length ? selectedTickerNews : news.slice(0, 4)).map((item, index) => {
+            {tapeRows.map((item, index) => {
               const hasUrl = Boolean(item.url);
+              const headline = String(item.headline || item.summary || "Market context update").trim();
+              const source = cleanStatus(item.source || "News");
+              const ticker = String(item.relatedTicker || item.symbol || selectedStock).toUpperCase();
               const content = (
                 <>
-                  <div
-                    style={{
-                      color: theme.text,
-                      fontSize: "11px",
-                      fontWeight: 750,
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {item.headline}
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                    <span style={{ ...compactValueStyle, marginTop: 0, color: theme.cyan, flex: "0 0 auto" }}>
+                      {ticker}
+                    </span>
+                    <span style={{ color: theme.muted, fontSize: "9px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {source}
+                    </span>
                   </div>
                   <div
                     style={{
+                      color: theme.text,
+                      fontSize: "10.5px",
+                      fontWeight: 700,
+                      lineHeight: 1.35,
                       marginTop: "4px",
-                      display: "flex",
-                      gap: "6px",
-                      color: theme.muted,
-                      fontSize: "9px",
-                      fontFamily: terminalMonoFont,
                     }}
                   >
-                    <span>{item.relatedTicker || selectedStock}</span>
-                    <span>{item.source || "News"}</span>
+                    {headline}
                   </div>
                 </>
               );
@@ -2227,6 +2223,7 @@ export default function App() {
                     display: "block",
                     borderTop: index === 0 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
                     paddingTop: index === 0 ? 0 : "8px",
+                    cursor: "pointer",
                   }}
                 >
                   {content}
@@ -2243,6 +2240,11 @@ export default function App() {
                 </div>
               );
             })}
+            {!tapeRows.length && (
+              <div style={{ color: theme.muted, fontSize: "10px", lineHeight: 1.4 }}>
+                Catalyst feed pending. Chart, scanner, and quote context remain available.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2258,8 +2260,7 @@ export default function App() {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
-        fontFamily:
-          "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+        fontFamily: terminalSansFont,
       }}
     >
         <TerminalTopBar
@@ -2789,13 +2790,13 @@ export default function App() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(64px, 1fr))",
-                    gap: "5px",
-                    marginBottom: "10px",
-                    padding: "5px",
-                    background: theme.panel,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(54px, 1fr))",
+                    gap: "4px",
+                    marginBottom: "9px",
+                    padding: "4px",
+                    background: "rgba(255,255,255,0.018)",
                     border: `1px solid ${theme.borderSoft || theme.border}`,
-                    borderRadius: "8px",
+                    borderRadius: "7px",
                   }}
                 >
                   {visibleRightPanelTabs.map((tab) => (
@@ -2804,14 +2805,16 @@ export default function App() {
                       onClick={() => setRightTab(tab.id)}
                       style={{
                         ...buttonStyle(rightTab === tab.id),
-                        height: "28px",
+                        height: "25px",
                         minWidth: 0,
-                        padding: "0 6px",
-                        fontSize: "10px",
+                        padding: "0 5px",
+                        fontSize: "9px",
+                        fontFamily: terminalSansFont,
+                        fontWeight: 800,
                         borderColor: rightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
                         background: rightTab === tab.id
                           ? `linear-gradient(180deg, ${theme.blue}, #1765c6)`
-                          : "transparent",
+                          : "rgba(255,255,255,0.015)",
                       }}
                     >
                       {tab.label}

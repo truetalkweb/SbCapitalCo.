@@ -756,30 +756,13 @@ function Chart({
   useEffect(() => {
     if (!candleSeriesRef.current || !candlesRef.current.length) return;
 
-    if (!replayMode) {
-      candleSeriesRef.current.setData(candlesRef.current);
-      updateVolume(candlesRef.current);
-      updateIndicators(candlesRef.current);
-      updateMarkers();
-      return;
-    }
+    const source = replayMode ? getVisibleCandles() : candlesRef.current;
 
-    const visibleCandles = getVisibleCandles();
-
-    candleSeriesRef.current.setData(visibleCandles);
-    updateVolume(visibleCandles);
-    updateIndicators(visibleCandles);
-    updateMarkers();
-  }, [
-    getVisibleCandles,
-    replayMode,
-    replayIndex,
-    replayTrades,
-    indicators,
-    updateIndicators,
-    updateMarkers,
-    updateVolume,
-  ]);
+    candleSeriesRef.current.setData(source);
+    updateVolumeRef.current(source);
+    updateIndicatorsRef.current(source);
+    updateMarkersRef.current();
+  }, [getVisibleCandles, replayIndex, replayMode, replayTrades]);
 
   return (
     <div

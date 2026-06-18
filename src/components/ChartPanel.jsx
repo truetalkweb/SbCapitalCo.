@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import {
   Camera,
   Crosshair,
@@ -51,7 +51,7 @@ export default function ChartPanel({
   advancedMode = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
-  const chartIndicators = normalizeIndicatorState(indicators);
+  const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
   const cleanChartSymbol = String(symbol || "").trim().toUpperCase();
   const commitChartSymbol = (nextSymbol) => {
     const clean = String(nextSymbol || "").trim().toUpperCase();

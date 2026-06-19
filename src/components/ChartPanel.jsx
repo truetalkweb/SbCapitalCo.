@@ -108,6 +108,14 @@ export default function ChartPanel({
       [toolId]: !current[toolId],
     }));
   };
+  const toggleTrendToolsMenu = () => {
+    setShowIndicators?.(false);
+    setShowTrendTools((value) => !value);
+  };
+  const toggleIndicatorsMenu = () => {
+    setShowTrendTools(false);
+    setShowIndicators?.((value) => !value);
+  };
 
   return (
     <div
@@ -260,7 +268,7 @@ export default function ChartPanel({
                 borderColor: showTrendTools || trendTools.autoLevels ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
                 color: showTrendTools || trendTools.autoLevels ? "#ffffff" : toolButtonStyle.color,
               }}
-              onClick={() => setShowTrendTools((value) => !value)}
+              onClick={toggleTrendToolsMenu}
               title="Trend Tools"
               aria-expanded={showTrendTools}
             >
@@ -334,7 +342,7 @@ export default function ChartPanel({
                 borderColor: showIndicators ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
                 color: showIndicators ? "#ffffff" : toolButtonStyle.color,
               }}
-              onClick={() => setShowIndicators((value) => !value)}
+              onClick={toggleIndicatorsMenu}
               title="Indicators"
               aria-expanded={showIndicators}
             >

@@ -22,7 +22,8 @@ function getArticleType(item) {
 }
 
 function getArticleTypeColor(type, theme) {
-  if (type === "Real Article" || type === "Article" || type === "Market News") return theme.green;
+  if (type === "Ticker Catalyst" || type === "Real Article" || type === "Article" || type === "Market News") return theme.green;
+  if (type === "Market Context") return theme.blue || theme.green;
   if (type === "Fallback Context" || type === "Scanner Catalyst") return theme.amber;
 
   return theme.muted;
@@ -167,7 +168,7 @@ export default function MarketNewsPanel({
             const sourceLabel = formatTerminalStatusLabel(item.fallback ? item.source || "Fallback" : item.source || "Market News");
             const sourceType = getArticleType(item);
             const sourceColor = getArticleTypeColor(sourceType, theme);
-            const ticker = String(item.relatedTicker || selectedStock || "MARKET").toUpperCase();
+            const ticker = String(item.relatedTicker || (sourceType === "Ticker Catalyst" ? selectedStock : "MARKET")).toUpperCase();
             const headline = String(item.text || item.headline || "Market context update").trim();
             const summary = String(item.summary || "").trim();
 

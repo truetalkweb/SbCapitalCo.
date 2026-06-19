@@ -29,7 +29,7 @@ export function normalizePanelNewsItem(item, index, selectedSymbol) {
   const fallback = Boolean(item.fallback || item.degraded) ||
     rawSource.toLowerCase().includes("fallback") ||
     rawSource.toLowerCase().includes("scanner");
-  const sourceType = getNewsSourceType({ source: rawSource, fallback, url: item.url });
+  const sourceType = item.sourceType || item.relevance || getNewsSourceType({ source: rawSource, fallback, url: item.url });
 
   return {
     id: item.id || `${selectedSymbol || "MARKET"}-${index}-${headline.slice(0, 32)}`,
@@ -37,7 +37,7 @@ export function normalizePanelNewsItem(item, index, selectedSymbol) {
     source: fallback && source.toLowerCase().includes("scanner") ? "Scanner Catalyst" : source,
     text: headline,
     url: item.url || null,
-    relatedTicker: item.relatedTicker || selectedSymbol,
+    relatedTicker: item.relatedTicker || (sourceType === "Ticker Catalyst" ? selectedSymbol : null),
     summary: item.summary || "",
     fallback,
     sourceType,

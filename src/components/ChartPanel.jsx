@@ -3,8 +3,6 @@ import {
   Camera,
   Crosshair,
   Maximize2,
-  PencilLine,
-  Settings,
   SlidersHorizontal,
 } from "lucide-react";
 import ChartTickerInput from "./ChartTickerInput";
@@ -319,12 +317,6 @@ export default function ChartPanel({
             )}
           </div>
           {advancedMode && (
-          <button style={toolButtonStyle} title="Draw">
-            <PencilLine size={14} style={toolIconStyle} />
-            {!isPhoneChart && "Draw"}
-          </button>
-          )}
-          {advancedMode && (
           <button style={toolButtonStyle} onClick={takeScreenshot} title="Screenshot">
             <Camera size={14} style={toolIconStyle} />
             {!isPhoneChart && "Screenshot"}
@@ -334,12 +326,6 @@ export default function ChartPanel({
             <Maximize2 size={14} style={toolIconStyle} />
             {!isPhoneChart && "Fullscreen"}
           </button>
-          {advancedMode && (
-          <button style={toolButtonStyle} title="Settings">
-            <Settings size={14} style={toolIconStyle} />
-            {!isPhoneChart && "Settings"}
-          </button>
-          )}
         </div>
       )}
 

@@ -1842,12 +1842,17 @@ export default function App() {
   const workspaceDefaultSize =
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
 
+  const isFourChartLayout = activeWorkspace === "charts" && layoutMode !== "1" && gridMode === "4";
+  const showWorkspaceNewsPanel =
+    (activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") &&
+    !isFourChartLayout;
   const centerRows =
     activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
     activeWorkspace === "watchlist" ||
     activeWorkspace === "journal" ||
-    activeWorkspace === "settings"
+    activeWorkspace === "settings" ||
+    isFourChartLayout
       ? "1fr"
       : "1fr 170px";
 
@@ -2762,7 +2767,7 @@ export default function App() {
             />
           )}
 
-          {(activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") && (
+          {showWorkspaceNewsPanel && (
             <MarketNewsPanel
               news={news}
               newsLoading={newsLoading}

@@ -144,6 +144,7 @@ function Chart({
   const pendingStreamTickRef = useRef(null);
   const streamFrameRef = useRef(null);
   const lastStreamTickAtRef = useRef(null);
+  const resizeFrameRef = useRef(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [hadChartHistoryBeforeLoad, setHadChartHistoryBeforeLoad] = useState(false);
 
@@ -227,6 +228,31 @@ function Chart({
   const updateVolumeRef = useRef(updateVolume);
   const updateIndicatorsRef = useRef(updateIndicators);
   const updateMarkersRef = useRef(updateMarkers);
+
+  const applyHistoryDataset = useCallback((rows, nextStatus, options = {}) => {
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+
+    if (!normalizedRows.length || !candleSeriesRef.current) return false;
+
+    candlesRef.current = normalizedRows;
+    lastCandleRef.current = normalizedRows[normalizedRows.length - 1];
+    displayPriceRef.current = lastCandleRef.current.close;
+    targetPriceRef.current = lastCandleRef.current.close;
+    lastAppliedPriceRef.current = lastCandleRef.current.close;
+
+    candleSeriesRef.current.setData(normalizedRows);
+    updateVolumeRef.current(normalizedRows);
+    if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(normalizedRows);
+    updateIndicatorsRef.current(normalizedRows);
+    updateMarkersRef.current();
+
+    if (chartRef.current && options.fitContent !== false) {
+      chartRef.current.timeScale().fitContent();
+    }
+
+    if (nextStatus) setStatus(nextStatus);
+    return true;
+  }, [setStatus]);
 
   useEffect(() => {
     updateVolumeRef.current = updateVolume;
@@ -511,12 +537,12 @@ function Chart({
         borderColor: "#1f2937",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 8,
-        barSpacing: 8,
-        minBarSpacing: 3,
+        rightOffset: 10,
+        barSpacing: 7,
+        minBarSpacing: 2,
         fixLeftEdge: false,
         fixRightEdge: false,
-        lockVisibleTimeRangeOnResize: false,
+        lockVisibleTimeRangeOnResize: true,
       },
       handleScroll: {
         mouseWheel: true,
@@ -577,6 +603,10 @@ function Chart({
     volumeSeriesRef.current = volumeSeries;
     indicatorSeriesRef.current = indicatorSeries;
 
+    if (hadHistory) {
+      applyHistoryDataset(candlesRef.current, "UPDATING", { fitContent: true });
+    }
+
     chart.subscribeCrosshairMove((param) => {
       if (disposed) return;
       if (!tooltipRef.current || !containerRef.current) return;
@@ -619,19 +649,7 @@ function Chart({
           if (backendCandles.length) {
             if (disposed) return;
 
-            candlesRef.current = backendCandles;
-            lastCandleRef.current = backendCandles[backendCandles.length - 1];
-            displayPriceRef.current = lastCandleRef.current.close;
-            targetPriceRef.current = lastCandleRef.current.close;
-            lastAppliedPriceRef.current = lastCandleRef.current.close;
-
-            candleSeries.setData(backendCandles);
-            updateVolumeRef.current(backendCandles);
-            if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(backendCandles);
-            updateIndicatorsRef.current(backendCandles);
-            updateMarkersRef.current();
-            chart.timeScale().fitContent();
-            setStatus("QTRD");
+            applyHistoryDataset(backendCandles, "QTRD", { fitContent: true });
             setIsHistoryLoading(false);
 
             if (lastLivePriceRef.current) {
@@ -644,37 +662,13 @@ function Chart({
         const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
         if (disposed) return;
 
-        candlesRef.current = fallback;
-        lastCandleRef.current = fallback[fallback.length - 1];
-        displayPriceRef.current = lastCandleRef.current.close;
-        targetPriceRef.current = lastCandleRef.current.close;
-        lastAppliedPriceRef.current = lastCandleRef.current.close;
-
-        candleSeries.setData(fallback);
-        updateVolumeRef.current(fallback);
-        if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
-        updateIndicatorsRef.current(fallback);
-        updateMarkersRef.current();
-        chart.timeScale().fitContent();
-        setStatus("SIM");
+        applyHistoryDataset(fallback, "SIM", { fitContent: true });
         setIsHistoryLoading(false);
       } catch {
         const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
         if (disposed) return;
 
-        candlesRef.current = fallback;
-        lastCandleRef.current = fallback[fallback.length - 1];
-        displayPriceRef.current = lastCandleRef.current.close;
-        targetPriceRef.current = lastCandleRef.current.close;
-        lastAppliedPriceRef.current = lastCandleRef.current.close;
-
-        candleSeries.setData(fallback);
-        updateVolumeRef.current(fallback);
-        if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(fallback);
-        updateIndicatorsRef.current(fallback);
-        updateMarkersRef.current();
-        chart.timeScale().fitContent();
-        setStatus("SIM");
+        applyHistoryDataset(fallback, "SIM", { fitContent: true });
         setIsHistoryLoading(false);
       }
     }
@@ -684,10 +678,16 @@ function Chart({
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
       if (!containerRef.current || !chartRef.current) return;
+      if (resizeFrameRef.current) cancelAnimationFrame(resizeFrameRef.current);
 
-      chartRef.current.applyOptions({
-        width: containerRef.current.clientWidth,
-        height: containerRef.current.clientHeight,
+      resizeFrameRef.current = requestAnimationFrame(() => {
+        resizeFrameRef.current = null;
+        if (disposed || !containerRef.current || !chartRef.current) return;
+
+        chartRef.current.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        });
       });
     });
 
@@ -704,6 +704,10 @@ function Chart({
         cancelAnimationFrame(streamFrameRef.current);
         streamFrameRef.current = null;
       }
+      if (resizeFrameRef.current) {
+        cancelAnimationFrame(resizeFrameRef.current);
+        resizeFrameRef.current = null;
+      }
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
@@ -716,7 +720,7 @@ function Chart({
         }
       });
     };
-  }, [brokerApiUrl, chartSymbol, setStatus, timeframe]);
+  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, setStatus, timeframe]);
 
   useEffect(() => {
     updateIndicators();

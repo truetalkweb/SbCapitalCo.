@@ -1843,6 +1843,7 @@ export default function App() {
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
 
   const isFourChartLayout = activeWorkspace === "charts" && layoutMode !== "1" && gridMode === "4";
+  const showTickerTape = activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay";
   const showWorkspaceNewsPanel =
     (activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") &&
     !isFourChartLayout;
@@ -2311,11 +2312,13 @@ export default function App() {
         onSymbolCommit={selectMainSymbol}
       />
 
-      <TickerTape
-        theme={theme}
-        stocks={tickerTapeSymbols.slice(0, activeWorkspace === "intelligence" ? 14 : 20)}
-        onPick={selectMainSymbol}
-      />
+      {showTickerTape && (
+        <TickerTape
+          theme={theme}
+          stocks={tickerTapeSymbols.slice(0, 12)}
+          onPick={selectMainSymbol}
+        />
+      )}
 
       <ProductionHealthStrip
         theme={theme}

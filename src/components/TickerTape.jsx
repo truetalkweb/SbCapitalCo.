@@ -20,7 +20,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
 
   function formatMove(move, hasLivePrice) {
     if (move === null) return hasLivePrice ? "LIVE" : "PENDING";
-    if (Math.abs(move) < 0.005) return "FLAT";
+    if (Math.abs(move) < 0.005) return "";
 
     return `${move > 0 ? "+" : ""}${move.toFixed(2)}%`;
   }
@@ -48,6 +48,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
   }, []);
   const winners = uniqueStocks.filter((stock) => Number(stock.move) > 0).length;
   const losers = uniqueStocks.filter((stock) => Number(stock.move) < 0).length;
+  const breadthLabel = winners || losers ? `ADV ${winners} DEC ${losers}` : "MARKET TAPE";
   const displayStocks = uniqueStocks.length ? [...uniqueStocks, ...uniqueStocks] : [];
 
   return (
@@ -62,7 +63,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
         borderTop: `1px solid ${theme.border}`,
         borderBottom: `1px solid ${theme.border}`,
         color: theme.text,
-        fontSize: "11px",
+        fontSize: "10px",
         fontFamily: monoFont,
         fontVariantNumeric: "tabular-nums",
         contain: "layout paint",
@@ -70,14 +71,14 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
     >
       <div
         style={{
-          padding: "0 10px",
+          padding: "0 8px",
           fontWeight: 900,
           color: theme.cyan || theme.blue,
           borderRight: `1px solid ${theme.border}`,
           background: theme.panel2,
           whiteSpace: "nowrap",
           flexShrink: 0,
-          minWidth: "138px",
+          minWidth: "116px",
           height: "100%",
           display: "flex",
           alignItems: "center",
@@ -85,7 +86,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
           zIndex: 2,
         }}
       >
-        BREADTH ADV {winners} DEC {losers}
+        {breadthLabel}
       </div>
 
       <div
@@ -100,11 +101,11 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
         <div
           style={{
             display: "flex",
-            gap: "18px",
+            gap: "12px",
             whiteSpace: "nowrap",
             width: "max-content",
             minWidth: "max-content",
-            animation: "tickerMove 38s linear infinite",
+            animation: "tickerMove 58s linear infinite",
             paddingLeft: "16px",
             height: "100%",
             alignItems: "center",
@@ -121,11 +122,11 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
               style={{
                 cursor: "pointer",
                 display: "inline-grid",
-                gridTemplateColumns: "56px 74px 68px",
-                columnGap: "7px",
+                gridTemplateColumns: "52px 70px 62px",
+                columnGap: "6px",
                 alignItems: "center",
                 color: theme.text,
-                width: "212px",
+                width: "190px",
                 flex: "0 0 auto",
               }}
             >
@@ -133,7 +134,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
               <span style={{ textAlign: "right", color: stock.hasLivePrice ? theme.text : theme.muted }}>
                 {formatPrice(stock)}
               </span>
-              <span style={{ color: moveColor(stock.move), textAlign: "right", fontWeight: 800 }}>
+              <span style={{ color: moveColor(stock.move), textAlign: "right", fontWeight: 800, opacity: Math.abs(Number(stock.move || 0)) < 0.005 ? 0.35 : 1 }}>
                 {formatMove(stock.move, stock.hasLivePrice)}
               </span>
             </div>

@@ -1,29 +1,57 @@
 import LoadingPanel from "./LoadingPanel";
 import { getNewsStatusLabel } from "../hooks/useMarketNews";
+import { terminalSansFont } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { formatTerminalStatusLabel } from "../utils/marketUtils";
 
 function getStatusColor(label, theme) {
-  if (String(label).includes("FALLBACK") || String(label).includes("LIMITED") || String(label).includes("PENDING")) return theme.amber;
-  if (label === "NEWS LIVE" || label === "NEWS CACHED") return theme.green;
+  const value = String(label || "").toUpperCase();
+
+  if (value.includes("FALLBACK") || value.includes("LIMITED") || value.includes("PENDING")) return theme.amber;
+  if (value.includes("LIVE") || value.includes("CACHED")) return theme.green;
 
   return theme.muted;
 }
 
-function EmptyNewsState({ theme }) {
+function getArticleType(item) {
+  if (item.sourceType) return formatTerminalStatusLabel(item.sourceType);
+  if (item.fallback) return "Scanner Catalyst";
+  if (item.url) return "Real Article";
+
+  return "Market News";
+}
+
+function getArticleTypeColor(type, theme) {
+  if (type === "Real Article" || type === "Article" || type === "Market News") return theme.green;
+  if (type === "Fallback Context" || type === "Scanner Catalyst") return theme.amber;
+
+  return theme.muted;
+}
+
+function EmptyNewsState({ theme, terminalMonoFont, selectedStock }) {
   return (
     <div
       style={{
         height: "100%",
         minHeight: "72px",
-        display: "grid",
-        placeItems: "center",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: "5px",
         color: theme.muted,
-        fontSize: "11px",
         textAlign: "center",
+        border: `1px dashed ${theme.borderSoft || theme.border}`,
+        borderRadius: "7px",
+        background: "rgba(255,255,255,0.015)",
       }}
     >
-      Market headlines will appear here when the backend returns articles.
+      <div style={{ color: theme.text, fontSize: "11px", fontWeight: 800, fontFamily: terminalSansFont }}>
+        News feed pending
+      </div>
+      <div style={{ color: theme.muted, fontSize: "10px", fontFamily: terminalSansFont }}>
+        Backend headlines for <span style={{ fontFamily: terminalMonoFont }}>{selectedStock || "MARKET"}</span> will appear here.
+      </div>
     </div>
   );
 }
@@ -55,6 +83,9 @@ export default function MarketNewsPanel({
       : dataConfidence?.confidence === "Medium"
         ? theme.amber
         : theme.red;
+  const updatedLabel = dataConfidence?.lastUpdatedLabel || "Pending";
+  const providerMessage = visibleMessage || formatTerminalStatusLabel(newsMeta.source || "Backend News");
+  const rowCountLabel = `${news.length} ${news.length === 1 ? "row" : "rows"}`;
 
   function confidencePill(label, value, confidence) {
     const color = confidence === "High" ? theme.green : confidence === "Medium" ? theme.amber : theme.red;
@@ -68,12 +99,12 @@ export default function MarketNewsPanel({
           gap: "4px",
           minWidth: 0,
           color: theme.text,
-          background: "rgba(255,255,255,0.025)",
-          border: `1px solid ${theme.borderSoft || theme.border}`,
+          background: "rgba(255,255,255,0.02)",
           borderRadius: "999px",
-          padding: "3px 6px",
+          padding: "3px 7px",
           fontSize: "9px",
-          fontWeight: 850,
+          fontWeight: 800,
+          fontFamily: terminalSansFont,
         }}
       >
         <span style={{ color: theme.muted }}>{label}</span>
@@ -101,25 +132,26 @@ export default function MarketNewsPanel({
         overflow: "hidden",
         display: "grid",
         gridTemplateRows: "auto 1fr",
-        gap: "6px",
+        gap: "7px",
         background: theme.card,
         border: `1px solid ${theme.border}`,
         borderRadius: "8px",
         padding: "9px",
+        fontFamily: terminalSansFont,
       }}
     >
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "10px",
+          display: "grid",
+          gridTemplateColumns: "minmax(160px, 1fr) auto",
+          alignItems: "start",
+          gap: "12px",
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-          paddingBottom: "6px",
+          paddingBottom: "7px",
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950, textTransform: "uppercase" }}>
+          <div style={{ color: theme.text, fontSize: "11px", fontWeight: 900, textTransform: "uppercase" }}>
             Market News
           </div>
           <div
@@ -127,23 +159,26 @@ export default function MarketNewsPanel({
               marginTop: "2px",
               color: theme.muted,
               fontSize: "9px",
-              fontWeight: 800,
+              fontWeight: 750,
               fontFamily: terminalMonoFont,
               fontVariantNumeric: "tabular-nums",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            {selectedStock || "MARKET"} / backend feed
+            {selectedStock || "MARKET"} / backend feed / {rowCountLabel}
           </div>
         </div>
         <div
           style={{
-            display: "flex",
+            display: "grid",
+            gridTemplateColumns: "auto minmax(0, 1fr)",
             alignItems: "center",
-            gap: "8px",
+            gap: "7px",
             minWidth: 0,
-            color: statusColor,
-            fontSize: "9px",
-            fontWeight: 850,
+            justifySelf: "end",
+            maxWidth: "520px",
           }}
           title={diagnosticsTitle}
         >
@@ -151,16 +186,29 @@ export default function MarketNewsPanel({
             style={{
               fontFamily: terminalMonoFont,
               fontVariantNumeric: "tabular-nums",
-              color: theme.faint || theme.muted,
+              color: statusColor,
+              border: `1px solid ${statusColor}42`,
+              borderRadius: "999px",
+              padding: "3px 7px",
+              background: `${statusColor}10`,
+              fontSize: "9px",
+              fontWeight: 850,
+              whiteSpace: "nowrap",
             }}
           >
-            {news.length} rows
-          </span>
-          <span style={{ fontFamily: terminalMonoFont, whiteSpace: "nowrap" }}>
             {displayStatusLabel}
           </span>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: theme.muted, maxWidth: "240px" }}>
-            {visibleMessage || newsMeta.source || "Backend News"}
+          <span
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: theme.muted,
+              fontSize: "9.5px",
+              fontWeight: 700,
+            }}
+          >
+            {providerMessage}
           </span>
         </div>
       </div>
@@ -173,7 +221,7 @@ export default function MarketNewsPanel({
             gap: "6px",
             minWidth: 0,
             overflow: "hidden",
-            padding: "2px 0 5px",
+            padding: "1px 0 5px",
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
           }}
         >
@@ -204,7 +252,7 @@ export default function MarketNewsPanel({
               whiteSpace: "nowrap",
             }}
           >
-            Updated {dataConfidence.lastUpdatedLabel}
+            Updated {updatedLabel}
           </span>
         </div>
       )}
@@ -212,18 +260,17 @@ export default function MarketNewsPanel({
       {newsLoading ? (
         <LoadingPanel theme={theme} label="Loading news" height="100%" />
       ) : news.length === 0 ? (
-        <EmptyNewsState theme={theme} />
+        <EmptyNewsState theme={theme} terminalMonoFont={terminalMonoFont} selectedStock={selectedStock} />
       ) : (
-        <div style={{ minHeight: 0, overflowY: "auto", display: "grid", alignContent: "start" }}>
-          {news.map((item) => {
+        <div style={{ minHeight: 0, overflowY: "auto", display: "grid", alignContent: "start", gap: "0" }}>
+          {news.map((item, index) => {
             const NewsRow = item.url ? "a" : "div";
-            const sourceLabel = item.fallback ? item.source || "Fallback" : item.source;
-            const sourceType = item.sourceType || (item.fallback ? "Scanner Catalyst" : item.url ? "Real Article" : "Market Context");
-            const sourceColor = sourceType === "Real Article" || sourceType === "Article"
-              ? theme.green
-              : sourceType === "Market Context"
-                ? theme.amber
-                : theme.red;
+            const sourceLabel = formatTerminalStatusLabel(item.fallback ? item.source || "Fallback" : item.source || "Market News");
+            const sourceType = getArticleType(item);
+            const sourceColor = getArticleTypeColor(sourceType, theme);
+            const ticker = String(item.relatedTicker || selectedStock || "MARKET").toUpperCase();
+            const headline = String(item.text || item.headline || "Market context update").trim();
+            const summary = String(item.summary || "").trim();
 
             return (
               <NewsRow
@@ -233,20 +280,21 @@ export default function MarketNewsPanel({
                 rel={item.url ? "noreferrer" : undefined}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(58px, 74px) minmax(70px, 104px) minmax(82px, 110px) minmax(0, 1fr) minmax(46px, 70px)",
-                  gap: "10px",
+                  gridTemplateColumns: "minmax(54px, 72px) minmax(72px, 102px) minmax(76px, 108px) minmax(0, 1fr) minmax(42px, 66px)",
+                  gap: "9px",
                   alignItems: "start",
                   color: theme.text,
                   textDecoration: "none",
-                  borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-                  padding: "9px 5px",
-                  fontSize: "12px",
-                  lineHeight: "1.42",
+                  borderBottom: index === news.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+                  padding: "8px 6px",
+                  fontSize: "11px",
+                  lineHeight: 1.38,
                   cursor: item.url ? "pointer" : "default",
                   transition: "background 0.15s ease",
+                  borderRadius: item.url ? "5px" : 0,
                 }}
                 onMouseEnter={(event) => {
-                  if (item.url) event.currentTarget.style.background = "rgba(45,140,255,0.055)";
+                  if (item.url) event.currentTarget.style.background = "rgba(45,140,255,0.06)";
                 }}
                 onMouseLeave={(event) => {
                   event.currentTarget.style.background = "transparent";
@@ -257,7 +305,7 @@ export default function MarketNewsPanel({
                     fontFamily: terminalMonoFont,
                     fontVariantNumeric: "tabular-nums",
                     color: theme.faint || theme.muted,
-                    fontSize: "10px",
+                    fontSize: "9.5px",
                     fontWeight: 700,
                     whiteSpace: "nowrap",
                   }}
@@ -269,7 +317,7 @@ export default function MarketNewsPanel({
                     fontFamily: terminalMonoFont,
                     fontVariantNumeric: "tabular-nums",
                     color: item.fallback ? theme.amber : theme.faint || theme.muted,
-                    fontSize: "10px",
+                    fontSize: "9.5px",
                     fontWeight: item.fallback ? 850 : 750,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -287,7 +335,7 @@ export default function MarketNewsPanel({
                     background: `${sourceColor}12`,
                     borderRadius: "999px",
                     padding: "2px 6px",
-                    fontSize: "9px",
+                    fontSize: "8.5px",
                     fontWeight: 900,
                     whiteSpace: "nowrap",
                     fontFamily: terminalMonoFont,
@@ -299,18 +347,24 @@ export default function MarketNewsPanel({
                 <div
                   style={{
                     color: item.url ? theme.text : theme.muted,
-                    fontFamily: '"Inter", system-ui, sans-serif',
-                    fontSize: "12px",
-                    fontWeight: item.url ? 700 : 650,
+                    fontFamily: terminalSansFont,
+                    fontSize: "11.5px",
+                    fontWeight: item.url ? 750 : 650,
                     whiteSpace: "normal",
-                    overflowWrap: "anywhere",
+                    overflowWrap: "break-word",
+                    minWidth: 0,
                   }}
-                  title={item.summary || item.text}
+                  title={summary || headline}
                 >
-                  {item.text}
+                  {headline}
                   {item.url && (
-                    <span style={{ color: theme.blue, fontSize: "10px", fontWeight: 800 }}>
+                    <span style={{ color: theme.blue, fontSize: "9px", fontWeight: 850, whiteSpace: "nowrap" }}>
                       {" "}OPEN
+                    </span>
+                  )}
+                  {!item.url && sourceType === "Scanner Catalyst" && (
+                    <span style={{ color: theme.amber, fontSize: "9px", fontWeight: 800 }}>
+                      {" "}CONTEXT
                     </span>
                   )}
                 </div>
@@ -320,12 +374,12 @@ export default function MarketNewsPanel({
                     fontFamily: terminalMonoFont,
                     fontVariantNumeric: "tabular-nums",
                     color: theme.cyan || theme.blue,
-                    fontSize: "10px",
+                    fontSize: "9.5px",
                     fontWeight: 800,
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {item.relatedTicker || selectedStock}
+                  {ticker}
                 </div>
               </NewsRow>
             );

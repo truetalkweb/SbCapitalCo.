@@ -270,13 +270,27 @@ export function useBrokerData(brokerApiUrl) {
         setBrokerBalances(balancesRes.data);
         setBrokerPositions(positionsRes.data?.positions || []);
         setBrokerOrders(ordersRes.data?.orders || []);
-        setBrokerStatus(`Synced ${new Date().toLocaleTimeString()}`);
+        const degradedSync = [balancesRes.data, positionsRes.data, ordersRes.data].some((payload) =>
+          payload?.degraded || payload?.fallback
+        );
+
+        setBrokerStatus(degradedSync ? "Broker data degraded" : `Synced ${new Date().toLocaleTimeString()}`);
         setBrokerSyncMeta({
           lastSuccessAt: new Date().toISOString(),
           latencyMs: Date.now() - startedAt,
         });
         setBrokerConnected(true);
-        setBrokerError("");
+        setBrokerError(
+          degradedSync
+            ? getCleanProviderMessage(
+                balancesRes.data?.userMessage ||
+                  positionsRes.data?.userMessage ||
+                  ordersRes.data?.userMessage ||
+                  "Broker account data degraded.",
+                "Broker account data degraded. Retry account sync shortly."
+              )
+            : ""
+        );
       } catch (error) {
         setBrokerStatus("Broker sync failed");
         setBrokerError(getBrokerError(error));

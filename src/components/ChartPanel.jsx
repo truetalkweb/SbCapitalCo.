@@ -237,11 +237,12 @@ export default function ChartPanel({
             gap: "4px",
             marginBottom: "0px",
             padding: "7px 10px",
-            flexWrap: "nowrap",
+            flexWrap: "wrap",
             position: "relative",
             background: theme.panel,
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-            overflowX: "auto",
+            overflow: "visible",
+            zIndex: 30,
           }}
         >
           {advancedMode && (
@@ -250,14 +251,73 @@ export default function ChartPanel({
             {!isPhoneChart && "Crosshair"}
           </button>
           )}
-          <button
-            style={toolButtonStyle}
-            onClick={() => setShowIndicators(!showIndicators)}
-            title="Indicators"
-          >
-            <SlidersHorizontal size={14} style={toolIconStyle} />
-            {!isPhoneChart && "Indicators"}
-          </button>
+          <div style={{ position: "relative", flex: "0 0 auto" }}>
+            <button
+              style={{
+                ...toolButtonStyle,
+                background: showIndicators ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : toolButtonStyle.background,
+                borderColor: showIndicators ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
+                color: showIndicators ? "#ffffff" : toolButtonStyle.color,
+              }}
+              onClick={() => setShowIndicators((value) => !value)}
+              title="Indicators"
+              aria-expanded={showIndicators}
+            >
+              <SlidersHorizontal size={14} style={{ ...toolIconStyle, color: showIndicators ? "#ffffff" : toolIconStyle.color }} />
+              {!isPhoneChart && "Indicators"}
+            </button>
+
+            {showIndicators && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "34px",
+                  left: 0,
+                  background: theme.panel2,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: "7px",
+                  padding: "8px",
+                  zIndex: 200,
+                  width: "176px",
+                  display: "grid",
+                  gap: "6px",
+                  boxShadow: "0 18px 36px rgba(0,0,0,0.42)",
+                }}
+              >
+                {CHART_INDICATORS.map((indicator) => (
+                  <label
+                    key={indicator.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      minHeight: "26px",
+                      color: theme.text,
+                      fontSize: "11px",
+                      fontWeight: 850,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(chartIndicators[indicator.id])}
+                      onChange={() => toggleIndicator(indicator.id)}
+                    />
+                    <span
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "999px",
+                        background: indicator.color,
+                        boxShadow: `0 0 0 1px ${theme.borderSoft || theme.border}`,
+                      }}
+                    />
+                    {indicator.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
           {advancedMode && (
           <button style={toolButtonStyle} title="Draw">
             <PencilLine size={14} style={toolIconStyle} />
@@ -279,57 +339,6 @@ export default function ChartPanel({
             <Settings size={14} style={toolIconStyle} />
             {!isPhoneChart && "Settings"}
           </button>
-          )}
-
-          {showIndicators && (
-            <div
-              style={{
-                position: "absolute",
-                top: "42px",
-                left: "78px",
-                background: theme.panel2,
-                border: `1px solid ${theme.border}`,
-                borderRadius: "6px",
-                padding: "8px",
-                zIndex: 20,
-                width: "170px",
-                display: "grid",
-                gap: "6px",
-                boxShadow: "0 18px 36px rgba(0,0,0,0.36)",
-              }}
-            >
-              {CHART_INDICATORS.map((indicator) => (
-                <label
-                  key={indicator.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    minHeight: "24px",
-                    color: theme.text,
-                    fontSize: "11px",
-                    fontWeight: 850,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(chartIndicators[indicator.id])}
-                    onChange={() => toggleIndicator(indicator.id)}
-                  />
-                  <span
-                    style={{
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "999px",
-                      background: indicator.color,
-                      boxShadow: `0 0 0 1px ${theme.borderSoft || theme.border}`,
-                    }}
-                  />
-                  {indicator.label}
-                </label>
-              ))}
-            </div>
           )}
         </div>
       )}

@@ -61,7 +61,6 @@ export default function MarketNewsPanel({
   newsLoading,
   newsMeta,
   selectedStock,
-  dataConfidence,
   theme,
   terminalMonoFont,
 }) {
@@ -77,53 +76,8 @@ export default function MarketNewsPanel({
     newsMeta.warning,
     ...(newsMeta.providerWarnings || []),
   ].filter(Boolean).join("; ") || newsMeta.source;
-  const confidenceColor =
-    dataConfidence?.confidence === "High"
-      ? theme.green
-      : dataConfidence?.confidence === "Medium"
-        ? theme.amber
-        : theme.red;
-  const updatedLabel = dataConfidence?.lastUpdatedLabel || "Pending";
   const providerMessage = visibleMessage || formatTerminalStatusLabel(newsMeta.source || "Backend News");
   const rowCountLabel = `${news.length} ${news.length === 1 ? "row" : "rows"}`;
-
-  function confidencePill(label, value, confidence) {
-    const color = confidence === "High" ? theme.green : confidence === "Medium" ? theme.amber : theme.red;
-
-    return (
-      <span
-        title={`${label}: ${value || "Pending"} / ${confidence || "Limited"}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-          minWidth: 0,
-          color: theme.text,
-          background: "rgba(255,255,255,0.02)",
-          borderRadius: "999px",
-          padding: "3px 7px",
-          fontSize: "9px",
-          fontWeight: 800,
-          fontFamily: terminalSansFont,
-        }}
-      >
-        <span style={{ color: theme.muted }}>{label}</span>
-        <span
-          style={{
-            color,
-            fontFamily: terminalMonoFont,
-            fontVariantNumeric: "tabular-nums",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "92px",
-          }}
-        >
-          {confidence || "Limited"}
-        </span>
-      </span>
-    );
-  }
 
   return (
     <div
@@ -212,50 +166,6 @@ export default function MarketNewsPanel({
           </span>
         </div>
       </div>
-
-      {dataConfidence && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            minWidth: 0,
-            overflow: "hidden",
-            padding: "1px 0 5px",
-            borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-          }}
-        >
-          <span
-            title={`Selected ticker data confidence: ${dataConfidence.confidence}`}
-            style={{
-              color: confidenceColor,
-              fontFamily: terminalMonoFont,
-              fontVariantNumeric: "tabular-nums",
-              fontSize: "9px",
-              fontWeight: 950,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {dataConfidence.symbol} DATA {dataConfidence.confidence.toUpperCase()}
-          </span>
-          {confidencePill("Quote", dataConfidence.quote?.label, dataConfidence.quote?.confidence)}
-          {confidencePill("News", dataConfidence.news?.label, dataConfidence.news?.confidence)}
-          {confidencePill("Scan", dataConfidence.scanner?.label, dataConfidence.scanner?.confidence)}
-          <span
-            style={{
-              marginLeft: "auto",
-              color: theme.muted,
-              fontFamily: terminalMonoFont,
-              fontVariantNumeric: "tabular-nums",
-              fontSize: "9px",
-              fontWeight: 800,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Updated {updatedLabel}
-          </span>
-        </div>
-      )}
 
       {newsLoading ? (
         <LoadingPanel theme={theme} label="Loading news" height="100%" />

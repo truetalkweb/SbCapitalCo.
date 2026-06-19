@@ -226,12 +226,12 @@ export default function TerminalTopBar({
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: "6px",
+    gap: "4px",
     rowGap: "5px",
     whiteSpace: "nowrap",
-    minWidth: "240px",
-    maxWidth: compact ? "100%" : "min(100%, 620px)",
-    flex: "1 1 360px",
+    minWidth: "260px",
+    maxWidth: compact ? "100%" : "min(100%, 680px)",
+    flex: "1 1 620px",
     flexWrap: "wrap",
     overflow: "visible",
   };
@@ -577,8 +577,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "86px",
-            maxWidth: "116px",
+            minWidth: "64px",
+            maxWidth: "88px",
           }}
         >
           <span
@@ -597,8 +597,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "78px",
-            maxWidth: "116px",
+            minWidth: "64px",
+            maxWidth: "88px",
             fontSize: "10px",
             color: statusColor(resolvedChartLabel),
           }}
@@ -611,8 +611,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "112px",
-            maxWidth: "140px",
+            minWidth: "96px",
+            maxWidth: "120px",
           }}
         >
           <span
@@ -647,8 +647,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "74px",
-            maxWidth: "104px",
+            minWidth: "58px",
+            maxWidth: "82px",
             fontSize: "10px",
             color: statusColor(resolvedModeLabel),
           }}

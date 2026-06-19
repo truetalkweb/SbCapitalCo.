@@ -221,6 +221,20 @@ export default function TerminalTopBar({
     fontVariantNumeric: "tabular-nums",
     overflow: "hidden",
   };
+  const topRightDockStyle = {
+    marginLeft: "auto",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "6px",
+    rowGap: "5px",
+    whiteSpace: "nowrap",
+    minWidth: "240px",
+    maxWidth: compact ? "100%" : "min(100%, 620px)",
+    flex: "1 1 360px",
+    flexWrap: "wrap",
+    overflow: "visible",
+  };
   const topStatusValueStyle = {
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -261,9 +275,10 @@ export default function TerminalTopBar({
         alignItems: "center",
         padding: compact ? "8px" : "0 12px",
         gap: compact ? "8px" : "10px",
-        flexWrap: compact ? "wrap" : "nowrap",
+        flexWrap: "wrap",
+        alignContent: "center",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035), 0 10px 28px rgba(0,0,0,0.22)",
-        overflow: compact ? "visible" : "hidden",
+        overflow: "visible",
       }}
     >
       <div
@@ -556,17 +571,15 @@ export default function TerminalTopBar({
 
       <div
         style={{
-          marginLeft: "auto",
-          display: "flex",
-          alignItems: "center",
-          gap: "7px",
-          whiteSpace: "nowrap",
-          minWidth: 0,
-          overflow: "hidden",
+          ...topRightDockStyle,
         }}
       >
         <span
-          style={topStatusLaneStyle}
+          style={{
+            ...topStatusLaneStyle,
+            minWidth: "86px",
+            maxWidth: "116px",
+          }}
         >
           <span
             style={{
@@ -584,6 +597,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
+            minWidth: "78px",
+            maxWidth: "116px",
             fontSize: "10px",
             color: statusColor(resolvedChartLabel),
           }}
@@ -594,7 +609,11 @@ export default function TerminalTopBar({
 
         {showUtilityControls && (
         <span
-          style={topStatusLaneStyle}
+          style={{
+            ...topStatusLaneStyle,
+            minWidth: "112px",
+            maxWidth: "140px",
+          }}
         >
           <span
             style={{
@@ -628,7 +647,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "86px",
+            minWidth: "74px",
+            maxWidth: "104px",
             fontSize: "10px",
             color: statusColor(resolvedModeLabel),
           }}

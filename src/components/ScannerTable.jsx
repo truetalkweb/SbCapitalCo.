@@ -7,6 +7,10 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
   };
   const visibleRows = rows.slice(0, 9);
   const gridColumns = "minmax(58px, 1fr) 64px 62px 44px 48px";
+  const isDark = theme.isDark !== false;
+  const rowHoverBackground = isDark ? "rgba(255,255,255,0.026)" : "rgba(45,140,255,0.055)";
+  const rowBackground = isDark ? "transparent" : "rgba(255,255,255,0.58)";
+  const headerBackground = isDark ? theme.panel2 : "#f8fafc";
 
   function parseNumber(value) {
     const parsed = Number.parseFloat(String(value ?? "").replace(/[$,%x,]/g, ""));
@@ -67,8 +71,8 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
         border: `1px solid ${theme.borderSoft || theme.border}`,
         borderRadius: "7px",
         overflow: "hidden",
-        background: theme.panel2,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.025)",
+        background: headerBackground,
+        boxShadow: isDark ? "inset 0 1px 0 rgba(255,255,255,0.025)" : "0 1px 2px rgba(15,23,42,0.03)",
       }}
     >
       <div
@@ -100,10 +104,10 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
             data-smallcap-symbol={stock.symbol}
             onClick={() => onPick?.(stock.symbol, stock)}
             onMouseEnter={(event) => {
-              event.currentTarget.style.background = "rgba(255,255,255,0.026)";
+              event.currentTarget.style.background = rowHoverBackground;
             }}
             onMouseLeave={(event) => {
-              event.currentTarget.style.background = "transparent";
+              event.currentTarget.style.background = rowBackground;
             }}
             style={{
               width: "100%",
@@ -111,9 +115,9 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
               gridTemplateColumns: gridColumns,
               gap: "6px",
               alignItems: "center",
-              minHeight: "42px",
-              padding: "6px 8px",
-              background: "transparent",
+              minHeight: "44px",
+              padding: "7px 8px",
+              background: rowBackground,
               border: "none",
               borderBottom:
                 index === visibleRows.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,

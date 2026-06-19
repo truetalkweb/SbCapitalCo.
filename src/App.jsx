@@ -288,6 +288,8 @@ export default function App() {
   const isPhoneTerminal = viewportWidth <= 700;
 
   const theme = {
+    mode: themeMode,
+    isDark,
     bg: isDark ? "#040507" : "#eef3f8",
     panel: isDark ? "#0a0e15" : "#ffffff",
     panel2: isDark ? "#0f141d" : "#f7f9fc",
@@ -1973,6 +1975,7 @@ export default function App() {
       <ChartPanel
         {...chartProps}
         theme={theme}
+        isDark={isDark}
         allSymbols={allSymbols}
         viewportWidth={viewportWidth}
         panelStyle={panelStyle}
@@ -2012,12 +2015,15 @@ export default function App() {
       return theme.muted;
     };
     const cleanStatus = (value) => formatTerminalStatusLabel(value || "Pending");
+    const subtleCardBackground = isDark ? "rgba(12,18,29,0.84)" : "#ffffff";
+    const nestedCardBackground = isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd";
     const rightPanelCardStyle = {
-      background: "rgba(12,18,29,0.84)",
+      background: subtleCardBackground,
       border: `1px solid ${theme.borderSoft || theme.border}`,
       borderRadius: "7px",
       padding: "10px",
       minWidth: 0,
+      boxShadow: isDark ? "none" : "0 1px 2px rgba(15,23,42,0.04), 0 8px 22px rgba(15,23,42,0.045)",
     };
     const compactLabelStyle = {
       color: theme.muted,
@@ -2084,7 +2090,16 @@ export default function App() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "9px" }}>
             {sourceRows.map(([label, value, confidence]) => (
-              <div key={label} style={{ minWidth: 0, padding: "6px 7px", borderRadius: "5px", background: "rgba(255,255,255,0.025)" }}>
+              <div
+                key={label}
+                style={{
+                  minWidth: 0,
+                  padding: "6px 7px",
+                  borderRadius: "5px",
+                  background: nestedCardBackground,
+                  border: isDark ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+                }}
+              >
                 <div style={compactLabelStyle}>{label}</div>
                 <div style={{ ...compactValueStyle, color: confidenceColor(confidence) }}>
                   {value}
@@ -2148,7 +2163,8 @@ export default function App() {
                 style={{
                   borderRadius: "6px",
                   padding: "6px 7px",
-                  background: "rgba(255,255,255,0.025)",
+                  background: nestedCardBackground,
+                  border: isDark ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
                   minWidth: 0,
                 }}
               >
@@ -2259,9 +2275,12 @@ export default function App() {
 
   return (
     <div
+      className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"}`}
       style={{
         height: "100vh",
-        background: "radial-gradient(circle at 38% -12%, rgba(25,198,216,0.08), transparent 28%), #040507",
+        background: isDark
+          ? "radial-gradient(circle at 38% -12%, rgba(25,198,216,0.08), transparent 28%), #040507"
+          : "linear-gradient(180deg, #f7f9fc, #eef3f8)",
         color: theme.text,
         overflow: "hidden",
         display: "flex",
@@ -2359,6 +2378,8 @@ export default function App() {
           brokerConnected={brokerConnected}
           advancedMode={advancedMode}
           brokerStatus={brokerStatus}
+          theme={theme}
+          isDark={isDark}
         />
         </Panel>
 
@@ -2802,7 +2823,7 @@ export default function App() {
                     gap: "4px",
                     marginBottom: "9px",
                     padding: "4px",
-                    background: "rgba(255,255,255,0.018)",
+                    background: isDark ? "rgba(255,255,255,0.018)" : theme.panel2,
                     border: `1px solid ${theme.borderSoft || theme.border}`,
                     borderRadius: "7px",
                   }}
@@ -2822,7 +2843,7 @@ export default function App() {
                         borderColor: rightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
                         background: rightTab === tab.id
                           ? `linear-gradient(180deg, ${theme.blue}, #1765c6)`
-                          : "rgba(255,255,255,0.015)",
+                          : isDark ? "rgba(255,255,255,0.015)" : theme.panel,
                       }}
                     >
                       {tab.label}

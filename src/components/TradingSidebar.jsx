@@ -27,8 +27,18 @@ export default function Tradingsidebar({
   setActiveWorkspace,
   brokerConnected,
   advancedMode = false,
+  theme,
+  isDark = true,
 }) {
   const visibleItems = NAV_ITEMS.filter((item) => advancedMode || !item.advanced);
+  const sidebarBackground = isDark
+    ? "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)"
+    : "linear-gradient(180deg, #ffffff 0%, #f3f7fb 100%)";
+  const sidebarBorder = isDark ? "rgba(55,65,81,0.42)" : theme?.borderSoft || "#d7dde8";
+  const inactiveIconColor = isDark ? "#8a95a8" : "#667085";
+  const inactiveIconBackground = isDark ? "rgba(148,163,184,0.055)" : "rgba(15,23,42,0.045)";
+  const activeIconColor = isDark ? "#19c6d8" : theme?.blue || "#2d8cff";
+  const activeButtonColor = isDark ? "#f8fafc" : theme?.text || "#1d2733";
 
   return (
     <aside
@@ -37,13 +47,13 @@ export default function Tradingsidebar({
         minWidth: "50px",
         maxWidth: "none",
         height: "100%",
-        background: "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)",
-        borderRight: "1px solid rgba(55,65,81,0.42)",
+        background: sidebarBackground,
+        borderRight: `1px solid ${sidebarBorder}`,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
         flexShrink: 0,
-        boxShadow: "inset -1px 0 0 rgba(255,255,255,0.025)",
+        boxShadow: isDark ? "inset -1px 0 0 rgba(255,255,255,0.025)" : "inset -1px 0 0 rgba(15,23,42,0.035)",
       }}
     >
       <div
@@ -54,7 +64,7 @@ export default function Tradingsidebar({
           alignItems: "center",
           justifyContent: "center",
           padding: "0",
-          borderBottom: "1px solid rgba(55,65,81,0.42)",
+          borderBottom: `1px solid ${sidebarBorder}`,
           position: "relative",
           flexShrink: 0,
         }}
@@ -68,8 +78,8 @@ export default function Tradingsidebar({
             borderRadius: "50%",
             objectFit: "cover",
             background: "#000",
-            border: "1px solid rgba(231,236,243,0.52)",
-            boxShadow: "0 0 0 3px rgba(25,198,216,0.04)",
+            border: isDark ? "1px solid rgba(231,236,243,0.52)" : "1px solid rgba(15,23,42,0.16)",
+            boxShadow: isDark ? "0 0 0 3px rgba(25,198,216,0.04)" : "0 6px 18px rgba(15,23,42,0.10)",
           }}
         />
 
@@ -82,7 +92,7 @@ export default function Tradingsidebar({
             height: "8px",
             borderRadius: "50%",
             background: brokerConnected ? "#00c896" : "#ef5350",
-            border: "1px solid #050b14",
+            border: `1px solid ${isDark ? "#050b14" : "#ffffff"}`,
             boxShadow: `0 0 10px ${brokerConnected ? "#00c896" : "#ef5350"}`,
           }}
         />
@@ -118,7 +128,7 @@ export default function Tradingsidebar({
                 background: active
                   ? "linear-gradient(180deg, rgba(45,140,255,0.20), rgba(25,198,216,0.08))"
                   : "transparent",
-                color: active ? "#f8fafc" : "#a0a8b8",
+                color: active ? activeButtonColor : inactiveIconColor,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -131,14 +141,14 @@ export default function Tradingsidebar({
               }}
               onMouseEnter={(e) => {
                 if (!active) {
-                  e.currentTarget.style.background = "rgba(148,163,184,0.08)";
-                  e.currentTarget.style.color = "#e7ecf3";
+                  e.currentTarget.style.background = isDark ? "rgba(148,163,184,0.08)" : "rgba(45,140,255,0.07)";
+                  e.currentTarget.style.color = activeButtonColor;
                 }
               }}
               onMouseLeave={(e) => {
                 if (!active) {
                   e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "#8a95a8";
+                  e.currentTarget.style.color = inactiveIconColor;
                 }
               }}
             >
@@ -149,8 +159,8 @@ export default function Tradingsidebar({
                   display: "grid",
                   placeItems: "center",
                   borderRadius: "7px",
-                  color: active ? "#19c6d8" : "#8a95a8",
-                  background: active ? "rgba(25,198,216,0.10)" : "rgba(148,163,184,0.055)",
+                  color: active ? activeIconColor : inactiveIconColor,
+                  background: active ? "rgba(25,198,216,0.10)" : inactiveIconBackground,
                   flexShrink: 0,
                 }}
               >

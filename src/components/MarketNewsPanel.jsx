@@ -29,6 +29,8 @@ function getArticleTypeColor(type, theme) {
 }
 
 function EmptyNewsState({ theme, terminalMonoFont, selectedStock }) {
+  const isDark = theme.isDark !== false;
+
   return (
     <div
       style={{
@@ -43,7 +45,7 @@ function EmptyNewsState({ theme, terminalMonoFont, selectedStock }) {
         textAlign: "center",
         border: `1px dashed ${theme.borderSoft || theme.border}`,
         borderRadius: "7px",
-        background: "rgba(255,255,255,0.015)",
+        background: isDark ? "rgba(255,255,255,0.015)" : "#f8fafc",
       }}
     >
       <div style={{ color: theme.text, fontSize: "11px", fontWeight: 800, fontFamily: terminalSansFont }}>
@@ -64,6 +66,7 @@ export default function MarketNewsPanel({
   theme,
   terminalMonoFont,
 }) {
+  const isDark = theme.isDark !== false;
   const statusLabel = getNewsStatusLabel(newsMeta);
   const displayStatusLabel = formatTerminalStatusLabel(statusLabel);
   const statusColor = getStatusColor(statusLabel, theme);
@@ -91,6 +94,7 @@ export default function MarketNewsPanel({
         borderRadius: "8px",
         padding: "9px",
         fontFamily: terminalSansFont,
+        boxShadow: isDark ? "none" : "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)",
       }}
     >
       <div
@@ -181,18 +185,19 @@ export default function MarketNewsPanel({
                   color: theme.text,
                   textDecoration: "none",
                   borderBottom: index === news.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
-                  padding: "8px 6px",
+                  padding: "9px 7px",
                   fontSize: "11px",
                   lineHeight: 1.38,
                   cursor: item.url ? "pointer" : "default",
                   transition: "background 0.15s ease",
                   borderRadius: item.url ? "5px" : 0,
+                  background: isDark ? "transparent" : "rgba(255,255,255,0.62)",
                 }}
                 onMouseEnter={(event) => {
-                  if (item.url) event.currentTarget.style.background = "rgba(45,140,255,0.06)";
+                  if (item.url) event.currentTarget.style.background = isDark ? "rgba(45,140,255,0.06)" : "rgba(45,140,255,0.075)";
                 }}
                 onMouseLeave={(event) => {
-                  event.currentTarget.style.background = "transparent";
+                  event.currentTarget.style.background = isDark ? "transparent" : "rgba(255,255,255,0.62)";
                 }}
               >
                 <div

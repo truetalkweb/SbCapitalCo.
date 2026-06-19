@@ -1,9 +1,9 @@
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import {
   Camera,
-  Crosshair,
   Maximize2,
   SlidersHorizontal,
+  TrendingUp,
 } from "lucide-react";
 import ChartTickerInput from "./ChartTickerInput";
 import LoadingPanel from "./LoadingPanel";
@@ -11,7 +11,7 @@ import {
   formatChartSourceStatus,
   formatQuoteSourceStatus,
 } from "../utils/marketUtils";
-import { CHART_INDICATORS, normalizeIndicatorState } from "../indicators/chartIndicators";
+import { CHART_INDICATOR_OPTIONS, normalizeIndicatorState } from "../indicators/chartIndicators";
 
 const Chart = lazy(() => import("./Chart"));
 
@@ -28,6 +28,7 @@ export default function ChartPanel({
   chartStatus = "LOADING",
   onStatusChange,
   theme,
+  isDark = true,
   allSymbols,
   viewportWidth,
   panelStyle,
@@ -50,6 +51,8 @@ export default function ChartPanel({
 }) {
   const isPhoneChart = viewportWidth <= 700;
   const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
+  const [showTrendTools, setShowTrendTools] = useState(false);
+  const [trendTools, setTrendTools] = useState({ autoLevels: false });
   const cleanChartSymbol = String(symbol || "").trim().toUpperCase();
   const commitChartSymbol = (nextSymbol) => {
     const clean = String(nextSymbol || "").trim().toUpperCase();
@@ -99,13 +102,19 @@ export default function ChartPanel({
       };
     });
   };
+  const toggleTrendTool = (toolId) => {
+    setTrendTools((current) => ({
+      ...current,
+      [toolId]: !current[toolId],
+    }));
+  };
 
   return (
     <div
       style={{
         ...panelStyle({
           padding: "0px",
-          background: "#050b14",
+          background: isDark ? "#050b14" : "#ffffff",
         }),
         overflow: "hidden",
         display: "flex",
@@ -243,12 +252,80 @@ export default function ChartPanel({
             zIndex: 30,
           }}
         >
-          {advancedMode && (
-          <button style={toolButtonStyle} title="Crosshair">
-            <Crosshair size={14} style={toolIconStyle} />
-            {!isPhoneChart && "Crosshair"}
-          </button>
-          )}
+          <div style={{ position: "relative", flex: "0 0 auto" }}>
+            <button
+              style={{
+                ...toolButtonStyle,
+                background: showTrendTools || trendTools.autoLevels ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : toolButtonStyle.background,
+                borderColor: showTrendTools || trendTools.autoLevels ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
+                color: showTrendTools || trendTools.autoLevels ? "#ffffff" : toolButtonStyle.color,
+              }}
+              onClick={() => setShowTrendTools((value) => !value)}
+              title="Trend Tools"
+              aria-expanded={showTrendTools}
+            >
+              <TrendingUp size={14} style={{ ...toolIconStyle, color: showTrendTools || trendTools.autoLevels ? "#ffffff" : toolIconStyle.color }} />
+              {!isPhoneChart && "Trend Tools"}
+            </button>
+
+            {showTrendTools && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "34px",
+                  left: 0,
+                  background: theme.panel2,
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: "7px",
+                  padding: "9px",
+                  zIndex: 200,
+                  width: "190px",
+                  display: "grid",
+                  gap: "7px",
+                  boxShadow: "0 18px 36px rgba(0,0,0,0.42)",
+                }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    minHeight: "26px",
+                    color: theme.text,
+                    fontSize: "11px",
+                    fontWeight: 850,
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(trendTools.autoLevels)}
+                    onChange={() => toggleTrendTool("autoLevels")}
+                  />
+                  <span
+                    style={{
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "999px",
+                      background: theme.blue,
+                      boxShadow: `0 0 0 1px ${theme.borderSoft || theme.border}`,
+                    }}
+                  />
+                  Auto Levels
+                </label>
+                <div
+                  style={{
+                    color: theme.muted,
+                    fontSize: "10px",
+                    lineHeight: 1.35,
+                    paddingLeft: "24px",
+                  }}
+                >
+                  Session high, session low, and previous close.
+                </div>
+              </div>
+            )}
+          </div>
           <div style={{ position: "relative", flex: "0 0 auto" }}>
             <button
               style={{
@@ -282,7 +359,7 @@ export default function ChartPanel({
                   boxShadow: "0 18px 36px rgba(0,0,0,0.42)",
                 }}
               >
-                {CHART_INDICATORS.map((indicator) => (
+                {CHART_INDICATOR_OPTIONS.map((indicator) => (
                   <label
                     key={indicator.id}
                     style={{
@@ -335,7 +412,7 @@ export default function ChartPanel({
           flex: 1,
           minHeight: 0,
           height: "100%",
-          background: "#050b14",
+          background: isDark ? "#050b14" : "#ffffff",
         }}
       >
         <Suspense fallback={<LoadingPanel theme={theme} label="Loading chart" />}>
@@ -354,6 +431,8 @@ export default function ChartPanel({
             onReplayData={setMainReplayData}
             replayTrades={replayTrades}
             brokerApiUrl={brokerApiUrl}
+            trendTools={trendTools}
+            isDark={isDark}
           />
         </Suspense>
       </div>

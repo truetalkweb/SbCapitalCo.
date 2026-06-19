@@ -6,7 +6,7 @@ import {
   LineSeries,
   CrosshairMode,
 } from "lightweight-charts";
-import { CHART_INDICATORS } from "../indicators/chartIndicators";
+import { CHART_INDICATORS, VOLUME_INDICATOR } from "../indicators/chartIndicators";
 import { marketDataService } from "../services/marketDataService";
 
 const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
@@ -107,6 +107,42 @@ function normalizeBackendCandles(rows) {
     );
 }
 
+function getCandleDateKey(candle) {
+  const timestamp = Number(candle?.time || 0);
+  if (!timestamp) return "";
+  return new Date(timestamp * 1000).toISOString().slice(0, 10);
+}
+
+function calculateAutoLevels(candles) {
+  const source = Array.isArray(candles) ? candles.filter(Boolean) : [];
+  if (!source.length) return [];
+
+  const latestDateKey = getCandleDateKey(source[source.length - 1]);
+  const firstSessionIndex = source.findIndex((candle) => getCandleDateKey(candle) === latestDateKey);
+  const sessionCandles = firstSessionIndex >= 0 ? source.slice(firstSessionIndex) : source.slice(-80);
+  const high = Math.max(...sessionCandles.map((candle) => Number(candle.high)).filter(Number.isFinite));
+  const low = Math.min(...sessionCandles.map((candle) => Number(candle.low)).filter(Number.isFinite));
+  const previousClose =
+    firstSessionIndex > 0 && Number.isFinite(Number(source[firstSessionIndex - 1]?.close))
+      ? Number(source[firstSessionIndex - 1].close)
+      : null;
+  const levels = [];
+
+  if (Number.isFinite(high)) {
+    levels.push({ title: "Day High", price: high, color: "#00c896" });
+  }
+
+  if (Number.isFinite(low)) {
+    levels.push({ title: "Day Low", price: low, color: "#ef5350" });
+  }
+
+  if (previousClose && Number.isFinite(previousClose)) {
+    levels.push({ title: "Prev Close", price: previousClose, color: "#8a94a6" });
+  }
+
+  return levels;
+}
+
 function Chart({
   symbol,
   timeframe,
@@ -119,14 +155,44 @@ function Chart({
   onReplayData,
   replayTrades = [],
   brokerApiUrl = DEFAULT_BROKER_API_URL,
+  trendTools = {},
+  isDark = true,
 }) {
   const chartSymbol = String(symbol || "").trim().toUpperCase() || "SPY";
+  const chartTheme = isDark
+    ? {
+        background: "#050b14",
+        text: "#d1d4dc",
+        muted: "#8a94a6",
+        faint: "#5f6b7a",
+        grid: "rgba(31,41,55,0.55)",
+        border: "#1f2937",
+        overlay: "rgba(5,11,20,0.76)",
+        overlayStrong: "rgba(5,11,20,0.92)",
+        overlayBorder: "rgba(35,48,68,0.85)",
+        tooltipTitle: "#ffffff",
+        loadingAccent: "#8fb7ff",
+      }
+    : {
+        background: "#ffffff",
+        text: "#1d2733",
+        muted: "#667085",
+        faint: "#98a2b3",
+        grid: "rgba(148,163,184,0.28)",
+        border: "#d7dde8",
+        overlay: "rgba(255,255,255,0.88)",
+        overlayStrong: "rgba(255,255,255,0.96)",
+        overlayBorder: "rgba(203,213,225,0.95)",
+        tooltipTitle: "#111827",
+        loadingAccent: "#1765c6",
+      };
   const containerRef = useRef(null);
   const tooltipRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
   const indicatorSeriesRef = useRef({});
+  const trendLineRefs = useRef([]);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
   const lastLivePriceRef = useRef(null);
@@ -191,6 +257,10 @@ function Chart({
 
   const updateVolume = useCallback((source = getVisibleCandles()) => {
     if (!volumeSeriesRef.current) return;
+    if (!indicators[VOLUME_INDICATOR.id]) {
+      volumeSeriesRef.current.setData([]);
+      return;
+    }
 
     volumeSeriesRef.current.setData(
       source.map((candle) => ({
@@ -202,7 +272,7 @@ function Chart({
             : "rgba(239,83,80,0.35)",
       }))
     );
-  }, [getVisibleCandles]);
+  }, [getVisibleCandles, indicators]);
 
   const updateMarkers = useCallback(() => {
     if (!candleSeriesRef.current) return;
@@ -225,9 +295,44 @@ function Chart({
     }
   }, [replayTrades]);
 
+  const clearTrendLines = useCallback(() => {
+    if (!candleSeriesRef.current || !trendLineRefs.current.length) {
+      trendLineRefs.current = [];
+      return;
+    }
+
+    trendLineRefs.current.forEach((line) => {
+      try {
+        candleSeriesRef.current.removePriceLine(line);
+      } catch {
+        // Price lines may already be gone after a rapid chart remount.
+      }
+    });
+    trendLineRefs.current = [];
+  }, []);
+
+  const updateTrendTools = useCallback((source = getVisibleCandles()) => {
+    clearTrendLines();
+
+    if (!trendTools?.autoLevels || !candleSeriesRef.current) return;
+
+    const levels = calculateAutoLevels(source);
+    trendLineRefs.current = levels.map((level) =>
+      candleSeriesRef.current.createPriceLine({
+        price: level.price,
+        color: level.color,
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: level.title,
+      })
+    );
+  }, [clearTrendLines, getVisibleCandles, trendTools?.autoLevels]);
+
   const updateVolumeRef = useRef(updateVolume);
   const updateIndicatorsRef = useRef(updateIndicators);
   const updateMarkersRef = useRef(updateMarkers);
+  const updateTrendToolsRef = useRef(updateTrendTools);
 
   const applyHistoryDataset = useCallback((rows, nextStatus, options = {}) => {
     const normalizedRows = Array.isArray(rows) ? rows : [];
@@ -245,6 +350,7 @@ function Chart({
     if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(normalizedRows);
     updateIndicatorsRef.current(normalizedRows);
     updateMarkersRef.current();
+    updateTrendToolsRef.current(normalizedRows);
 
     if (chartRef.current && options.fitContent !== false) {
       chartRef.current.timeScale().fitContent();
@@ -265,6 +371,10 @@ function Chart({
   useEffect(() => {
     updateMarkersRef.current = updateMarkers;
   }, [updateMarkers]);
+
+  useEffect(() => {
+    updateTrendToolsRef.current = updateTrendTools;
+  }, [updateTrendTools]);
 
   const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
@@ -314,7 +424,7 @@ function Chart({
     if (!replayMode) {
       candleSeriesRef.current.update(updated);
 
-      if (volumeSeriesRef.current) {
+      if (volumeSeriesRef.current && indicators[VOLUME_INDICATOR.id]) {
         volumeSeriesRef.current.update({
           time: updated.time,
           value: updated.volume,
@@ -333,6 +443,7 @@ function Chart({
 
       if (shouldUpdateIndicators) {
         updateIndicators(candlesRef.current);
+        updateTrendToolsRef.current(candlesRef.current);
         lastIndicatorUpdateRef.current = now;
       }
     }
@@ -342,7 +453,7 @@ function Chart({
     } else if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED" && statusRef.current !== "QTRD" && statusRef.current !== "SIM") {
       setStatus("LIVE");
     }
-  }, [replayMode, setStatus, timeframe, updateIndicators]);
+  }, [indicators, replayMode, setStatus, timeframe, updateIndicators]);
 
   const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
     if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
@@ -378,6 +489,7 @@ function Chart({
       candleSeriesRef.current.update(updated);
       updateVolume(candlesRef.current);
       updateIndicators(candlesRef.current);
+      updateTrendToolsRef.current(candlesRef.current);
     }
 
     setStatus(options.status || "LIVE");
@@ -499,13 +611,13 @@ function Chart({
       height: containerRef.current.clientHeight,
       autoSize: false,
       layout: {
-        background: { color: "#050b14" },
-        textColor: "#d1d4dc",
+        background: { color: chartTheme.background },
+        textColor: chartTheme.text,
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: "rgba(31,41,55,0.55)" },
-        horzLines: { color: "rgba(31,41,55,0.55)" },
+        vertLines: { color: chartTheme.grid },
+        horzLines: { color: chartTheme.grid },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -526,15 +638,15 @@ function Chart({
         priceFormatter: (price) => `$${Number(price).toFixed(2)}`,
       },
       rightPriceScale: {
-        borderColor: "#1f2937",
-        textColor: "#d1d4dc",
+        borderColor: chartTheme.border,
+        textColor: chartTheme.text,
         scaleMargins: {
           top: 0.08,
           bottom: 0.22,
         },
       },
       timeScale: {
-        borderColor: "#1f2937",
+        borderColor: chartTheme.border,
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 10,
@@ -626,7 +738,7 @@ function Chart({
       tooltipRef.current.style.left = `${Math.min(param.point.x + 14, containerRef.current.clientWidth - 170)}px`;
       tooltipRef.current.style.top = `${Math.max(param.point.y - 84, 8)}px`;
       tooltipRef.current.innerHTML = `
-        <div style="font-weight:900;color:#fff;margin-bottom:4px">${escapeHtml(chartSymbol)} - ${escapeHtml(timeframe)}</div>
+        <div style="font-weight:900;color:${chartTheme.tooltipTitle};margin-bottom:4px">${escapeHtml(chartSymbol)} - ${escapeHtml(timeframe)}</div>
         <div>O: <b>${candle.open.toFixed(2)}</b></div>
         <div>H: <b style="color:#00c896">${candle.high.toFixed(2)}</b></div>
         <div>L: <b style="color:#ef5350">${candle.low.toFixed(2)}</b></div>
@@ -712,6 +824,7 @@ function Chart({
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       indicatorSeriesRef.current = {};
+      trendLineRefs.current = [];
       requestAnimationFrame(() => {
         try {
           chart.remove();
@@ -720,11 +833,19 @@ function Chart({
         }
       });
     };
-  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, setStatus, timeframe]);
+  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, chartTheme.background, chartTheme.border, chartTheme.grid, chartTheme.text, chartTheme.tooltipTitle, setStatus, timeframe]);
 
   useEffect(() => {
     updateIndicators();
   }, [updateIndicators]);
+
+  useEffect(() => {
+    updateVolume();
+  }, [updateVolume]);
+
+  useEffect(() => {
+    updateTrendTools();
+  }, [updateTrendTools]);
 
   useEffect(() => {
     if (!livePrice || replayMode) return;
@@ -766,6 +887,7 @@ function Chart({
     updateVolumeRef.current(source);
     updateIndicatorsRef.current(source);
     updateMarkersRef.current();
+    updateTrendToolsRef.current(source);
   }, [getVisibleCandles, replayIndex, replayMode, replayTrades]);
 
   return (
@@ -776,7 +898,7 @@ function Chart({
         width: "100%",
         height: "100%",
         minHeight: 0,
-        background: "#050b14",
+        background: chartTheme.background,
         overflow: "hidden",
         cursor: "crosshair",
       }}
@@ -789,27 +911,39 @@ function Chart({
           zIndex: 5,
           padding: "6px 8px",
           borderRadius: "6px",
-          background: "rgba(5,11,20,0.76)",
-          border: "1px solid rgba(35,48,68,0.85)",
-          color: "#d1d4dc",
+          background: chartTheme.overlay,
+          border: `1px solid ${chartTheme.overlayBorder}`,
+          color: chartTheme.text,
           fontSize: "11px",
           lineHeight: "1.35",
           backdropFilter: "blur(8px)",
           pointerEvents: "none",
         }}
       >
-        <div style={{ fontWeight: 900, color: "#ffffff" }}>
+        <div style={{ fontWeight: 900, color: chartTheme.tooltipTitle }}>
           {chartSymbol} - {timeframe}
         </div>
         <div>
           {CHART_INDICATORS.map((indicator, index) => (
             <React.Fragment key={indicator.id}>
               {index > 0 && " / "}
-              <span style={{ color: indicators[indicator.id] ? indicator.color : "#5f6b7a" }}>
+              <span style={{ color: indicators[indicator.id] ? indicator.color : chartTheme.faint }}>
                 {indicator.shortLabel}
               </span>
             </React.Fragment>
           ))}
+          {indicators[VOLUME_INDICATOR.id] && (
+            <>
+              {" / "}
+              <span style={{ color: VOLUME_INDICATOR.color }}>{VOLUME_INDICATOR.shortLabel}</span>
+            </>
+          )}
+          {trendTools?.autoLevels && (
+            <>
+              {" / "}
+              <span style={{ color: "#8fb7ff" }}>Levels</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -822,18 +956,18 @@ function Chart({
             zIndex: 7,
             padding: "6px 8px",
             borderRadius: "6px",
-            background: "rgba(5,11,20,0.78)",
-            border: "1px solid rgba(35,48,68,0.9)",
-            color: "#8fb7ff",
+            background: chartTheme.overlay,
+            border: `1px solid ${chartTheme.overlayBorder}`,
+            color: chartTheme.loadingAccent,
             fontSize: "10px",
             fontWeight: 850,
             pointerEvents: "none",
             backdropFilter: "blur(8px)",
           }}
         >
-          <span style={{ color: "#d1d4dc" }}>{hadChartHistoryBeforeLoad ? "Updating" : "Loading"}</span>{" "}
+          <span style={{ color: chartTheme.text }}>{hadChartHistoryBeforeLoad ? "Updating" : "Loading"}</span>{" "}
           {chartSymbol}
-          <span style={{ display: "block", marginTop: "2px", color: "#8a94a6", fontWeight: 700 }}>
+          <span style={{ display: "block", marginTop: "2px", color: chartTheme.muted, fontWeight: 700 }}>
             {hadChartHistoryBeforeLoad ? "Keeping chart context active" : "Building chart history"}
           </span>
         </div>
@@ -848,9 +982,9 @@ function Chart({
           minWidth: "145px",
           padding: "8px",
           borderRadius: "8px",
-          background: "rgba(5,11,20,0.92)",
-          border: "1px solid rgba(35,48,68,0.95)",
-          color: "#d1d4dc",
+          background: chartTheme.overlayStrong,
+          border: `1px solid ${chartTheme.overlayBorder}`,
+          color: chartTheme.text,
           fontSize: "11px",
           lineHeight: "1.45",
           pointerEvents: "none",

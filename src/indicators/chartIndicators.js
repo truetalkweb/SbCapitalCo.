@@ -28,8 +28,18 @@ export const CHART_INDICATORS = [
   },
 ];
 
+export const VOLUME_INDICATOR = {
+  id: "volume",
+  label: "Volume",
+  shortLabel: "VOL",
+  color: "#64748b",
+  defaultEnabled: false,
+};
+
+export const CHART_INDICATOR_OPTIONS = [...CHART_INDICATORS, VOLUME_INDICATOR];
+
 export function getDefaultIndicatorState() {
-  return CHART_INDICATORS.reduce((state, indicator) => {
+  return CHART_INDICATOR_OPTIONS.reduce((state, indicator) => {
     state[indicator.id] = indicator.defaultEnabled;
     return state;
   }, {});
@@ -40,7 +50,7 @@ export function normalizeIndicatorState(value) {
 
   if (!value || typeof value !== "object") return defaults;
 
-  return CHART_INDICATORS.reduce((state, indicator) => {
+  return CHART_INDICATOR_OPTIONS.reduce((state, indicator) => {
     state[indicator.id] =
       typeof value[indicator.id] === "boolean"
         ? value[indicator.id]

@@ -140,8 +140,8 @@ export default function TerminalTopBar({
 }) {
   const now = new Date();
 
-  const nyTime = now.toLocaleTimeString("en-US", {
-    timeZone: "America/New_York",
+  const pacificTime = now.toLocaleTimeString("en-US", {
+    timeZone: "America/Los_Angeles",
     hour12: false,
   });
 
@@ -183,6 +183,12 @@ export default function TerminalTopBar({
     background: "transparent",
     borderColor: theme.borderSoft || theme.border,
   };
+  const chromeBackground = isDark
+    ? "linear-gradient(180deg, #07090d 0%, #090d14 100%)"
+    : "linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%)";
+  const controlClusterBackground = isDark ? "rgba(255,255,255,0.03)" : theme.panel2;
+  const searchBackground = isDark ? "rgba(255,255,255,0.045)" : theme.panel;
+  const logoTextColor = isDark ? "#f8fafc" : theme.text;
   const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const isIntelligenceWorkspace = activeWorkspace === "intelligence";
   const showAdvancedControls = advancedMode && !compact;
@@ -201,7 +207,7 @@ export default function TerminalTopBar({
   const brokerDisplayLabel = formatTerminalStatusLabel(resolvedBrokerLabel);
   const modeDisplayLabel = formatTerminalStatusLabel(resolvedModeLabel);
   const marketDateLabel = now.toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
+    timeZone: "America/Los_Angeles",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -269,7 +275,7 @@ export default function TerminalTopBar({
     <div
       style={{
         minHeight: compact ? "64px" : "74px",
-        background: "linear-gradient(180deg, #07090d 0%, #090d14 100%)",
+        background: chromeBackground,
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         display: "flex",
         alignItems: "center",
@@ -277,7 +283,9 @@ export default function TerminalTopBar({
         gap: compact ? "8px" : "10px",
         flexWrap: "wrap",
         alignContent: "center",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035), 0 10px 28px rgba(0,0,0,0.22)",
+        boxShadow: isDark
+          ? "inset 0 1px 0 rgba(255,255,255,0.035), 0 10px 28px rgba(0,0,0,0.22)"
+          : "0 1px 8px rgba(15,23,42,0.06)",
         overflow: "visible",
       }}
     >
@@ -291,7 +299,7 @@ export default function TerminalTopBar({
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "#f8fafc", fontWeight: 900, fontSize: "20px", lineHeight: 1, letterSpacing: "-0.01em" }}>
+          <div style={{ color: logoTextColor, fontWeight: 900, fontSize: "20px", lineHeight: 1, letterSpacing: "-0.01em" }}>
             SB <span style={{ color: theme.cyan || theme.blue }}>Terminal</span>
           </div>
         </div>
@@ -336,7 +344,7 @@ export default function TerminalTopBar({
           style={{
             width: "100%",
             height: "46px",
-            background: "rgba(255,255,255,0.045)",
+            background: searchBackground,
             border: `1px solid ${theme.borderSoft || theme.border}`,
             color: theme.text,
             borderRadius: "12px",
@@ -345,7 +353,7 @@ export default function TerminalTopBar({
             fontSize: "13px",
             fontWeight: 850,
             outline: "none",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+            boxShadow: isDark ? "inset 0 1px 0 rgba(255,255,255,0.04)" : "0 1px 4px rgba(15,23,42,0.04)",
           }}
         />
       </div>
@@ -359,7 +367,7 @@ export default function TerminalTopBar({
           gap: "9px",
           padding: "0 10px",
           borderRadius: "12px",
-          background: "rgba(255,255,255,0.035)",
+          background: controlClusterBackground,
           border: `1px solid ${theme.borderSoft || theme.border}`,
           whiteSpace: "nowrap",
           flexShrink: 0,
@@ -384,7 +392,7 @@ export default function TerminalTopBar({
             Market {marketStatus.toLowerCase()}
           </div>
           <div style={{ fontSize: "11px", color: theme.muted, fontWeight: 800, marginTop: "2px" }}>
-            {marketDateLabel} - <span style={{ display: "inline-block", minWidth: "74px", fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>{nyTime} ET</span>
+            {marketDateLabel} - <span style={{ display: "inline-block", minWidth: "74px", fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>{pacificTime} PT</span>
           </div>
         </div>
       </div>
@@ -397,7 +405,7 @@ export default function TerminalTopBar({
           alignItems: "center",
           flexShrink: 0,
           padding: "4px",
-          background: "rgba(255,255,255,0.03)",
+          background: controlClusterBackground,
           border: `1px solid ${theme.borderSoft || theme.border}`,
           borderRadius: "10px",
         }}

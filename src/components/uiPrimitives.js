@@ -9,7 +9,7 @@ export function createPanelStyle(theme, isDark, extra = {}) {
     minHeight: 0,
     boxShadow: isDark
       ? "inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 30px rgba(0,0,0,0.18)"
-      : "0 1px 8px rgba(0,0,0,0.04)",
+      : "0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(15,23,42,0.05)",
     ...extra,
   };
 }
@@ -30,7 +30,9 @@ export function createButtonStyle(theme, active = false, extra = {}) {
     whiteSpace: "nowrap",
     boxShadow: active
       ? "inset 0 1px 0 rgba(255,255,255,0.16)"
-      : "inset 0 1px 0 rgba(255,255,255,0.04)",
+      : theme.isDark
+        ? "inset 0 1px 0 rgba(255,255,255,0.04)"
+        : "0 1px 2px rgba(15,23,42,0.04)",
     ...extra,
   };
 }

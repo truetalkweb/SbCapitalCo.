@@ -208,6 +208,26 @@ h3 {
   background: #344258;
 }
 
+.theme-light ::-webkit-scrollbar-track {
+  background: #eef3f8;
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.theme-light {
+  scrollbar-color: #cbd5e1 #eef3f8;
+}
+
+.theme-dark {
+  scrollbar-color: #263142 #05070d;
+}
+
 @media (max-width: 900px) {
   body {
     overflow: auto;

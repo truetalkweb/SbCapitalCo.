@@ -351,9 +351,9 @@ export default function ProfessionalScanner({
       ? [scannerMeta.lastWarning]
       : [];
   const userWarnings = Array.isArray(scannerMeta.userWarnings) ? scannerMeta.userWarnings.filter(Boolean) : [];
-  const scannerVisibleWarning = getCleanProviderMessage(
+  const scannerStatusDetail = getCleanProviderMessage(
     scannerMeta.userMessage || userWarnings[0] || warnings[0],
-    "Limited provider mode. Showing ranked cached and fallback context."
+    "Primary scanner feed is limited."
   );
   const providerLimited = Boolean(scannerMeta.providerStatus?.providerLimited) ||
     (degraded && warnings.some((warning) =>
@@ -415,6 +415,7 @@ export default function ProfessionalScanner({
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div
+        title={scannerStatusDetail}
         style={{
           display: "grid",
           gridTemplateColumns: "1fr auto",
@@ -548,24 +549,6 @@ export default function ProfessionalScanner({
         </>
         )}
       </div>
-
-      {degraded && (
-        <div
-          style={{
-            color: theme.amber,
-            background: "rgba(245,184,75,0.045)",
-            border: "1px solid rgba(245,184,75,0.18)",
-            borderRadius: "6px",
-            padding: "6px 7px",
-            marginBottom: "7px",
-            fontSize: "9px",
-            lineHeight: "1.35",
-          }}
-          title={warnings[0] || "Primary movers are limited; backend fallback ranking is active."}
-        >
-            {scannerVisibleWarning}
-        </div>
-      )}
 
       {detailStock && detailAnalysis && (
         <div

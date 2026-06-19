@@ -3320,19 +3320,15 @@ export default function App() {
                 ["News", resolvedNewsStatusLabel],
                 ["Broker", brokerSourceLabel],
                 ["Mode", modeSourceLabel],
-                ["Chart", mainChartSourceLabel],
-                ["Main", selectedStock],
-                ["Secondary", secondarySymbol],
-                ["Layout", `${layoutMode} Chart`],
-                ["P&L", `$${Number(realizedPnL).toFixed(2)}`],
-                ["Cloud", user ? user.email : "Local"],
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]
             : [
                 ["Data", resolvedMarketDataStatusLabel],
+                ["Backend", backendHealthLabel],
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
-                ["Main", selectedStock],
+                ["Broker", brokerSourceLabel],
+                ["Mode", modeSourceLabel],
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]
         }

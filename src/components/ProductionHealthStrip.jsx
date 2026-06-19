@@ -13,7 +13,7 @@ function statusDotColor(status, theme) {
 function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
   const resolvedStatus = status || getHealthLabelStatus(value);
   const dotColor = statusDotColor(resolvedStatus, theme);
-  const valueWidth = label === "Checked" ? "66px" : "128px";
+  const valueWidth = label === "Updated" ? "62px" : label === "Data" ? "92px" : "82px";
   const displayValue = formatTerminalStatusLabel(value);
 
   return (
@@ -22,12 +22,13 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: "6px",
+        gap: "5px",
         minHeight: "19px",
-        padding: "0 7px",
+        padding: "0 9px",
         borderRight: `1px solid ${theme.borderSoft || theme.border}`,
         whiteSpace: "nowrap",
-        minWidth: label === "Checked" ? "138px" : "196px",
+        minWidth: 0,
+        flex: "0 1 auto",
       }}
     >
       <span
@@ -41,7 +42,7 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
         }}
       />
       <span style={{ color: theme.faint || theme.muted, fontWeight: 850 }}>
-        {label}
+        {label}:
       </span>
       <span
         style={{
@@ -61,6 +62,16 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
   );
 }
 
+function resolveDataLabel(scannerLabel, newsLabel) {
+  const statusText = `${scannerLabel || ""} ${newsLabel || ""}`.toUpperCase();
+
+  if (statusText.includes("ERROR") || statusText.includes("FAILED")) return "Data Limited";
+  if (statusText.includes("LIMITED") || statusText.includes("CACHED") || statusText.includes("FALLBACK")) return "Data Limited";
+  if (statusText.includes("LIVE")) return "Data Live";
+
+  return "Data Pending";
+}
+
 export default function ProductionHealthStrip({
   theme,
   terminalMonoFont,
@@ -77,9 +88,22 @@ export default function ProductionHealthStrip({
   refreshing = false,
 }) {
   const checkedLabel = formatHealthTime(lastCheckedAt);
+  const dataLabel = resolveDataLabel(scannerLabel, newsLabel);
+  const detailsTitle = [
+    `Backend: ${formatTerminalStatusLabel(backendLabel)}`,
+    `Questrade: ${formatTerminalStatusLabel(qtrdHealth.label)}`,
+    `Scanner: ${formatTerminalStatusLabel(scannerLabel)}`,
+    getCleanProviderMessage(scannerMessage, ""),
+    `News: ${formatTerminalStatusLabel(newsLabel)}`,
+    getCleanProviderMessage(newsMessage, ""),
+    aiLabel ? `AI: ${formatTerminalStatusLabel(aiLabel)}` : null,
+    aiMessage ? getCleanProviderMessage(aiMessage, "") : null,
+    `Checked: ${checkedLabel}`,
+  ].filter(Boolean).join(" | ");
 
   return (
     <div
+      title={detailsTitle}
       style={{
         minHeight: "23px",
         display: "flex",
@@ -88,7 +112,7 @@ export default function ProductionHealthStrip({
         padding: "0 7px",
         background: theme.panel,
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-        overflowX: "auto",
+        overflow: "hidden",
         whiteSpace: "nowrap",
         fontSize: "9px",
       }}
@@ -103,7 +127,7 @@ export default function ProductionHealthStrip({
       <HealthCell
         theme={theme}
         terminalMonoFont={terminalMonoFont}
-        label="Questrade"
+        label="QTRD"
         value={qtrdHealth.label}
         detail={qtrdHealth.rawMessage || qtrdHealth.message}
         status={qtrdHealth.status}
@@ -111,28 +135,19 @@ export default function ProductionHealthStrip({
       <HealthCell
         theme={theme}
         terminalMonoFont={terminalMonoFont}
-        label="Scanner"
-        value={scannerLabel}
-        detail={getCleanProviderMessage(scannerMessage, "Provider limited. Cached/fallback data active.")}
+        label="Data"
+        value={dataLabel}
+        detail={[
+          `Scanner: ${formatTerminalStatusLabel(scannerLabel)}`,
+          getCleanProviderMessage(scannerMessage, ""),
+          `News: ${formatTerminalStatusLabel(newsLabel)}`,
+          getCleanProviderMessage(newsMessage, ""),
+        ].filter(Boolean).join(" | ")}
       />
       <HealthCell
         theme={theme}
         terminalMonoFont={terminalMonoFont}
-        label="News"
-        value={newsLabel}
-        detail={getCleanProviderMessage(newsMessage, "News provider limited. Showing available headlines.")}
-      />
-      <HealthCell
-        theme={theme}
-        terminalMonoFont={terminalMonoFont}
-        label="AI"
-        value={aiLabel || "AI PENDING"}
-        detail={getCleanProviderMessage(aiMessage, "Gemini intelligence status.")}
-      />
-      <HealthCell
-        theme={theme}
-        terminalMonoFont={terminalMonoFont}
-        label="Checked"
+        label="Updated"
         value={checkedLabel}
         detail="Last manual or automatic health check."
         status={lastCheckedAt ? "ok" : "info"}

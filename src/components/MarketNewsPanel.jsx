@@ -76,7 +76,6 @@ export default function MarketNewsPanel({
     newsMeta.warning,
     ...(newsMeta.providerWarnings || []),
   ].filter(Boolean).join("; ") || newsMeta.source;
-  const providerMessage = visibleMessage || formatTerminalStatusLabel(newsMeta.source || "Backend News");
   const rowCountLabel = `${news.length} ${news.length === 1 ? "row" : "rows"}`;
 
   return (
@@ -127,12 +126,10 @@ export default function MarketNewsPanel({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "auto minmax(0, 1fr)",
+            gridTemplateColumns: "auto",
             alignItems: "center",
-            gap: "7px",
             minWidth: 0,
             justifySelf: "end",
-            maxWidth: "520px",
           }}
           title={diagnosticsTitle}
         >
@@ -151,18 +148,6 @@ export default function MarketNewsPanel({
             }}
           >
             {displayStatusLabel}
-          </span>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              color: theme.muted,
-              fontSize: "9.5px",
-              fontWeight: 700,
-            }}
-          >
-            {providerMessage}
           </span>
         </div>
       </div>

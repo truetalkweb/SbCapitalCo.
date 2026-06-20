@@ -77,6 +77,7 @@ export const rightPanelTabs = [
   { id: "order", label: "Order" },
   { id: "broker", label: "Broker" },
   { id: "risk", label: "Risk" },
+  { id: "audit", label: "Audit" },
   { id: "replay", label: "Replay" },
   { id: "activity", label: "Activity" },
   { id: "health", label: "Health" },

@@ -73,6 +73,7 @@ const PaperAccountPanel = lazy(() => import("./components/PaperAccountPanel"));
 const OpenPositionsPanel = lazy(() => import("./components/OpenPositionsPanel"));
 const RecentOrdersPanel = lazy(() => import("./components/RecentOrdersPanel"));
 const JournalPanel = lazy(() => import("./components/JournalPanel"));
+const ExecutionAuditPanel = lazy(() => import("./components/ExecutionAuditPanel"));
 const CommandPalette = lazy(() => import("./components/CommandPalette"));
 const RiskDashboard = lazy(() => import("./components/RiskDashboard"));
 const ShortcutsPanel = lazy(() => import("./components/ShortcutsPanel"));
@@ -143,6 +144,9 @@ export default function App() {
     loadSetting("sb_risk_per_trade", 250)
   );
   const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
+  const [orderAuditTrail, setOrderAuditTrail] = useState(() =>
+    loadSetting("sb_order_audit_trail", [])
+  );
   const [positions, setPositions] = useState(() =>
     loadSetting("sb_positions", {})
   );
@@ -328,6 +332,39 @@ export default function App() {
 
   const clearActivityLog = useCallback(() => {
     setActivityLog([]);
+  }, []);
+
+  const pushOrderAudit = useCallback((entry) => {
+    const timestamp = entry.timestamp || new Date().toISOString();
+    const nextEntry = {
+      id: entry.id || `AUD-${Date.now().toString(36).toUpperCase()}`,
+      timestamp,
+      symbol: entry.symbol || null,
+      side: entry.side || null,
+      quantity: Number(entry.quantity || 0),
+      orderType: entry.orderType || "MARKET",
+      limitPrice: entry.limitPrice ?? null,
+      entryPrice: Number(entry.entryPrice || 0),
+      stopLoss: Number(entry.stopLoss || 0),
+      takeProfit: Number(entry.takeProfit || 0),
+      orderValue: Number(entry.orderValue || 0),
+      orderRisk: Number(entry.orderRisk || 0),
+      orderReward: Number(entry.orderReward || 0),
+      riskReward: Number(entry.riskReward || 0),
+      tradingMode: entry.tradingMode || "paper",
+      brokerConnected: Boolean(entry.brokerConnected),
+      accountId: entry.accountId || null,
+      result: entry.result || "recorded",
+      reason: entry.reason || "",
+      requestId: entry.requestId || null,
+    };
+
+    setOrderAuditTrail((prev) => [nextEntry, ...prev].slice(0, 150));
+    return nextEntry;
+  }, []);
+
+  const clearOrderAuditTrail = useCallback(() => {
+    setOrderAuditTrail([]);
   }, []);
 
   const {
@@ -532,6 +569,7 @@ export default function App() {
       gridMode,
       quantity,
       orders,
+      orderAuditTrail,
       positions,
       realizedPnL,
       alerts,
@@ -567,6 +605,7 @@ export default function App() {
       gridMode,
       quantity,
       orders,
+      orderAuditTrail,
       positions,
       realizedPnL,
       alerts,
@@ -604,6 +643,7 @@ export default function App() {
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
     if (typeof data.quantity !== "undefined") setQuantity(data.quantity);
     if (Array.isArray(data.orders)) setOrders(data.orders);
+    if (Array.isArray(data.orderAuditTrail)) setOrderAuditTrail(data.orderAuditTrail);
     if (data.positions) setPositions(data.positions);
     if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
     if (Array.isArray(data.alerts)) setAlerts(data.alerts);
@@ -970,6 +1010,7 @@ export default function App() {
       "sb_scanner_tab",
       "sb_watchlist",
       "sb_orders",
+      "sb_order_audit_trail",
       "sb_positions",
       "sb_realized_pnl",
       "sb_alerts",
@@ -1000,6 +1041,7 @@ export default function App() {
     setChartIndicators(getDefaultIndicatorState());
     setScannerTab("Gainers");
     setOrders([]);
+    setOrderAuditTrail([]);
     setPositions({});
     setRealizedPnL(0);
     setAlerts([]);
@@ -1123,6 +1165,39 @@ export default function App() {
     };
   }
 
+  function buildOrderAuditRecord(sideOverride, result, reason = "", overrides = {}) {
+    const qty = Number(overrides.quantity ?? quantity ?? 0);
+    const currentPrice = Number(selectedStockData?.price || 0);
+    const entryPrice = Number(
+      overrides.entryPrice ??
+        (orderType === "LIMIT" && Number(limitPrice) > 0 ? Number(limitPrice) : currentPrice)
+    );
+    const value = Number(overrides.orderValue ?? entryPrice * qty);
+
+    return {
+      id: overrides.id,
+      timestamp: overrides.timestamp,
+      symbol: overrides.symbol || selectedStock,
+      side: sideOverride,
+      quantity: qty,
+      orderType,
+      limitPrice: orderType === "LIMIT" ? Number(limitPrice || 0) : null,
+      entryPrice,
+      stopLoss: Number(stopLoss || 0),
+      takeProfit: Number(takeProfit || 0),
+      orderValue: value,
+      orderRisk: Number(overrides.orderRisk ?? orderRisk ?? 0),
+      orderReward: Number(overrides.orderReward ?? orderReward ?? 0),
+      riskReward: Number(overrides.riskReward ?? riskReward ?? 0),
+      tradingMode,
+      brokerConnected,
+      accountId: selectedBrokerAccount,
+      result,
+      reason,
+      requestId: overrides.requestId,
+    };
+  }
+
   async function previewLiveOrderTicket(sideOverride = orderSide) {
     setOrderMessage("Requesting backend live order preview...");
 
@@ -1173,6 +1248,7 @@ export default function App() {
 
     if (!qty || qty <= 0) {
       setOrderMessage("Enter a valid quantity.");
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", "Invalid quantity."));
       pushActivity({
         type: "order",
         status: "blocked",
@@ -1185,6 +1261,7 @@ export default function App() {
 
     if (!entryPrice || entryPrice <= 0) {
       setOrderMessage("Enter a valid entry price.");
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", "Invalid entry price.", { entryPrice }));
       pushActivity({
         type: "order",
         status: "blocked",
@@ -1197,6 +1274,7 @@ export default function App() {
 
     if (orderType === "LIMIT" && !Number(limitPrice)) {
       setOrderMessage("Limit orders need a limit price.");
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", "Limit order missing limit price.", { entryPrice }));
       pushActivity({
         type: "order",
         status: "blocked",
@@ -1210,6 +1288,7 @@ export default function App() {
     if (tradingMode !== "paper") {
       if (safetyIssues.length > 0) {
         setOrderMessage(safetyIssues[0]);
+        pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", safetyIssues[0], { entryPrice }));
         pushActivity({
           type: "broker",
           status: "blocked",
@@ -1229,6 +1308,7 @@ export default function App() {
 
       if (!window.confirm(confirmText)) {
         setOrderMessage("Live submission cancelled before backend request.");
+        pushOrderAudit(buildOrderAuditRecord(sideOverride, "cancelled", "User cancelled live submission before backend request.", { entryPrice }));
         return;
       }
 
@@ -1243,6 +1323,10 @@ export default function App() {
       if (response?.submitted) {
         setOrderMessage(`${sideOverride} ${qty} ${selectedStock} submitted to Questrade.`);
         setOrderConfirmed(false);
+        pushOrderAudit(buildOrderAuditRecord(sideOverride, "submitted", "Live order submitted through backend safety gate.", {
+          entryPrice,
+          requestId: response.requestId,
+        }));
         pushActivity({
           type: "broker",
           status: "submitted",
@@ -1257,6 +1341,10 @@ export default function App() {
       }
 
       setOrderMessage(firstBlock ? `Live submit disabled: ${firstBlock}` : "Live submit disabled by backend safety gate.");
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, response?.error ? "failed" : "blocked", firstBlock || "Backend safety gate rejected the live order.", {
+        entryPrice,
+        requestId: response?.requestId,
+      }));
       pushActivity({
         type: "broker",
         status: "blocked",
@@ -1272,6 +1360,7 @@ export default function App() {
 
     if (safetyIssues.length > 0) {
       setOrderMessage(safetyIssues[0]);
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", safetyIssues[0], { entryPrice }));
       pushActivity({
         type: "risk",
         status: "blocked",
@@ -1300,6 +1389,11 @@ export default function App() {
 
     if (!window.confirm(confirmText)) {
       setOrderMessage("Order submission cancelled before execution.");
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "cancelled", "User cancelled paper order before execution.", {
+        id: auditId,
+        timestamp: submittedAt,
+        entryPrice,
+      }));
       pushActivity({
         type: "order",
         status: "cancelled",
@@ -1339,6 +1433,13 @@ export default function App() {
 
       setOrderMessage(`${sideOverride} ${fillText} ${selectedStock} filled as paper ${orderType.toLowerCase()} order.`);
       setOrderConfirmed(false);
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "simulated", `Paper ${sideOverride.toLowerCase()} filled in local simulator.`, {
+        id: auditId,
+        timestamp: submittedAt,
+        entryPrice,
+        quantity: result.filledQty,
+        orderValue: Number(entryPrice * result.filledQty),
+      }));
       pushActivity({
         type: "order",
         status: "filled",
@@ -1354,6 +1455,11 @@ export default function App() {
       });
     } else {
       setOrderMessage(`No ${selectedStock} position available to sell.`);
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", `No ${selectedStock} paper position was available to sell.`, {
+        id: auditId,
+        timestamp: submittedAt,
+        entryPrice,
+      }));
       pushActivity({
         type: "order",
         status: "blocked",
@@ -1656,6 +1762,7 @@ export default function App() {
     saveSetting("sb_chart_indicators", chartIndicators);
     saveSetting("sb_scanner_tab", scannerTab);
     saveSetting("sb_orders", orders);
+    saveSetting("sb_order_audit_trail", orderAuditTrail);
     saveSetting("sb_positions", positions);
     saveSetting("sb_realized_pnl", realizedPnL);
     saveSetting("sb_alerts", alerts);
@@ -1674,6 +1781,7 @@ export default function App() {
     chartIndicators,
     scannerTab,
     orders,
+    orderAuditTrail,
     positions,
     realizedPnL,
     alerts,
@@ -3006,6 +3114,15 @@ export default function App() {
                     />
                   )}
 
+                  {rightTab === "audit" && (
+                    <ExecutionAuditPanel
+                      theme={theme}
+                      auditTrail={orderAuditTrail}
+                      clearAuditTrail={clearOrderAuditTrail}
+                      buttonStyle={buttonStyle}
+                    />
+                  )}
+
                   {rightTab === "health" && (
                     <ProductionHealthPanel
                       theme={theme}
@@ -3082,7 +3199,7 @@ export default function App() {
           {[
             ["order", "Trade"],
             ["risk", "Risk"],
-            ["replay", "Replay"],
+            ["audit", "Audit"],
             ["alerts", "Alerts"],
           ].map(([tabId, label]) => (
             <button
@@ -3296,6 +3413,15 @@ export default function App() {
                   theme={theme}
                   activityLog={activityLog}
                   clearActivityLog={clearActivityLog}
+                  buttonStyle={buttonStyle}
+                />
+              )}
+
+              {rightTab === "audit" && (
+                <ExecutionAuditPanel
+                  theme={theme}
+                  auditTrail={orderAuditTrail}
+                  clearAuditTrail={clearOrderAuditTrail}
                   buttonStyle={buttonStyle}
                 />
               )}

@@ -658,8 +658,8 @@ export default function OrderTicket({
         )}
 
         <button
-          onClick={submitOrderTicket}
-          disabled={!canSubmit}
+          onClick={() => submitOrderTicket?.(orderSide)}
+          aria-disabled={!canSubmit}
           title={!canSubmit ? riskGuard?.primaryBlockingReason || visibleSafetyIssues[0] || "Risk guard blocked this order." : "Submit guarded order"}
           style={{
             ...buttonStyle(true),
@@ -672,7 +672,7 @@ export default function OrderTicket({
             border: canSubmit ? "none" : `1px solid ${theme.border}`,
             color: canSubmit ? "#ffffff" : theme.muted,
             opacity: 1,
-            cursor: canSubmit ? "pointer" : "not-allowed",
+            cursor: "pointer",
           }}
         >
           Submit {tradingMode === "paper" ? "Paper" : "Live"} {orderSide}

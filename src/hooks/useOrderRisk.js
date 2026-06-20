@@ -1,5 +1,26 @@
 import { useMemo } from "react";
 
+function getUsMarketSession(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Vancouver",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const getPart = (type) => parts.find((item) => item.type === type)?.value || "";
+  const weekday = getPart("weekday");
+  const minutes = Number(getPart("hour")) * 60 + Number(getPart("minute"));
+  const isWeekday = !["Sat", "Sun"].includes(weekday);
+  const regularOpen = 6 * 60 + 30;
+  const regularClose = 13 * 60;
+
+  if (!isWeekday) return { label: "Closed", isRegular: false };
+  if (minutes < regularOpen) return { label: "Premarket", isRegular: false };
+  if (minutes <= regularClose) return { label: "Regular", isRegular: true };
+  return { label: "After Hours", isRegular: false };
+}
+
 export function useOrderRisk({
   brokerConnected,
   dailyLossLimit,
@@ -45,6 +66,8 @@ export function useOrderRisk({
       : "N/A";
 
   const orderValue = Number(orderEntryPrice || 0) * Number(quantity || 0);
+  const quantityValue = Number(quantity || 0);
+  const marketSession = getUsMarketSession();
   const dailyRealizedLoss = Math.max(0, -Number(realizedPnL || 0));
   const positionQuantity = Number(positions[selectedStock]?.quantity || 0);
   const positionAverage = Number(positions[selectedStock]?.average || 0);
@@ -87,6 +110,32 @@ export function useOrderRisk({
     const entry = Number(orderEntryPrice || 0);
     const stop = Number(stopLoss || 0);
     const target = Number(takeProfit || 0);
+    const limit = Number(limitPrice || 0);
+    const qty = Number(quantity || 0);
+
+    if (!selectedStock) {
+      issues.push("Select a symbol before submitting.");
+    }
+
+    if (!Number.isFinite(qty) || qty <= 0) {
+      issues.push("Enter a valid quantity greater than zero.");
+    }
+
+    if (Number.isFinite(qty) && qty > 0 && !Number.isInteger(qty)) {
+      issues.push("Quantity must be a whole-share value.");
+    }
+
+    if (!entry || entry <= 0) {
+      issues.push("Entry price is not valid yet.");
+    }
+
+    if (orderType === "LIMIT" && (!limit || limit <= 0)) {
+      issues.push("Limit orders require a valid limit price.");
+    }
+
+    if (orderType === "MARKET" && !marketSession.isRegular) {
+      issues.push(`Market orders are blocked during ${marketSession.label.toLowerCase()} session.`);
+    }
 
     if (tradingMode !== "paper") {
       if (!brokerConnected || !selectedBrokerAccount) {
@@ -153,7 +202,10 @@ export function useOrderRisk({
     brokerConnected,
     dailyLossLimit,
     dailyRealizedLoss,
+    limitPrice,
     liveReadiness,
+    marketSession.isRegular,
+    marketSession.label,
     maxOrderValue,
     orderConfirmationKey,
     orderConfirmed,
@@ -161,8 +213,10 @@ export function useOrderRisk({
     orderReward,
     orderRisk,
     orderSide,
+    orderType,
     orderValue,
     positionQuantity,
+    quantity,
     riskPerTrade,
     riskReward,
     selectedBrokerAccount,
@@ -171,6 +225,28 @@ export function useOrderRisk({
     takeProfit,
     tradingMode,
   ]);
+  const primaryBlockingReason = safetyIssues[0] || null;
+  const riskGuard = {
+    statusLabel: primaryBlockingReason ? "Guard Blocked" : "Guard Ready",
+    status: primaryBlockingReason ? "blocked" : "ready",
+    primaryBlockingReason,
+    mode: tradingMode === "paper" ? "Paper Mode" : "Live Mode",
+    brokerStatus: tradingMode === "paper"
+      ? "Paper execution"
+      : brokerConnected && selectedBrokerAccount
+        ? "Broker connected"
+        : "Broker locked",
+    marketSession: marketSession.label,
+    marketOrderAllowed: orderType !== "MARKET" || marketSession.isRegular,
+    quantityValid: Number.isFinite(quantityValue) && quantityValue > 0 && Number.isInteger(quantityValue),
+    entryValid: Number(orderEntryPrice || 0) > 0,
+    maxOrderValue: Number(maxOrderValue || 0),
+    riskPerTrade: Number(riskPerTrade || 0),
+    dailyLossLimit: Number(dailyLossLimit || 0),
+    orderValue,
+    orderRisk,
+    orderConfirmed: orderConfirmed === orderConfirmationKey,
+  };
 
   return {
     dailyRealizedLoss,
@@ -184,6 +260,7 @@ export function useOrderRisk({
     positionAverage,
     positionQuantity,
     riskReward,
+    riskGuard,
     safetyIssues,
   };
 }

@@ -459,6 +459,7 @@ export default function App() {
     orderReward,
     orderRisk,
     orderValue,
+    riskGuard,
     riskReward,
     safetyIssues,
   } = useOrderRisk({
@@ -2888,6 +2889,7 @@ export default function App() {
                       riskPerTrade={riskPerTrade}
                       setRiskPerTrade={setRiskPerTrade}
                       orderPreview={orderPreview}
+                      riskGuard={riskGuard}
                       liveReadiness={liveReadiness}
                       liveOrderPreview={liveOrderPreview}
                       liveOrderLoading={liveOrderLoading}
@@ -3191,6 +3193,7 @@ export default function App() {
                   riskPerTrade={riskPerTrade}
                   setRiskPerTrade={setRiskPerTrade}
                   orderPreview={orderPreview}
+                  riskGuard={riskGuard}
                   liveReadiness={liveReadiness}
                   liveOrderPreview={liveOrderPreview}
                   liveOrderLoading={liveOrderLoading}

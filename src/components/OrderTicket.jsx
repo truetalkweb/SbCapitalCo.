@@ -39,6 +39,7 @@ export default function OrderTicket({
   riskPerTrade,
   setRiskPerTrade,
   orderPreview,
+  riskGuard = null,
   liveReadiness = null,
   liveOrderPreview = null,
   liveOrderLoading = false,
@@ -109,11 +110,21 @@ export default function OrderTicket({
   const positionAverage = Number(orderPreview.positionAverage || 0);
   const checklist = [
     ["Symbol", Boolean(selectedStock)],
-    ["Size", Number(quantity || 0) > 0],
+    ["Size", riskGuard?.quantityValid ?? Number(quantity || 0) > 0],
     ["Stop", stopDistance > 0],
     ["Target", targetDistance > 0],
     ["R:R", Number(riskReward) >= 1.5],
     ["Guardrails", safetyIssues.length === 0],
+  ];
+  const guardStatus = riskGuard?.status || (canSubmit ? "ready" : "blocked");
+  const guardColor = guardStatus === "ready" ? theme.green : theme.amber;
+  const guardRows = [
+    ["Mode", riskGuard?.mode || (tradingMode === "paper" ? "Paper Mode" : "Live Mode")],
+    ["Broker", riskGuard?.brokerStatus || (tradingMode === "paper" ? "Paper execution" : "Broker locked")],
+    ["Session", riskGuard?.marketSession || "Checking"],
+    ["Max Order", `$${Number(riskGuard?.maxOrderValue ?? maxOrderValue ?? 0).toFixed(0)}`],
+    ["Risk/Trade", `$${Number(riskGuard?.riskPerTrade ?? riskPerTrade ?? 0).toFixed(0)}`],
+    ["Daily Loss", `$${Number(riskGuard?.dailyLossLimit ?? dailyLossLimit ?? 0).toFixed(0)}`],
   ];
 
   function applyStopPreset(percent) {
@@ -188,6 +199,65 @@ export default function OrderTicket({
               <div style={{ color, fontSize: "12px", fontWeight: 950, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
             </div>
           ))}
+        </div>
+
+        <div
+          style={{
+            ...cardStyle,
+            border: `1px solid ${guardStatus === "ready" ? "rgba(0,200,150,0.38)" : "rgba(245,184,75,0.42)"}`,
+            background: guardStatus === "ready" ? "rgba(0,200,150,0.045)" : "rgba(245,184,75,0.055)",
+            display: "grid",
+            gap: "8px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+            <div>
+              <div style={{ color: theme.text, fontSize: "11px", fontWeight: 950 }}>Risk Guard</div>
+              <div style={{ color: theme.muted, fontSize: "9px", marginTop: "2px" }}>
+                Execution safety before any paper/live submit
+              </div>
+            </div>
+            <span
+              style={{
+                color: guardColor,
+                border: `1px solid ${guardColor}55`,
+                background: `${guardColor}12`,
+                borderRadius: "999px",
+                padding: "3px 7px",
+                fontSize: "8.5px",
+                fontWeight: 950,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {riskGuard?.statusLabel || (canSubmit ? "Guard Ready" : "Guard Blocked")}
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "5px" }}>
+            {guardRows.map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  background: theme.panel,
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: "6px",
+                  padding: "6px",
+                  minWidth: 0,
+                }}
+              >
+                <div style={{ color: theme.muted, fontSize: "8px", fontWeight: 950, textTransform: "uppercase" }}>{label}</div>
+                <div style={{ color: theme.text, fontSize: "10px", fontWeight: 900, marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {riskGuard?.primaryBlockingReason && (
+            <div style={{ color: theme.amber, fontSize: "10px", lineHeight: 1.45, fontWeight: 800 }}>
+              {riskGuard.primaryBlockingReason}
+            </div>
+          )}
         </div>
 
         <div
@@ -590,6 +660,7 @@ export default function OrderTicket({
         <button
           onClick={submitOrderTicket}
           disabled={!canSubmit}
+          title={!canSubmit ? riskGuard?.primaryBlockingReason || visibleSafetyIssues[0] || "Risk guard blocked this order." : "Submit guarded order"}
           style={{
             ...buttonStyle(true),
             width: "100%",

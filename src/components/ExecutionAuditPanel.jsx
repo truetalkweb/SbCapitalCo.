@@ -46,6 +46,7 @@ function getStatusColor(theme, result) {
 export default function ExecutionAuditPanel({
   theme,
   auditTrail = [],
+  syncStatus = "Local audit ready",
   clearAuditTrail,
   buttonStyle,
 }) {
@@ -58,6 +59,14 @@ export default function ExecutionAuditPanel({
       return acc;
     },
     { total: 0 }
+  );
+  const syncCounts = auditTrail.reduce(
+    (acc, item) => {
+      const status = String(item.syncStatus || "local").toLowerCase();
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    },
+    { synced: 0, pending: 0, local: 0 }
   );
   const cardStyle = {
     background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
@@ -80,7 +89,7 @@ export default function ExecutionAuditPanel({
           <div>
             <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 950 }}>Execution Audit</h3>
             <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
-              Local order intent, risk decision, and submission trail.
+              {syncStatus}
             </div>
           </div>
           <span
@@ -121,6 +130,30 @@ export default function ExecutionAuditPanel({
               </div>
               <div style={{ color, fontSize: "12px", fontWeight: 950, marginTop: "2px", ...mono }}>{value}</div>
             </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
+          {[
+            ["Synced", syncCounts.synced || 0, theme.green],
+            ["Pending", syncCounts.pending || 0, theme.amber],
+            ["Local", syncCounts.local || 0, theme.muted],
+          ].map(([label, value, color]) => (
+            <span
+              key={label}
+              style={{
+                color,
+                border: `1px solid ${color}44`,
+                background: `${color}10`,
+                borderRadius: "999px",
+                padding: "3px 7px",
+                fontSize: "8px",
+                fontWeight: 950,
+                ...mono,
+              }}
+            >
+              {label} {value}
+            </span>
           ))}
         </div>
       </div>
@@ -217,6 +250,7 @@ export default function ExecutionAuditPanel({
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px", color: theme.faint || theme.muted, fontSize: "9px", fontWeight: 900 }}>
                   <span style={mono}>{entry.id}</span>
                   <span>{entry.brokerConnected ? "Broker connected" : "Broker not connected"}</span>
+                  <span>{entry.syncStatus === "synced" ? "Backend synced" : entry.syncStatus === "pending" ? "Sync pending" : "Local fallback"}</span>
                   {entry.accountId && <span style={mono}>Acct {entry.accountId}</span>}
                 </div>
               </div>

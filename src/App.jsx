@@ -147,6 +147,7 @@ export default function App() {
   const [orderAuditTrail, setOrderAuditTrail] = useState(() =>
     loadSetting("sb_order_audit_trail", [])
   );
+  const [orderAuditSyncStatus, setOrderAuditSyncStatus] = useState("Local audit ready");
   const [positions, setPositions] = useState(() =>
     loadSetting("sb_positions", {})
   );
@@ -357,9 +358,54 @@ export default function App() {
       result: entry.result || "recorded",
       reason: entry.reason || "",
       requestId: entry.requestId || null,
+      syncStatus: "pending",
+      syncMessage: "Sync pending",
     };
 
     setOrderAuditTrail((prev) => [nextEntry, ...prev].slice(0, 150));
+    setOrderAuditSyncStatus("Syncing latest audit row");
+
+    fetchWithTimeout(`${BROKER_API_URL}/api/audit/orders`, 6000, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextEntry),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok || payload.synced === false) {
+          throw new Error(payload.validationErrors?.[0] || payload.error || "Backend audit sync failed.");
+        }
+
+        setOrderAuditTrail((prev) =>
+          prev.map((item) =>
+            item.id === nextEntry.id
+              ? {
+                  ...item,
+                  syncStatus: "synced",
+                  syncMessage: "Backend synced",
+                  requestId: payload.requestId || item.requestId,
+                }
+              : item
+          )
+        );
+        setOrderAuditSyncStatus("Backend audit synced");
+      })
+      .catch(() => {
+        setOrderAuditTrail((prev) =>
+          prev.map((item) =>
+            item.id === nextEntry.id
+              ? {
+                  ...item,
+                  syncStatus: "local",
+                  syncMessage: "Local fallback",
+                }
+              : item
+          )
+        );
+        setOrderAuditSyncStatus("Local fallback active");
+      });
+
     return nextEntry;
   }, []);
 
@@ -1755,6 +1801,52 @@ export default function App() {
   }, [brokerError, pushActivity]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadBackendAuditTrail() {
+      try {
+        const response = await fetchWithTimeout(`${BROKER_API_URL}/api/audit/orders?limit=80`, 6000);
+        const payload = await response.json();
+
+        if (!response.ok) throw new Error(payload?.error || "Backend audit unavailable.");
+        if (cancelled || !Array.isArray(payload.entries)) return;
+
+        const syncedEntries = payload.entries.map((entry) => ({
+          ...entry,
+          syncStatus: "synced",
+          syncMessage: "Backend synced",
+        }));
+
+        setOrderAuditTrail((prev) => {
+          const byId = new Map();
+
+          [...prev, ...syncedEntries].forEach((entry) => {
+            if (!entry?.id) return;
+
+            byId.set(entry.id, {
+              ...byId.get(entry.id),
+              ...entry,
+            });
+          });
+
+          return Array.from(byId.values())
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 150);
+        });
+        setOrderAuditSyncStatus(payload.count ? "Backend audit loaded" : "Backend audit ready");
+      } catch {
+        if (!cancelled) setOrderAuditSyncStatus("Local fallback active");
+      }
+    }
+
+    loadBackendAuditTrail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     saveSetting("sb_timeframe", timeframe);
     saveSetting("sb_secondary_timeframe", secondaryTimeframe);
     saveSetting("sb_theme_mode", themeMode);
@@ -3118,6 +3210,7 @@ export default function App() {
                     <ExecutionAuditPanel
                       theme={theme}
                       auditTrail={orderAuditTrail}
+                      syncStatus={orderAuditSyncStatus}
                       clearAuditTrail={clearOrderAuditTrail}
                       buttonStyle={buttonStyle}
                     />
@@ -3421,6 +3514,7 @@ export default function App() {
                 <ExecutionAuditPanel
                   theme={theme}
                   auditTrail={orderAuditTrail}
+                  syncStatus={orderAuditSyncStatus}
                   clearAuditTrail={clearOrderAuditTrail}
                   buttonStyle={buttonStyle}
                 />

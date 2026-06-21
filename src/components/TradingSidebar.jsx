@@ -8,15 +8,19 @@ import {
   DollarSign,
   Bell,
   Star,
+  Briefcase,
+  Newspaper,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { id: "charts", label: "Charts", group: "Main", icon: BarChart3 },
+  { id: "charts", label: "Dashboard", group: "Main", icon: BarChart3 },
   { id: "scanner", label: "Scanner", group: "Main", icon: Search },
   { id: "watchlist", label: "Watchlist", group: "Main", icon: Star },
-  { id: "intelligence", label: "Intel", group: "Main", icon: Brain },
+  { id: "intelligence", label: "News", group: "Main", icon: Newspaper },
   { id: "alerts", label: "Alerts", group: "Main", icon: Bell },
-  { id: "broker", label: "Broker", group: "Advanced", icon: DollarSign, advanced: true },
+  { id: "broker", label: "Orders", group: "Advanced", icon: DollarSign, advanced: true },
+  { id: "portfolio", label: "Positions", group: "Advanced", icon: Briefcase, advanced: true },
+  { id: "alerts", label: "Risk", group: "Advanced", icon: Brain, advanced: true },
   { id: "replay", label: "Replay", group: "Advanced", icon: Play, advanced: true },
   { id: "journal", label: "Journal", group: "Advanced", icon: BookOpen, advanced: true },
   { id: "settings", label: "Settings", group: "Advanced", icon: Settings, advanced: true },
@@ -30,6 +34,7 @@ export default function Tradingsidebar({
   advancedMode = false,
   theme,
   isDark = true,
+  expanded = false,
 }) {
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
@@ -62,12 +67,13 @@ export default function Tradingsidebar({
     >
       <div
         style={{
-          height: "68px",
+          height: expanded ? "78px" : "68px",
           width: "100%",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
-          padding: "0",
+          justifyContent: expanded ? "flex-start" : "center",
+          gap: "10px",
+          padding: expanded ? "0 14px" : "0",
           borderBottom: `1px solid ${sidebarBorder}`,
           position: "relative",
           flexShrink: 0,
@@ -86,12 +92,22 @@ export default function Tradingsidebar({
             boxShadow: isDark ? "0 0 0 3px rgba(25,198,216,0.04)" : "0 6px 18px rgba(15,23,42,0.10)",
           }}
         />
+        {expanded && (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: activeButtonColor, fontSize: "14px", fontWeight: 900, lineHeight: 1.15 }}>
+              SB Terminal
+            </div>
+            <div style={{ color: brokerConnected ? "#00c896" : "#ef5350", fontSize: "9px", fontWeight: 900, marginTop: "3px" }}>
+              {brokerConnected ? "BROKER CONNECTED" : brokerToolsEnabled ? "BROKER LOCKED" : "MARKET DESK"}
+            </div>
+          </div>
+        )}
 
         <span
           style={{
             position: "absolute",
-            right: "11px",
-            bottom: "17px",
+            right: expanded ? "14px" : "11px",
+            bottom: expanded ? "20px" : "17px",
             width: "8px",
             height: "8px",
             borderRadius: "50%",
@@ -107,8 +123,8 @@ export default function Tradingsidebar({
           width: "100%",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          padding: "10px 6px",
+          alignItems: expanded ? "stretch" : "center",
+          padding: expanded ? "14px 10px" : "10px 6px",
           gap: "6px",
           flex: 1,
           overflowY: "auto",
@@ -120,13 +136,13 @@ export default function Tradingsidebar({
           const active = activeWorkspace === item.id;
 
           return (
-            <div key={item.id} style={{ display: "contents" }}>
+            <div key={`${item.id}-${item.label}`} style={{ display: "contents" }}>
             <button
               title={item.label}
               aria-label={item.label}
               onClick={() => setActiveWorkspace(item.id)}
               style={{
-                width: "38px",
+                width: expanded ? "100%" : "38px",
                 height: "38px",
                 border: `1px solid ${active ? "rgba(25,198,216,0.55)" : "transparent"}`,
                 background: active
@@ -135,9 +151,10 @@ export default function Tradingsidebar({
                 color: active ? activeButtonColor : inactiveIconColor,
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                padding: "0",
-                borderRadius: "10px",
+                justifyContent: expanded ? "flex-start" : "center",
+                gap: "10px",
+                padding: expanded ? "0 10px" : "0",
+                borderRadius: expanded ? "8px" : "10px",
                 cursor: "pointer",
                 transition: "all 0.16s ease",
                 flexShrink: 0,
@@ -154,7 +171,7 @@ export default function Tradingsidebar({
                   e.currentTarget.style.background = "transparent";
                   e.currentTarget.style.color = inactiveIconColor;
                 }
-              }}
+                }}
             >
               <span
                 style={{
@@ -168,8 +185,13 @@ export default function Tradingsidebar({
                   flexShrink: 0,
                 }}
               >
-                <Icon size={15} strokeWidth={active ? 2.45 : 2} />
+                  <Icon size={15} strokeWidth={active ? 2.45 : 2} />
               </span>
+              {expanded && (
+                <span style={{ fontSize: "12px", fontWeight: active ? 850 : 750 }}>
+                  {item.label}
+                </span>
+              )}
             </button>
             </div>
           );

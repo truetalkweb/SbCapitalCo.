@@ -25,6 +25,7 @@ import ScannerTable from "./components/ScannerTable";
 import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
 import PublicOnboarding from "./components/PublicOnboarding";
+import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
   BROKER_TOOLS_ENABLED,
@@ -2078,15 +2079,16 @@ export default function App() {
     activeWorkspace === "replay" ||
     (BROKER_TOOLS_ENABLED && activeWorkspace === "portfolio") ||
     activeWorkspace === "alerts";
-  const showLeftDockPanel = showLeftDock && (!isCompactTerminal || activeWorkspace !== "charts");
+  const usePremiumChartShell = activeWorkspace === "charts" && !isCompactTerminal;
+  const showLeftDockPanel = showLeftDock && !usePremiumChartShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
   const sidebarPanelSize = isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
-      ? 3
+      ? usePremiumChartShell ? 11 : 3
       : isCompactTerminal
         ? 5
-        : 4.2;
+        : usePremiumChartShell ? 10 : 4.2;
   const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 28;
   const workspaceDefaultSize =
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
@@ -2094,9 +2096,13 @@ export default function App() {
   const isFourChartLayout = activeWorkspace === "charts" && layoutMode !== "1" && gridMode === "4";
   const showTickerTape = activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay";
   const showWorkspaceNewsPanel =
+    !usePremiumChartShell &&
     (activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay") &&
     !isFourChartLayout;
   const centerRows =
+    usePremiumChartShell
+      ? "minmax(0, 1fr) 320px"
+      :
     activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
     activeWorkspace === "watchlist" ||
@@ -2132,13 +2138,13 @@ export default function App() {
       }),
     [brokerConnected, brokerDetails, brokerError, liveQuotes, platformHealth]
   );
-  const publicMarketDataHealth = useMemo(() => ({
+  const publicMarketDataHealth = {
     ...qtrdHealth,
     label: formatTerminalStatusLabel(qtrdHealth.label || marketDataStatusLabel || "MARKET DATA PENDING").replace(/^QTRD\b/i, "MARKET DATA"),
     message: String(qtrdHealth.message || "Market data status pending.").replace(/Questrade/gi, "Market data"),
     rawMessage: BROKER_TOOLS_ENABLED ? qtrdHealth.rawMessage : "",
     tokenPersisted: BROKER_TOOLS_ENABLED ? qtrdHealth.tokenPersisted : false,
-  }), [marketDataStatusLabel, qtrdHealth]);
+  };
   const visibleMarketDataHealth = BROKER_TOOLS_ENABLED ? qtrdHealth : publicMarketDataHealth;
   const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
   const resolvedMarketDataStatusLabel = visibleMarketDataHealth.label || marketDataStatusLabel;
@@ -2552,6 +2558,251 @@ export default function App() {
     );
   }
 
+  function renderPremiumScannerBoard() {
+    return (
+      <div
+        style={panelStyle({
+          height: "100%",
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateRows: "auto 1fr",
+          padding: "12px 14px",
+        })}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            paddingBottom: "10px",
+            borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+            <div style={{ color: theme.text, fontSize: "14px", fontWeight: 900, letterSpacing: 0 }}>
+              Scanner
+            </div>
+            {["gainers", "losers", "active", "momentum", "relativeVolume"].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setScannerTab(tab)}
+                style={{
+                  ...buttonStyle(scannerTab === tab),
+                  height: "26px",
+                  padding: "0 12px",
+                  borderRadius: "6px",
+                  textTransform: "capitalize",
+                }}
+              >
+                {tab === "relativeVolume" ? "High RVOL" : tab}
+              </button>
+            ))}
+          </div>
+          <div style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: "10px", fontWeight: 800 }}>
+            Results: {scannerStocks.length}
+          </div>
+        </div>
+
+        <div style={{ minHeight: 0, overflow: "auto", paddingTop: "8px" }}>
+          <ScannerTable
+            rows={scannerStocks.slice(0, 18)}
+            onPick={selectMainSymbol}
+            theme={theme}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  function renderPremiumRightRail() {
+    const railCard = {
+      background: theme.panel,
+      border: `1px solid ${theme.borderSoft || theme.border}`,
+      borderRadius: "9px",
+      padding: "12px",
+      minWidth: 0,
+    };
+    const selectedPrice = Number(selectedStockData?.price || 0);
+    const selectedMove = Number.parseFloat(String(selectedStockData?.change || selectedStockData?.changePercent || "0").replace("%", ""));
+    const moveColor = selectedMove >= 0 ? theme.green : theme.red;
+    const latestRows = (selectedTickerNews.length ? selectedTickerNews : news).slice(0, 4);
+
+    return (
+      <div style={{ display: "grid", gap: "8px", height: "100%", overflow: "auto" }}>
+        <div style={railCard}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "9px" }}>
+            <div style={{ color: theme.text, textTransform: "uppercase", fontSize: "12px", fontWeight: 900 }}>
+              My Watchlist
+            </div>
+            <button
+              type="button"
+              onClick={addSymbol}
+              style={{
+                ...buttonStyle(false),
+                width: "28px",
+                height: "24px",
+                padding: 0,
+                display: "grid",
+                placeItems: "center",
+              }}
+              title="Add symbol"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 78px 62px",
+              gap: "8px",
+              color: theme.muted,
+              fontSize: "10px",
+              padding: "0 2px 6px",
+              borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+            }}
+          >
+            <span>Symbol</span>
+            <span style={{ textAlign: "right" }}>Last</span>
+            <span style={{ textAlign: "right" }}>Chg%</span>
+          </div>
+          {liveStocks.slice(0, 8).map((stock) => {
+            const move = Number.parseFloat(String(stock.change || stock.changePercent || "0").replace("%", ""));
+            const active = stock.symbol === selectedStock;
+            return (
+              <button
+                key={stock.symbol}
+                type="button"
+                onClick={() => selectMainSymbol(stock.symbol)}
+                style={{
+                  width: "100%",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 78px 62px",
+                  gap: "8px",
+                  alignItems: "center",
+                  minHeight: "28px",
+                  border: "none",
+                  borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+                  background: active ? "linear-gradient(90deg, rgba(45,140,255,0.24), transparent)" : "transparent",
+                  color: theme.text,
+                  cursor: "pointer",
+                  padding: "0 2px",
+                }}
+              >
+                <span style={{ fontFamily: terminalMonoFont, fontWeight: 850, textAlign: "left" }}>{stock.symbol}</span>
+                <span style={{ fontFamily: terminalMonoFont, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                  {Number(stock.price || 0) > 0 ? Number(stock.price).toFixed(2) : "Quote"}
+                </span>
+                <span
+                  style={{
+                    fontFamily: terminalMonoFont,
+                    color: move >= 0 ? theme.green : theme.red,
+                    textAlign: "right",
+                    fontVariantNumeric: "tabular-nums",
+                    fontWeight: 850,
+                  }}
+                >
+                  {Number.isFinite(move) ? `${move >= 0 ? "+" : ""}${move.toFixed(2)}%` : "Live"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={railCard}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "start" }}>
+            <div>
+              <div style={{ fontFamily: terminalMonoFont, color: theme.text, fontSize: "20px", fontWeight: 950 }}>
+                {selectedStock}
+              </div>
+              <div style={{ color: theme.muted, fontSize: "11px", marginTop: "3px" }}>
+                {selectedStockData?.name || "Selected equity"}
+              </div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: terminalMonoFont, fontSize: "24px", fontWeight: 900, color: theme.text }}>
+                {selectedPrice > 0 ? selectedPrice.toFixed(2) : "Quote"}
+              </div>
+              <div style={{ fontFamily: terminalMonoFont, color: moveColor, fontSize: "12px", fontWeight: 900 }}>
+                {Number.isFinite(selectedMove) ? `${selectedMove >= 0 ? "+" : ""}${selectedMove.toFixed(2)}%` : "Live"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ color: theme.green, fontSize: "11px", fontWeight: 850, marginTop: "8px" }}>
+            {marketDataStatusLabel?.includes("LIVE") || mainChartSourceLabel?.includes("QTRD") ? "Market Data Live" : "Market Context Active"}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
+            {[
+              ["Volume", selectedStockData?.volume || selectedDockStock?.volume],
+              ["RVOL", selectedDockStock?.relativeVolume || selectedDockStock?.rvol],
+              ["Score", selectedDockStock?.score10 || selectedDockStock?.score],
+              ["Risk", selectedDockStock?.riskLabel || selectedDockStock?.risk || selectedDataConfidence.confidence],
+            ].map(([label, value]) => (
+              <div key={label} style={{ background: isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd", borderRadius: "7px", padding: "8px" }}>
+                <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 850, textTransform: "uppercase" }}>{label}</div>
+                <div style={{ marginTop: "4px", fontFamily: terminalMonoFont, color: theme.text, fontSize: "11px", fontWeight: 850 }}>
+                  {value || "Context"}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
+            <button onClick={() => selectMainSymbol(selectedStock)} style={{ ...buttonStyle(true), height: "34px" }}>
+              Open Chart
+            </button>
+            <button
+              onClick={() => {
+                if (hasSelectedInWatchlist) removeWatchlistSymbol(selectedStock);
+                else addSymbolToWatchlist(selectedStock);
+              }}
+              style={{ ...buttonStyle(false), height: "34px" }}
+            >
+              {hasSelectedInWatchlist ? "Watching" : "Add Alert"}
+            </button>
+          </div>
+        </div>
+
+        <div style={railCard}>
+          <div style={{ color: theme.text, textTransform: "uppercase", fontSize: "12px", fontWeight: 900, marginBottom: "10px" }}>
+            Latest News
+          </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {latestRows.map((item, index) => {
+              const headline = String(item.headline || item.summary || "Market update").trim();
+              const row = (
+                <div>
+                  <div style={{ color: theme.muted, fontSize: "9px", marginBottom: "3px" }}>
+                    {item.source || "Market News"}
+                  </div>
+                  <div style={{ color: theme.text, fontSize: "11px", lineHeight: 1.35, fontWeight: 750 }}>
+                    {headline}
+                  </div>
+                </div>
+              );
+
+              return item.url ? (
+                <a
+                  key={item.id || `${headline}-${index}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: "none", display: "block" }}
+                >
+                  {row}
+                </a>
+              ) : (
+                <div key={item.id || `${headline}-${index}`}>{row}</div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"}`}
@@ -2612,7 +2863,15 @@ export default function App() {
         onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
       />
 
-      {showTickerTape && (
+      {usePremiumChartShell ? (
+        <div style={{ padding: "0 10px 8px", flexShrink: 0 }}>
+          <MarketSnapshotStrip
+            theme={theme}
+            stocks={allSymbols}
+            onPick={selectMainSymbol}
+          />
+        </div>
+      ) : showTickerTape && (
         <TickerTape
           theme={theme}
           stocks={tickerTapeSymbols.slice(0, 12)}
@@ -2652,7 +2911,7 @@ export default function App() {
           order={1}
           defaultSize={sidebarPanelSize}
           minSize={sidebarPanelSize}
-          maxSize={isPhoneTerminal ? 12 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
+          maxSize={isPhoneTerminal ? 12 : usePremiumChartShell ? 14 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
         >
           <TradingSidebar
           activeWorkspace={activeWorkspace}
@@ -2663,6 +2922,7 @@ export default function App() {
           brokerStatus={brokerStatus}
           theme={theme}
           isDark={isDark}
+          expanded={usePremiumChartShell}
         />
         </Panel>
 
@@ -3049,29 +3309,32 @@ export default function App() {
               />
             </Suspense>
           ) : (
-            <WorkspaceGrid
-              theme={theme}
-              layoutMode={layoutMode}
-              gridMode={gridMode}
-              renderChartPanel={renderChartPanel}
-              selectedStock={selectedStock}
-              setMainSymbol={selectMainSymbol}
-              secondarySymbol={secondarySymbol}
-              setSecondarySymbol={setSecondarySymbol}
-              timeframe={timeframe}
-              setMainTimeframe={setMainTimeframe}
-              secondaryTimeframe={secondaryTimeframe}
-              setSecondaryTimeframe={setSecondaryTimeframe}
-              selectedStockData={selectedStockData}
-              secondaryStockData={secondaryStockData}
-              allSymbols={allSymbols}
-              mainChartStatus={mainChartStatus}
-              secondaryChartStatus={secondaryChartStatus}
-              setMainChartStatus={setMainChartStatus}
-              setSecondaryChartStatus={setSecondaryChartStatus}
-              syncCharts={syncCharts}
-              compact={isPhoneTerminal}
-            />
+            <>
+              <WorkspaceGrid
+                theme={theme}
+                layoutMode={layoutMode}
+                gridMode={gridMode}
+                renderChartPanel={renderChartPanel}
+                selectedStock={selectedStock}
+                setMainSymbol={selectMainSymbol}
+                secondarySymbol={secondarySymbol}
+                setSecondarySymbol={setSecondarySymbol}
+                timeframe={timeframe}
+                setMainTimeframe={setMainTimeframe}
+                secondaryTimeframe={secondaryTimeframe}
+                setSecondaryTimeframe={setSecondaryTimeframe}
+                selectedStockData={selectedStockData}
+                secondaryStockData={secondaryStockData}
+                allSymbols={allSymbols}
+                mainChartStatus={mainChartStatus}
+                secondaryChartStatus={secondaryChartStatus}
+                setMainChartStatus={setMainChartStatus}
+                setSecondaryChartStatus={setSecondaryChartStatus}
+                syncCharts={syncCharts}
+                compact={isPhoneTerminal}
+              />
+              {usePremiumChartShell && renderPremiumScannerBoard()}
+            </>
           )}
 
           {showWorkspaceNewsPanel && (
@@ -3097,8 +3360,12 @@ export default function App() {
                   overflowY: "auto",
                 })}
               >
-                {panelTitle(BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
+                {panelTitle(usePremiumChartShell ? "Market Console" : BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
 
+                {usePremiumChartShell ? (
+                  renderPremiumRightRail()
+                ) : (
+                  <>
                 <div
                   style={{
                     display: "grid",
@@ -3350,6 +3617,8 @@ export default function App() {
                     <ShortcutsPanel theme={theme} />
                   )}
                 </Suspense>
+                  </>
+                )}
               </div>
             </Panel>
           </RightTradingPanel>

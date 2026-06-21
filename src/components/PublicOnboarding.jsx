@@ -27,6 +27,11 @@ const dataSources = [
   ["Provider limited", "API plan limits, rate limits, or cached fallback data may reduce freshness or coverage."],
 ];
 
+const onboardingTabs = [
+  { id: "quick", label: "Quick Start" },
+  { id: "sources", label: "Data Sources" },
+];
+
 export default function PublicOnboarding({
   theme,
   isOpen,
@@ -34,6 +39,12 @@ export default function PublicOnboarding({
   onDontShowAgain,
 }) {
   const [activeView, setActiveView] = useState("quick");
+
+  function moveTab(direction) {
+    const activeIndex = onboardingTabs.findIndex((tab) => tab.id === activeView);
+    const nextIndex = (activeIndex + direction + onboardingTabs.length) % onboardingTabs.length;
+    setActiveView(onboardingTabs[nextIndex].id);
+  }
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -152,43 +163,76 @@ export default function PublicOnboarding({
 
         <div style={{ padding: "16px 18px 18px", display: "grid", gap: "14px" }}>
           <div
+            role="tablist"
+            aria-label="Onboarding sections"
             style={{
-              display: "flex",
-              gap: "6px",
-              padding: "4px",
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: "4px",
+              padding: "3px",
               border: `1px solid ${theme.borderSoft || theme.border}`,
               borderRadius: "8px",
               background: stepBg,
             }}
           >
-            {[
-              ["quick", "Quick Start"],
-              ["sources", "About / Data Sources"],
-            ].map(([id, label]) => (
+            {onboardingTabs.map((tab) => {
+              const selected = activeView === tab.id;
+              return (
               <button
                 className="public-focus-control"
-                key={id}
+                key={tab.id}
                 type="button"
-                onClick={() => setActiveView(id)}
+                role="tab"
+                id={`public-tab-${tab.id}`}
+                aria-selected={selected}
+                aria-controls={`public-panel-${tab.id}`}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => setActiveView(tab.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    moveTab(1);
+                  }
+
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    moveTab(-1);
+                  }
+                }}
                 style={{
-                  height: "28px",
-                  flex: "1 1 0",
-                  border: `1px solid ${activeView === id ? theme.blue : "transparent"}`,
+                  height: "30px",
+                  width: "100%",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: `1px solid ${selected ? `${theme.blue}88` : "transparent"}`,
                   borderRadius: "6px",
-                  background: activeView === id ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
-                  color: activeView === id ? "#ffffff" : theme.text,
+                  background: selected
+                    ? isDark
+                      ? "rgba(45,140,255,0.18)"
+                      : "rgba(45,140,255,0.12)"
+                    : "transparent",
+                  color: selected ? theme.text : theme.muted,
                   cursor: "pointer",
                   fontSize: "11px",
                   fontWeight: 900,
+                  boxShadow: selected ? `inset 0 -2px 0 ${theme.blue}` : "none",
+                  transition: "background 120ms ease, border-color 120ms ease, color 120ms ease",
                 }}
               >
-                {label}
+                {tab.label}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {activeView === "quick" && (
-          <>
+          <div
+            role="tabpanel"
+            id="public-panel-quick"
+            aria-labelledby="public-tab-quick"
+            style={{ display: "grid", gap: "14px" }}
+          >
           <div className="public-onboarding-steps" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "9px" }}>
             {steps.map((step, index) => (
               <div
@@ -244,11 +288,16 @@ export default function PublicOnboarding({
           >
             Informational market context only. Verify data freshness, liquidity, and your own risk plan before acting.
           </div>
-          </>
+          </div>
           )}
 
           {activeView === "sources" && (
-          <>
+          <div
+            role="tabpanel"
+            id="public-panel-sources"
+            aria-labelledby="public-tab-sources"
+            style={{ display: "grid", gap: "14px" }}
+          >
           <div
             style={{
               border: `1px solid ${theme.borderSoft || theme.border}`,
@@ -282,7 +331,7 @@ export default function PublicOnboarding({
           <div style={{ color: theme.faint || theme.muted, fontSize: "10.5px", lineHeight: 1.45 }}>
             Data can be delayed, cached, incomplete, or limited by provider plans. Scanner and news context are informational only.
           </div>
-          </>
+          </div>
           )}
 
           <div className="public-onboarding-actions" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>

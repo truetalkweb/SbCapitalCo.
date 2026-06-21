@@ -592,8 +592,8 @@ export default function TerminalTopBar({
         <span
           style={{
             ...topStatusLaneStyle,
-            minWidth: "64px",
-            maxWidth: "88px",
+            minWidth: premiumShell ? "110px" : "64px",
+            maxWidth: premiumShell ? "142px" : "88px",
           }}
         >
           <span

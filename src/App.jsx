@@ -184,6 +184,7 @@ export default function App() {
   const [scannerTab, setScannerTab] = useState(() =>
     loadSetting("sb_scanner_tab", "Gainers")
   );
+  const [premiumDockTab, setPremiumDockTab] = useState("positions");
   const [themeMode, setThemeMode] = useState(() =>
     loadSetting("sb_theme_mode", "dark")
   );
@@ -2101,7 +2102,7 @@ export default function App() {
     !isFourChartLayout;
   const centerRows =
     usePremiumChartShell
-      ? "minmax(0, 1fr) 320px"
+      ? "minmax(0, 1fr) 250px 116px"
       :
     activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
@@ -2559,6 +2560,8 @@ export default function App() {
   }
 
   function renderPremiumScannerBoard() {
+    const premiumScannerTabs = ["Gainers", "Losers", "Active", "Momentum", "Relative Volume"];
+
     return (
       <div
         style={panelStyle({
@@ -2583,7 +2586,7 @@ export default function App() {
             <div style={{ color: theme.text, fontSize: "13px", fontWeight: 900, letterSpacing: 0, textTransform: "uppercase" }}>
               Scanner
             </div>
-            {["gainers", "losers", "active", "momentum", "relativeVolume"].map((tab) => (
+            {premiumScannerTabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setScannerTab(tab)}
@@ -2595,7 +2598,7 @@ export default function App() {
                   textTransform: "capitalize",
                 }}
               >
-                {tab === "relativeVolume" ? "High RVOL" : tab}
+                {tab === "Relative Volume" ? "High RVOL" : tab}
               </button>
             ))}
           </div>
@@ -2610,6 +2613,192 @@ export default function App() {
             onPick={selectMainSymbol}
             theme={theme}
           />
+        </div>
+      </div>
+    );
+  }
+
+  function renderPremiumBottomDock() {
+    const positionRows = Object.entries(positions || {}).map(([symbol, position]) => {
+      const lastPrice = Number(allSymbols.find((stock) => stock.symbol === symbol)?.price || selectedStockData?.price || position.avgPrice || 0);
+      const qty = Number(position.quantity || position.qty || 0);
+      const avgPrice = Number(position.avgPrice || position.averagePrice || 0);
+      const pnl = Number.isFinite(lastPrice) && Number.isFinite(avgPrice) ? (lastPrice - avgPrice) * qty : 0;
+
+      return {
+        symbol,
+        side: qty >= 0 ? "LONG" : "SHORT",
+        qty,
+        avgPrice,
+        lastPrice,
+        pnl,
+      };
+    });
+    const recentOrders = [...orders].slice(-4).reverse();
+    const visibleAlerts = alerts.slice(0, 4);
+    const tabs = [
+      ["positions", `Positions (${positionRows.length})`],
+      ["orders", `Orders (${orders.length})`],
+      ["alerts", `Alerts (${alerts.length})`],
+      ["messages", "Messages"],
+    ];
+    const dockGridColumns =
+      premiumDockTab === "positions"
+        ? "1fr 80px 80px 96px 96px 96px"
+        : premiumDockTab === "orders"
+          ? "1fr 80px 80px 96px 110px 1fr"
+          : "1fr 110px 120px 1fr";
+    const headerLabels =
+      premiumDockTab === "positions"
+        ? ["Symbol", "Side", "Qty", "Avg Price", "Last Price", "P&L"]
+        : premiumDockTab === "orders"
+          ? ["Symbol", "Side", "Qty", "Price", "Status", "Time"]
+          : premiumDockTab === "alerts"
+            ? ["Symbol", "Direction", "Target", "Status"]
+            : ["Source", "Status", "Time", "Message"];
+
+    function renderRows() {
+      if (premiumDockTab === "positions") {
+        if (!positionRows.length) return [["No positions", "Paper", "-", "-", "-", "$0.00"]];
+
+        return positionRows.map((row) => [
+          row.symbol,
+          row.side,
+          Math.abs(row.qty),
+          row.avgPrice ? `$${row.avgPrice.toFixed(2)}` : "-",
+          row.lastPrice ? `$${row.lastPrice.toFixed(2)}` : "-",
+          `${row.pnl >= 0 ? "+" : "-"}$${Math.abs(row.pnl).toFixed(2)}`,
+        ]);
+      }
+
+      if (premiumDockTab === "orders") {
+        if (!recentOrders.length) return [["No recent orders", "-", "-", "-", "Idle", "-"]];
+
+        return recentOrders.map((order) => [
+          order.symbol || selectedStock,
+          order.side || order.orderSide || "-",
+          order.quantity || order.qty || "-",
+          order.price ? `$${Number(order.price).toFixed(2)}` : order.limitPrice ? `$${Number(order.limitPrice).toFixed(2)}` : "Market",
+          order.status || order.mode || "Recorded",
+          order.time ? new Date(order.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-",
+        ]);
+      }
+
+      if (premiumDockTab === "alerts") {
+        if (!visibleAlerts.length) return [["No alerts", "-", "-", "Idle"]];
+
+        return visibleAlerts.map((alert) => [
+          alert.symbol || selectedStock,
+          alert.direction || "above",
+          alert.price ? `$${Number(alert.price).toFixed(2)}` : "-",
+          alert.active === false ? "Paused" : "Active",
+        ]);
+      }
+
+      return [
+        ["Data", resolvedMarketDataStatusLabel || "Market Data", "-", resolvedScannerMessage],
+        ["News", resolvedNewsStatusLabel || "News", "-", resolvedNewsMessage],
+      ];
+    }
+
+    return (
+      <div
+        style={panelStyle({
+          height: "100%",
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateRows: "34px 1fr",
+          padding: 0,
+        })}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "stretch",
+            borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+          }}
+        >
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPremiumDockTab(id)}
+              style={{
+                minWidth: "126px",
+                padding: "0 14px",
+                border: "none",
+                borderRight: `1px solid ${theme.borderSoft || theme.border}`,
+                background: premiumDockTab === id ? "rgba(45,140,255,0.14)" : "transparent",
+                color: premiumDockTab === id ? theme.blue : theme.muted,
+                cursor: "pointer",
+                fontSize: "11px",
+                fontWeight: 850,
+                textTransform: "uppercase",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ minHeight: 0, overflow: "auto", padding: "8px 12px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: dockGridColumns,
+              gap: "10px",
+              color: theme.muted,
+              fontSize: "9px",
+              fontWeight: 900,
+              textTransform: "uppercase",
+              padding: "0 0 6px",
+              borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+            }}
+          >
+            {headerLabels.map((label) => (
+              <span key={label} style={{ textAlign: label === "Symbol" || label === "Source" ? "left" : "right" }}>
+                {label}
+              </span>
+            ))}
+          </div>
+
+          {renderRows().map((row, rowIndex) => (
+            <div
+              key={`${premiumDockTab}-${rowIndex}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: dockGridColumns,
+                gap: "10px",
+                alignItems: "center",
+                minHeight: "30px",
+                borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+                color: theme.text,
+                fontFamily: terminalMonoFont,
+                fontSize: "10px",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {row.map((cell, cellIndex) => {
+                const value = String(cell);
+                const isPnl = value.startsWith("+$") || value.startsWith("-$");
+                return (
+                  <span
+                    key={`${value}-${cellIndex}`}
+                    style={{
+                      textAlign: cellIndex === 0 ? "left" : "right",
+                      color: isPnl ? (value.startsWith("+") ? theme.green : theme.red) : theme.text,
+                      fontWeight: cellIndex === 0 || isPnl ? 850 : 700,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {value}
+                  </span>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -3351,6 +3540,7 @@ export default function App() {
                 compact={isPhoneTerminal}
               />
               {usePremiumChartShell && renderPremiumScannerBoard()}
+              {usePremiumChartShell && renderPremiumBottomDock()}
             </>
           )}
 

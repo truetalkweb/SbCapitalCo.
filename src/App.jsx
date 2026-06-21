@@ -2288,6 +2288,7 @@ export default function App() {
         replayTrades={replayTrades}
         brokerApiUrl={BROKER_API_URL}
         advancedMode={advancedMode}
+        premiumShell={usePremiumChartShell}
       />
     );
   }
@@ -3653,7 +3654,7 @@ export default function App() {
               <div
                 style={panelStyle({
                   height: "100%",
-                  overflowY: "auto",
+                  overflowY: usePremiumChartShell ? "hidden" : "auto",
                 })}
               >
                 {panelTitle(usePremiumChartShell ? "Market Console" : BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
@@ -4217,6 +4218,7 @@ export default function App() {
         />
       )}
 
+      {!usePremiumChartShell && (
       <TerminalStatusBar
         theme={theme}
         terminalMonoFont={terminalMonoFont}
@@ -4245,6 +4247,7 @@ export default function App() {
               ]
         }
       />
+      )}
 
       <Suspense fallback={null}>
         <CommandPalette

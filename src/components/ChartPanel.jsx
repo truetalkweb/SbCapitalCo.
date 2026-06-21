@@ -48,6 +48,7 @@ export default function ChartPanel({
   replayTrades,
   brokerApiUrl,
   advancedMode = false,
+  premiumShell = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
   const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
@@ -80,13 +81,13 @@ export default function ChartPanel({
         : theme.amber;
   const toolButtonStyle = {
     ...buttonStyle(false),
-    height: "28px",
+    height: premiumShell ? "26px" : "28px",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: isPhoneChart ? 0 : "6px",
-    padding: isPhoneChart ? "0" : "0 9px",
-    width: isPhoneChart ? "36px" : "112px",
+    padding: isPhoneChart ? "0" : premiumShell ? "0 10px" : "0 9px",
+    width: isPhoneChart ? "36px" : premiumShell ? "104px" : "112px",
     background: theme.panel2,
     borderColor: theme.borderSoft || theme.border,
     fontSize: "10px",
@@ -133,7 +134,7 @@ export default function ChartPanel({
     >
       <div
         style={{
-          padding: isPhoneChart ? "10px" : "10px 12px",
+          padding: isPhoneChart ? "10px" : premiumShell ? "9px 12px" : "10px 12px",
           marginBottom: "0px",
           background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
@@ -251,7 +252,7 @@ export default function ChartPanel({
             display: "flex",
             gap: "4px",
             marginBottom: "0px",
-            padding: "7px 10px",
+            padding: premiumShell ? "6px 10px" : "7px 10px",
             flexWrap: "wrap",
             position: "relative",
             background: theme.panel,

@@ -26,6 +26,7 @@ import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
 import PublicOnboarding from "./components/PublicOnboarding";
 import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
+import PremiumWorkspace from "./components/premium/PremiumWorkspace";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
   BROKER_TOOLS_ENABLED,
@@ -2083,7 +2084,7 @@ export default function App() {
   const usePremiumShell = !isCompactTerminal;
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
-  const showRightDockPanel = usePremiumShell || (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
+  const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
   const sidebarPanelSize = isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
@@ -2102,10 +2103,8 @@ export default function App() {
     (activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay") &&
     !isFourChartLayout;
   const centerRows =
-    usePremiumShell && activeWorkspace === "charts"
-      ? "minmax(0, 1fr) 250px 116px"
-      : usePremiumShell
-        ? "minmax(0, 1fr)"
+    usePremiumShell
+      ? "minmax(0, 1fr)"
       :
     activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
@@ -3098,6 +3097,8 @@ export default function App() {
     );
   }
 
+  // Legacy premium renderer kept temporarily as a fallback reference while the screenshot replica layer is verified.
+  // eslint-disable-next-line no-unused-vars
   function renderPremiumMainWorkspace() {
     const pagePanel = (title, subtitle, content, extra = {}) => (
       <div
@@ -3537,6 +3538,78 @@ export default function App() {
     }
 
     return renderPremiumScannerBoard();
+  }
+
+  function renderPremiumChartGrid({ layoutMode: layoutModeOverride = "1", gridMode: gridModeOverride = "2", compact = false } = {}) {
+    return (
+      <WorkspaceGrid
+        theme={theme}
+        layoutMode={layoutModeOverride}
+        gridMode={gridModeOverride}
+        renderChartPanel={renderChartPanel}
+        selectedStock={selectedStock}
+        setMainSymbol={selectMainSymbol}
+        secondarySymbol={secondarySymbol}
+        setSecondarySymbol={setSecondarySymbol}
+        timeframe={timeframe}
+        setMainTimeframe={setMainTimeframe}
+        secondaryTimeframe={secondaryTimeframe}
+        setSecondaryTimeframe={setSecondaryTimeframe}
+        selectedStockData={selectedStockData}
+        secondaryStockData={secondaryStockData}
+        allSymbols={allSymbols}
+        mainChartStatus={mainChartStatus}
+        secondaryChartStatus={secondaryChartStatus}
+        setMainChartStatus={setMainChartStatus}
+        setSecondaryChartStatus={setSecondaryChartStatus}
+        syncCharts={syncCharts}
+        compact={compact}
+      />
+    );
+  }
+
+  function renderReplicaPremiumWorkspace() {
+    return (
+      <PremiumWorkspace
+        activeWorkspace={activeWorkspace}
+        theme={theme}
+        isDark={isDark}
+        renderChartGrid={renderPremiumChartGrid}
+        selectedStock={selectedStock}
+        selectedStockData={selectedStockData}
+        liveStocks={liveStocks}
+        scannerStocks={scannerStocks}
+        news={news}
+        newsLoading={newsLoading}
+        alerts={alerts}
+        orders={orders}
+        positions={positions}
+        allSymbols={allSymbols}
+        realizedPnL={realizedPnL}
+        totalUnrealizedPnL={totalUnrealizedPnL}
+        quantity={quantity}
+        setQuantity={setQuantity}
+        setOrderSide={setOrderSide}
+        setOrderConfirmed={setOrderConfirmed}
+        setOrderMessage={setOrderMessage}
+        setPremiumDockTab={setPremiumDockTab}
+        selectMainSymbol={selectMainSymbol}
+        addSymbolToWatchlist={addSymbolToWatchlist}
+        removeWatchlistSymbol={removeWatchlistSymbol}
+        scannerTab={scannerTab}
+        setScannerTab={setScannerTab}
+        themeMode={themeMode}
+        setThemeMode={setThemeMode}
+        activePreset={activePreset}
+        layoutMode={layoutMode}
+        gridMode={gridMode}
+        user={user}
+        saveWorkspaceToCloud={saveWorkspaceToCloud}
+        loadWorkspaceFromCloud={loadWorkspaceFromCloud}
+        resetWorkspace={resetWorkspace}
+        brokerConnected={brokerConnected}
+      />
+    );
   }
 
   return (
@@ -4036,7 +4109,7 @@ export default function App() {
           }}
         >
           {usePremiumShell ? (
-            renderPremiumMainWorkspace()
+            renderReplicaPremiumWorkspace()
           ) : activeWorkspace === "intelligence" ? (
             <Suspense fallback={<LoadingPanel theme={theme} label="Loading market intelligence" />}>
               <MarketIntelligenceTerminal

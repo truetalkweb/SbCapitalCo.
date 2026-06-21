@@ -180,8 +180,8 @@ export default function MarketNewsPanel({
                 rel={item.url ? "noreferrer" : undefined}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(54px, 72px) minmax(72px, 102px) minmax(76px, 108px) minmax(0, 1fr) minmax(42px, 66px)",
-                  gap: "9px",
+                  gridTemplateColumns: "minmax(0, 1fr) minmax(42px, 58px)",
+                  gap: "8px",
                   alignItems: "start",
                   color: theme.text,
                   textDecoration: "none",
@@ -223,27 +223,32 @@ export default function MarketNewsPanel({
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
+                    justifySelf: "end",
+                    maxWidth: "100%",
                   }}
                   title={sourceLabel}
                 >
                   {sourceLabel}
-                </div>
-                <div
-                  style={{
-                    justifySelf: "start",
-                    color: sourceColor,
-                    border: `1px solid ${sourceColor}40`,
-                    background: `${sourceColor}12`,
-                    borderRadius: "999px",
-                    padding: "2px 6px",
-                    fontSize: "8.5px",
-                    fontWeight: 900,
-                    whiteSpace: "nowrap",
-                    fontFamily: terminalMonoFont,
-                  }}
-                  title={sourceType}
-                >
-                  {sourceType}
+                  <span
+                    style={{
+                      display: "block",
+                      width: "fit-content",
+                      maxWidth: "100%",
+                      color: sourceColor,
+                      border: `1px solid ${sourceColor}40`,
+                      background: `${sourceColor}12`,
+                      borderRadius: "999px",
+                      padding: "2px 6px",
+                      marginTop: "4px",
+                      fontSize: "8px",
+                      fontWeight: 900,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                    title={sourceType}
+                  >
+                    {sourceType}
+                  </span>
                 </div>
                 <div
                   style={{
@@ -254,6 +259,7 @@ export default function MarketNewsPanel({
                     whiteSpace: "normal",
                     overflowWrap: "break-word",
                     minWidth: 0,
+                    gridColumn: "1 / 2",
                   }}
                   title={summary || headline}
                 >
@@ -278,6 +284,9 @@ export default function MarketNewsPanel({
                     fontSize: "9.5px",
                     fontWeight: 800,
                     whiteSpace: "nowrap",
+                    maxWidth: "54px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
                   {ticker}

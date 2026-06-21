@@ -83,13 +83,15 @@ const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
 const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
 const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
 
-const brokerRightTabIds = new Set(["broker"]);
+const publicRightTabIds = new Set(["intel", "risk", "health", "alerts"]);
+const brokerRightTabIds = new Set(["broker", "order", "audit", "replay", "activity", "dom", "keys"]);
 const brokerWorkspaceIds = new Set(["broker", "portfolio"]);
 const coreRightTabs = new Set(["intel", "health", "alerts"]);
 const advancedWorkspaceIds = new Set(["broker", "replay", "journal", "portfolio", "settings"]);
 
 function isRightTabAllowed(tabId) {
-  if (!BROKER_TOOLS_ENABLED && brokerRightTabIds.has(tabId)) return false;
+  if (!BROKER_TOOLS_ENABLED) return publicRightTabIds.has(tabId);
+  if (brokerRightTabIds.has(tabId)) return true;
   return true;
 }
 
@@ -2116,8 +2118,16 @@ export default function App() {
       }),
     [brokerConnected, brokerDetails, brokerError, liveQuotes, platformHealth]
   );
+  const publicMarketDataHealth = useMemo(() => ({
+    ...qtrdHealth,
+    label: formatTerminalStatusLabel(qtrdHealth.label || marketDataStatusLabel || "MARKET DATA PENDING").replace(/^QTRD\b/i, "MARKET DATA"),
+    message: String(qtrdHealth.message || "Market data status pending.").replace(/Questrade/gi, "Market data"),
+    rawMessage: BROKER_TOOLS_ENABLED ? qtrdHealth.rawMessage : "",
+    tokenPersisted: BROKER_TOOLS_ENABLED ? qtrdHealth.tokenPersisted : false,
+  }), [marketDataStatusLabel, qtrdHealth]);
+  const visibleMarketDataHealth = BROKER_TOOLS_ENABLED ? qtrdHealth : publicMarketDataHealth;
   const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
-  const resolvedMarketDataStatusLabel = qtrdHealth.label || marketDataStatusLabel;
+  const resolvedMarketDataStatusLabel = visibleMarketDataHealth.label || marketDataStatusLabel;
   const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || null;
   const aiHealthLabel = aiHealth?.source === "gemini" && (aiHealth?.live || aiHealth?.providerLabel === "LIVE")
@@ -2158,16 +2168,17 @@ export default function App() {
       buildDataConfidence({
         selectedStock,
         selectedStockData,
-        qtrdHealth,
+        qtrdHealth: visibleMarketDataHealth,
         newsMeta,
         scannerMeta,
       }),
-    [newsMeta, qtrdHealth, scannerMeta, selectedStock, selectedStockData]
+    [newsMeta, scannerMeta, selectedStock, selectedStockData, visibleMarketDataHealth]
   );
   const visibleRightPanelTabs = useMemo(
     () => rightPanelTabs.filter((tab) => isRightTabAllowed(tab.id) && (advancedMode || coreRightTabs.has(tab.id))),
     [advancedMode]
   );
+  const activeRightTab = visibleRightPanelTabs.some((tab) => tab.id === rightTab) ? rightTab : "intel";
   const visibleWorkspaceViews = useMemo(
     () => workspaceViews.filter((view) => isWorkspaceAllowed(view.id)),
     []
@@ -2188,6 +2199,19 @@ export default function App() {
     [news, selectedStock]
   );
   const showAccountCloudInLeftDock = activeWorkspace === "settings";
+  const mobileDockTabs = BROKER_TOOLS_ENABLED
+    ? [
+        ["order", "Trade"],
+        ["risk", "Risk"],
+        ["audit", "Audit"],
+        ["alerts", "Alerts"],
+      ]
+    : [
+        ["intel", "Intel"],
+        ["risk", "Risk"],
+        ["health", "Health"],
+        ["alerts", "Alerts"],
+      ];
 
   useEffect(() => {
     saveSetting("sb_advanced_mode", advancedMode);
@@ -2282,7 +2306,9 @@ export default function App() {
       ["Quote", cleanStatus(selectedDataConfidence.quote?.label), selectedDataConfidence.quote?.confidence],
       ["News", cleanStatus(selectedDataConfidence.news?.label), selectedDataConfidence.news?.confidence],
       ["Scanner", cleanStatus(selectedDataConfidence.scanner?.label), selectedDataConfidence.scanner?.confidence],
-      ["Broker", qtrdHealth.tokenPersisted ? "Token Stored" : brokerConnected ? "Broker Connected" : "Broker Locked", brokerConnected ? "High" : qtrdHealth.tokenPersisted ? "Medium" : "Limited"],
+      ...(BROKER_TOOLS_ENABLED
+        ? [["Broker", qtrdHealth.tokenPersisted ? "Token Stored" : brokerConnected ? "Broker Connected" : "Broker Locked", brokerConnected ? "High" : qtrdHealth.tokenPersisted ? "Medium" : "Limited"]]
+        : []),
     ];
     const dockScore = selectedDockStock?.score10 || selectedDockStock?.score || selectedDockStock?.scoreValue || "Limited";
     const detailRows = [
@@ -2303,16 +2329,18 @@ export default function App() {
                 {selectedStock} Intelligence
               </div>
               <div style={{ color: theme.muted, fontSize: "9.5px", marginTop: "3px" }}>
-                Confidence {cleanStatus(selectedDataConfidence.confidence)} · Updated {selectedDataConfidence.lastUpdatedLabel}
+                Confidence {cleanStatus(selectedDataConfidence.confidence)} / Updated {selectedDataConfidence.lastUpdatedLabel}
               </div>
             </div>
             <span
               style={{
-                color: brokerConnected ? theme.green : theme.amber,
-                border: `1px solid ${(brokerConnected ? theme.green : theme.amber)}4d`,
+                color: BROKER_TOOLS_ENABLED ? (brokerConnected ? theme.green : theme.amber) : confidenceColor(selectedDataConfidence.confidence),
+                border: `1px solid ${(BROKER_TOOLS_ENABLED ? (brokerConnected ? theme.green : theme.amber) : confidenceColor(selectedDataConfidence.confidence))}4d`,
                 borderRadius: "999px",
                 padding: "3px 7px",
-                background: brokerConnected ? "rgba(0,200,150,0.07)" : "rgba(245,184,75,0.07)",
+                background: BROKER_TOOLS_ENABLED
+                  ? brokerConnected ? "rgba(0,200,150,0.07)" : "rgba(245,184,75,0.07)"
+                  : "rgba(25,198,216,0.07)",
                 fontSize: "8px",
                 fontWeight: 850,
                 textTransform: "uppercase",
@@ -2320,7 +2348,9 @@ export default function App() {
                 whiteSpace: "nowrap",
               }}
             >
-              {brokerConnected ? "Broker Connected" : "Broker Locked"}
+              {BROKER_TOOLS_ENABLED
+                ? brokerConnected ? "Broker Connected" : "Broker Locked"
+                : `${cleanStatus(selectedDataConfidence.confidence)} Context`}
             </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "9px" }}>
@@ -2579,7 +2609,7 @@ export default function App() {
         theme={theme}
         terminalMonoFont={terminalMonoFont}
         backendLabel={backendHealthLabel}
-        qtrdHealth={qtrdHealth}
+        qtrdHealth={visibleMarketDataHealth}
         scannerLabel={scannerSourceLabel}
         scannerMessage={resolvedScannerMessage}
         newsLabel={resolvedNewsStatusLabel}
@@ -3052,7 +3082,7 @@ export default function App() {
                   overflowY: "auto",
                 })}
               >
-                {panelTitle(advancedMode ? "Advanced Console" : "Market Intelligence")}
+                {panelTitle(BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
 
                 <div
                   style={{
@@ -3071,15 +3101,15 @@ export default function App() {
                       key={tab.id}
                       onClick={() => setRightTab(tab.id)}
                       style={{
-                        ...buttonStyle(rightTab === tab.id),
+                        ...buttonStyle(activeRightTab === tab.id),
                         height: "25px",
                         minWidth: 0,
                         padding: "0 5px",
                         fontSize: "9px",
                         fontFamily: terminalSansFont,
                         fontWeight: 800,
-                        borderColor: rightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
-                        background: rightTab === tab.id
+                        borderColor: activeRightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
+                        background: activeRightTab === tab.id
                           ? `linear-gradient(180deg, ${theme.blue}, #1765c6)`
                           : isDark ? "rgba(255,255,255,0.015)" : theme.panel,
                       }}
@@ -3089,10 +3119,10 @@ export default function App() {
                   ))}
                 </div>
 
-                <Suspense fallback={<LoadingPanel theme={theme} label="Loading trading panels" height="180px" />}>
-                  {rightTab === "intel" && renderIntelligenceDock()}
+                <Suspense fallback={<LoadingPanel theme={theme} label="Loading console panels" height="180px" />}>
+                  {activeRightTab === "intel" && renderIntelligenceDock()}
 
-                  {rightTab === "order" && (
+                  {activeRightTab === "order" && (
                     <OrderTicket
                       theme={theme}
                       buttonStyle={buttonStyle}
@@ -3139,7 +3169,7 @@ export default function App() {
                     />
                   )}
 
-                  {BROKER_TOOLS_ENABLED && rightTab === "broker" && (
+                  {BROKER_TOOLS_ENABLED && activeRightTab === "broker" && (
                     <>
                       <BrokerHeader
                         theme={theme}
@@ -3172,7 +3202,7 @@ export default function App() {
                     </>
                   )}
 
-                  {rightTab === "risk" && (
+                  {activeRightTab === "risk" && (
                     <>
                       <RiskDashboard
                         theme={theme}
@@ -3213,7 +3243,7 @@ export default function App() {
                     </>
                   )}
 
-                  {rightTab === "replay" && (
+                  {activeRightTab === "replay" && (
                     <ReplayPanel
                       theme={theme}
                       buttonStyle={buttonStyle}
@@ -3236,7 +3266,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "activity" && (
+                  {activeRightTab === "activity" && (
                     <ActivityLogPanel
                       theme={theme}
                       activityLog={activityLog}
@@ -3245,7 +3275,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "audit" && (
+                  {activeRightTab === "audit" && (
                     <ExecutionAuditPanel
                       theme={theme}
                       auditTrail={orderAuditTrail}
@@ -3255,7 +3285,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "health" && (
+                  {activeRightTab === "health" && (
                     <ProductionHealthPanel
                       theme={theme}
                       brokerApiUrl={BROKER_API_URL}
@@ -3269,12 +3299,13 @@ export default function App() {
                       wsStatus={wsStatus}
                       mainChartStatus={mainChartStatus}
                       refreshBroker={handleRefreshProductionHealth}
-                      qtrdHealth={qtrdHealth}
+                      qtrdHealth={visibleMarketDataHealth}
+                      brokerToolsEnabled={BROKER_TOOLS_ENABLED}
                       buttonStyle={buttonStyle}
                     />
                   )}
 
-                  {rightTab === "alerts" && (
+                  {activeRightTab === "alerts" && (
                     <AlertsPanel
                       theme={theme}
                       buttonStyle={buttonStyle}
@@ -3291,7 +3322,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "dom" && (
+                  {activeRightTab === "dom" && (
                     <DOMPanel
                       theme={theme}
                       ladderRows={ladderRows}
@@ -3300,7 +3331,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "keys" && (
+                  {activeRightTab === "keys" && (
                     <ShortcutsPanel theme={theme} />
                   )}
                 </Suspense>
@@ -3328,17 +3359,12 @@ export default function App() {
             backdropFilter: "blur(10px)",
           }}
         >
-          {[
-            ["order", "Trade"],
-            ["risk", "Risk"],
-            ["audit", "Audit"],
-            ["alerts", "Alerts"],
-          ].map(([tabId, label]) => (
+          {mobileDockTabs.filter(([tabId]) => isRightTabAllowed(tabId)).map(([tabId, label]) => (
             <button
               key={tabId}
               onClick={() => openMobileDockTab(tabId)}
               style={{
-                ...buttonStyle(rightTab === tabId && mobileDockOpen),
+                ...buttonStyle(activeRightTab === tabId && mobileDockOpen),
                 height: "32px",
                 minWidth: 0,
                 padding: "0 5px",
@@ -3381,15 +3407,15 @@ export default function App() {
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ color: theme.text, fontSize: "12px", fontWeight: 950 }}>
-                Mobile Trading Dock
+                {BROKER_TOOLS_ENABLED ? "Mobile Trading Dock" : "Mobile Insight Dock"}
               </div>
               <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 850 }}>
-                {selectedStock} · {rightPanelTabs.find((tab) => tab.id === rightTab)?.label || "Tools"}
+                {selectedStock} / {rightPanelTabs.find((tab) => tab.id === activeRightTab)?.label || "Tools"}
               </div>
             </div>
             <button
               onClick={() => setMobileDockOpen(false)}
-              title="Close mobile trading dock"
+              title={BROKER_TOOLS_ENABLED ? "Close mobile trading dock" : "Close mobile insight dock"}
               style={{
                 width: "30px",
                 height: "30px",
@@ -3408,7 +3434,7 @@ export default function App() {
 
           <div style={{ overflowY: "auto", padding: "9px" }}>
             <Suspense fallback={<LoadingPanel theme={theme} label="Loading mobile tools" height="180px" />}>
-              {rightTab === "order" && (
+              {activeRightTab === "order" && (
                 <OrderTicket
                   theme={theme}
                   buttonStyle={buttonStyle}
@@ -3456,7 +3482,7 @@ export default function App() {
                 />
               )}
 
-              {rightTab === "risk" && (
+              {activeRightTab === "risk" && (
                 <>
                   <RiskDashboard
                     theme={theme}
@@ -3486,7 +3512,7 @@ export default function App() {
                 </>
               )}
 
-              {BROKER_TOOLS_ENABLED && rightTab === "broker" && (
+              {BROKER_TOOLS_ENABLED && activeRightTab === "broker" && (
                 <>
                   <BrokerHeader
                     theme={theme}
@@ -3519,7 +3545,7 @@ export default function App() {
                 </>
               )}
 
-              {rightTab === "replay" && (
+              {activeRightTab === "replay" && (
                 <ReplayPanel
                   theme={theme}
                   buttonStyle={buttonStyle}
@@ -3542,7 +3568,7 @@ export default function App() {
                 />
               )}
 
-              {rightTab === "activity" && (
+              {activeRightTab === "activity" && (
                 <ActivityLogPanel
                   theme={theme}
                   activityLog={activityLog}
@@ -3551,7 +3577,7 @@ export default function App() {
                 />
               )}
 
-              {rightTab === "audit" && (
+              {activeRightTab === "audit" && (
                 <ExecutionAuditPanel
                   theme={theme}
                   auditTrail={orderAuditTrail}
@@ -3561,7 +3587,7 @@ export default function App() {
                 />
               )}
 
-              {rightTab === "health" && (
+              {activeRightTab === "health" && (
                 <ProductionHealthPanel
                   theme={theme}
                   brokerApiUrl={BROKER_API_URL}
@@ -3575,12 +3601,13 @@ export default function App() {
                   wsStatus={wsStatus}
                   mainChartStatus={mainChartStatus}
                   refreshBroker={handleRefreshProductionHealth}
-                  qtrdHealth={qtrdHealth}
+                  qtrdHealth={visibleMarketDataHealth}
+                  brokerToolsEnabled={BROKER_TOOLS_ENABLED}
                   buttonStyle={buttonStyle}
                 />
               )}
 
-              {rightTab === "alerts" && (
+              {activeRightTab === "alerts" && (
                 <AlertsPanel
                   theme={theme}
                   buttonStyle={buttonStyle}
@@ -3611,8 +3638,7 @@ export default function App() {
                 ["Backend", backendHealthLabel],
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
-                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel]] : []),
-                ["Mode", modeSourceLabel],
+                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel], ["Mode", modeSourceLabel]] : [["AI", aiHealthLabel]]),
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]
             : [
@@ -3620,8 +3646,7 @@ export default function App() {
                 ["Backend", backendHealthLabel],
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
-                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel]] : []),
-                ["Mode", modeSourceLabel],
+                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel], ["Mode", modeSourceLabel]] : [["AI", aiHealthLabel]]),
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]
         }

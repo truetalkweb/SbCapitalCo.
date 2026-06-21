@@ -196,6 +196,7 @@ export default function TerminalTopBar({
   const showChartControls = !isIntelligenceWorkspace;
   const showUtilityControls = advancedMode && !isIntelligenceWorkspace;
   const showBrokerStatus = showUtilityControls && brokerToolsEnabled;
+  const showModeStatus = showUtilityControls && brokerToolsEnabled;
   const resolvedMarketDataLabel =
     marketDataStatusLabel ||
     (wsStatus === "LIVE" ? "QTRD LIVE" : wsStatus === "BACKEND" ? "QTRD PENDING" : `QTRD ${wsStatus || "PENDING"}`);
@@ -281,10 +282,10 @@ export default function TerminalTopBar({
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         display: "flex",
         alignItems: "center",
-        padding: compact ? "8px" : "0 12px",
+        padding: compact ? "12px 8px 18px" : "0 12px",
         gap: compact ? "8px" : "10px",
         flexWrap: "wrap",
-        alignContent: "center",
+        alignContent: compact ? "flex-start" : "center",
         boxShadow: isDark
           ? "inset 0 1px 0 rgba(255,255,255,0.035), 0 10px 28px rgba(0,0,0,0.22)"
           : "0 1px 8px rgba(15,23,42,0.06)",
@@ -301,7 +302,7 @@ export default function TerminalTopBar({
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: logoTextColor, fontWeight: 900, fontSize: "20px", lineHeight: 1, letterSpacing: "-0.01em" }}>
+          <div style={{ color: logoTextColor, fontWeight: 900, fontSize: "20px", lineHeight: 1.15, letterSpacing: "-0.01em" }}>
             SB <span style={{ color: theme.cyan || theme.blue }}>Terminal</span>
           </div>
         </div>
@@ -647,13 +648,21 @@ export default function TerminalTopBar({
             ...compactButton(advancedMode),
             ...(!advancedMode ? quietButton : {}),
           }}
-          title={advancedMode ? "Hide execution, replay, DOM, and workspace tools" : "Show advanced trading/replay/workspace tools"}
+          title={
+            brokerToolsEnabled
+              ? advancedMode
+                ? "Hide execution, replay, DOM, and workspace tools"
+                : "Show advanced trading/replay/workspace tools"
+              : advancedMode
+                ? "Hide advanced workspace tools"
+                : "Show advanced workspace tools"
+          }
         >
           Advanced {advancedMode ? "On" : "Off"}
         </button>
         )}
 
-        {showUtilityControls && (
+        {showModeStatus && (
         <span
           style={{
             ...topStatusLaneStyle,

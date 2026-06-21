@@ -2104,7 +2104,7 @@ export default function App() {
     activeWorkspace === "settings" ||
     isFourChartLayout
       ? "1fr"
-      : "1fr 170px";
+      : "minmax(0, 1fr) 188px";
 
   const {
     marketDataStatusLabel,
@@ -3029,7 +3029,7 @@ export default function App() {
           style={{
             display: "grid",
             gridTemplateRows: centerRows,
-            gap: "6px",
+            gap: "4px",
             height: "100%",
             minHeight: 0,
             overflow: "hidden",

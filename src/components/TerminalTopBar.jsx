@@ -278,12 +278,12 @@ export default function TerminalTopBar({
   return (
     <div
       style={{
-        minHeight: compact ? "64px" : "74px",
+        minHeight: compact ? "66px" : "78px",
         background: chromeBackground,
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         display: "flex",
         alignItems: "center",
-        padding: compact ? "12px 8px 18px" : "0 12px",
+        padding: compact ? "14px 8px 16px" : "4px 12px 3px",
         gap: compact ? "8px" : "10px",
         flexWrap: "wrap",
         alignContent: compact ? "flex-start" : "center",

@@ -69,7 +69,6 @@ export default function MarketNewsPanel({
 }) {
   const isDark = theme.isDark !== false;
   const statusLabel = getNewsStatusLabel(newsMeta);
-  const displayStatusLabel = formatTerminalStatusLabel(statusLabel);
   const statusColor = getStatusColor(statusLabel, theme);
   const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
   const visibleMessage = rawVisibleMessage
@@ -89,11 +88,11 @@ export default function MarketNewsPanel({
         overflow: "hidden",
         display: "grid",
         gridTemplateRows: "auto 1fr",
-        gap: "7px",
+        gap: "4px",
         background: theme.card,
         border: `1px solid ${theme.border}`,
         borderRadius: "8px",
-        padding: "9px",
+        padding: "8px",
         fontFamily: terminalSansFont,
         boxShadow: isDark ? "none" : "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)",
       }}
@@ -102,10 +101,10 @@ export default function MarketNewsPanel({
         style={{
           display: "grid",
           gridTemplateColumns: "minmax(160px, 1fr) auto",
-          alignItems: "start",
+          alignItems: "center",
           gap: "12px",
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-          paddingBottom: "7px",
+          paddingBottom: "6px",
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -139,20 +138,24 @@ export default function MarketNewsPanel({
           title={diagnosticsTitle}
         >
           <span
+            aria-hidden="true"
             style={{
               fontFamily: terminalMonoFont,
               fontVariantNumeric: "tabular-nums",
               color: statusColor,
-              border: `1px solid ${statusColor}42`,
-              borderRadius: "999px",
-              padding: "3px 7px",
-              background: `${statusColor}10`,
+              border: "none",
+              padding: 0,
+              background: "transparent",
               fontSize: "9px",
               fontWeight: 850,
               whiteSpace: "nowrap",
+              width: 0,
+              height: 0,
+              opacity: 0,
+              overflow: "hidden",
             }}
           >
-            {displayStatusLabel}
+            {formatTerminalStatusLabel(statusLabel)}
           </span>
         </div>
       </div>
@@ -180,15 +183,16 @@ export default function MarketNewsPanel({
                 rel={item.url ? "noreferrer" : undefined}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0, 1fr) minmax(42px, 58px)",
+                  gridTemplateColumns: "72px 116px minmax(0, 1fr) 52px",
                   gap: "8px",
-                  alignItems: "start",
+                  alignItems: "center",
                   color: theme.text,
                   textDecoration: "none",
                   borderBottom: index === news.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
-                  padding: "9px 7px",
+                  minHeight: "30px",
+                  padding: "5px 6px",
                   fontSize: "11px",
-                  lineHeight: 1.38,
+                  lineHeight: 1.25,
                   cursor: item.url ? "pointer" : "default",
                   transition: "background 0.15s ease",
                   borderRadius: item.url ? "5px" : 0,
@@ -209,6 +213,9 @@ export default function MarketNewsPanel({
                     fontSize: "9.5px",
                     fontWeight: 700,
                     whiteSpace: "nowrap",
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
                   {item.time}
@@ -223,7 +230,6 @@ export default function MarketNewsPanel({
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
-                    justifySelf: "end",
                     maxWidth: "100%",
                   }}
                   title={sourceLabel}
@@ -231,9 +237,9 @@ export default function MarketNewsPanel({
                   {sourceLabel}
                   <span
                     style={{
-                      display: "block",
-                      width: "fit-content",
-                      maxWidth: "100%",
+                      display: "none",
+                      width: 0,
+                      maxWidth: 0,
                       color: sourceColor,
                       border: `1px solid ${sourceColor}40`,
                       background: `${sourceColor}12`,
@@ -256,10 +262,11 @@ export default function MarketNewsPanel({
                     fontFamily: terminalSansFont,
                     fontSize: "11.5px",
                     fontWeight: item.url ? 750 : 650,
-                    whiteSpace: "normal",
+                    whiteSpace: "nowrap",
                     overflowWrap: "break-word",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                     minWidth: 0,
-                    gridColumn: "1 / 2",
                   }}
                   title={summary || headline}
                 >

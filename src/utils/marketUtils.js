@@ -294,7 +294,7 @@ export function formatTerminalStatusLabel(label) {
   if (upper.includes("SCANNER UNAVAILABLE")) return "Fallback Context";
   if (upper.includes("SCANNER CONTEXT")) return "Fallback Context";
   if (upper.includes("SCANNER CATALYST")) return "Fallback Context";
-  if (upper.includes("PROVIDER LIMITED")) return "Provider Limited";
+  if (upper.includes("PROVIDER LIMITED")) return "Limited";
   if (upper.includes("CACHED")) return "Cached";
   if (upper.includes("FALLBACK")) return "Fallback Context";
   if (upper.includes("BACKEND LIVE")) return "Backend Live";

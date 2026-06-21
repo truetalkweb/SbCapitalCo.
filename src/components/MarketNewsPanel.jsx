@@ -53,7 +53,7 @@ function EmptyNewsState({ theme, terminalMonoFont, selectedStock }) {
         News feed pending
       </div>
       <div style={{ color: theme.muted, fontSize: "10px", fontFamily: terminalSansFont }}>
-        Backend headlines for <span style={{ fontFamily: terminalMonoFont }}>{selectedStock || "MARKET"}</span> will appear here.
+        Headlines for <span style={{ fontFamily: terminalMonoFont }}>{selectedStock || "MARKET"}</span> will appear here. Provider limits may show fallback context.
       </div>
     </div>
   );
@@ -73,7 +73,7 @@ export default function MarketNewsPanel({
   const statusColor = getStatusColor(statusLabel, theme);
   const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
   const visibleMessage = rawVisibleMessage
-    ? getCleanProviderMessage(rawVisibleMessage, "Provider limited. Showing available headlines.")
+    ? getCleanProviderMessage(rawVisibleMessage, "Provider limited. Showing available headlines or fallback context.")
     : null;
   const diagnosticsTitle = [
     visibleMessage,

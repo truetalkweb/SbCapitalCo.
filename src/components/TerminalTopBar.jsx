@@ -138,6 +138,7 @@ export default function TerminalTopBar({
   setAdvancedMode,
   selectedSymbol,
   onSymbolCommit,
+  onOpenHelp,
 }) {
   const now = new Date();
 
@@ -659,6 +660,19 @@ export default function TerminalTopBar({
           }
         >
           Advanced {advancedMode ? "On" : "Off"}
+        </button>
+        )}
+
+        {!compact && onOpenHelp && (
+        <button
+          onClick={onOpenHelp}
+          style={{
+            ...compactButton(false),
+            ...quietButton,
+          }}
+          title="How the terminal works"
+        >
+          Help
         </button>
         )}
 

@@ -24,6 +24,7 @@ import LoadingPanel from "./components/LoadingPanel";
 import ScannerTable from "./components/ScannerTable";
 import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
+import PublicOnboarding from "./components/PublicOnboarding";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
   BROKER_TOOLS_ENABLED,
@@ -200,6 +201,9 @@ export default function App() {
   );
   const [advancedMode, setAdvancedMode] = useState(() =>
     loadSetting("sb_advanced_mode", false)
+  );
+  const [publicOnboardingOpen, setPublicOnboardingOpen] = useState(() =>
+    !BROKER_TOOLS_ENABLED && !loadSetting("sb_public_onboarding_dismissed", false)
   );
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -826,6 +830,16 @@ export default function App() {
   }
 
   const buttonStyle = (active = false) => createButtonStyle(theme, active);
+  const openPublicOnboarding = useCallback(() => {
+    setPublicOnboardingOpen(true);
+  }, []);
+  const closePublicOnboarding = useCallback(() => {
+    setPublicOnboardingOpen(false);
+  }, []);
+  const dismissPublicOnboarding = useCallback(() => {
+    saveSetting("sb_public_onboarding_dismissed", true);
+    setPublicOnboardingOpen(false);
+  }, []);
 
   const timeframeButtonStyle = (active = false) => ({
     width: "40px",
@@ -2595,6 +2609,7 @@ export default function App() {
         setAdvancedMode={setAdvancedMode}
         selectedSymbol={selectedStock}
         onSymbolCommit={selectMainSymbol}
+        onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
       />
 
       {showTickerTape && (
@@ -3626,6 +3641,15 @@ export default function App() {
             </Suspense>
           </div>
         </div>
+      )}
+
+      {!BROKER_TOOLS_ENABLED && (
+        <PublicOnboarding
+          theme={theme}
+          isOpen={publicOnboardingOpen}
+          onClose={closePublicOnboarding}
+          onDontShowAgain={dismissPublicOnboarding}
+        />
       )}
 
       <TerminalStatusBar

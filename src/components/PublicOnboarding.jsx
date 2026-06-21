@@ -20,12 +20,6 @@ const steps = [
   },
 ];
 
-const statusNotes = [
-  ["Provider limited", "API plan or rate limit is active; cached or fallback rows may be shown."],
-  ["Fallback context", "Scanner-based context is shown until matching article data is available."],
-  ["Market data pending", "Quote data is still loading or the provider is not fully available."],
-];
-
 const dataSources = [
   ["Scanner", "Ranked movers from available market data, volume, relative volume, gaps, and intraday movement."],
   ["News", "Provider-backed headlines when available, with broader market headlines used when ticker coverage is thin."],
@@ -115,7 +109,7 @@ export default function PublicOnboarding({
               <div
                 id="public-onboarding-title"
                 style={{
-                  fontSize: "18px",
+                  fontSize: "17px",
                   fontWeight: 900,
                   lineHeight: 1.2,
                 }}
@@ -126,7 +120,7 @@ export default function PublicOnboarding({
                 style={{
                   marginTop: "4px",
                   color: theme.muted,
-                  fontSize: "12px",
+                  fontSize: "11.5px",
                   lineHeight: 1.45,
                   maxWidth: "500px",
                 }}
@@ -195,7 +189,7 @@ export default function PublicOnboarding({
 
           {activeView === "quick" && (
           <>
-          <div className="public-onboarding-steps" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+          <div className="public-onboarding-steps" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "9px" }}>
             {steps.map((step, index) => (
               <div
                 key={step.title}
@@ -203,10 +197,10 @@ export default function PublicOnboarding({
                   display: "grid",
                   gridTemplateColumns: "28px 1fr",
                   gap: "10px",
-                  padding: "11px",
+                  padding: "12px",
                   borderRadius: "9px",
                   border: `1px solid ${theme.borderSoft || theme.border}`,
-                  background: stepBg,
+                  background: isDark ? "rgba(255,255,255,0.018)" : "#f8fafc",
                   minWidth: 0,
                 }}
               >
@@ -241,37 +235,14 @@ export default function PublicOnboarding({
 
           <div
             style={{
-              border: `1px solid ${theme.borderSoft || theme.border}`,
-              borderRadius: "9px",
-              overflow: "hidden",
+              color: theme.faint || theme.muted,
+              fontSize: "10.5px",
+              lineHeight: 1.45,
+              borderTop: `1px solid ${theme.borderSoft || theme.border}`,
+              paddingTop: "10px",
             }}
           >
-            {statusNotes.map(([label, detail], index) => (
-              <div
-                key={label}
-                className="public-onboarding-status-row"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                  gap: "10px",
-                  padding: "9px 11px",
-                  borderBottom: index === statusNotes.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
-                  background: index % 2 === 0 ? "transparent" : stepBg,
-                  minWidth: 0,
-                }}
-              >
-                <div style={{ color: theme.amber, fontFamily: terminalMonoFont, fontSize: "10px", fontWeight: 850, minWidth: 0 }}>
-                  {label}
-                </div>
-                <div style={{ color: theme.muted, fontSize: "11px", lineHeight: 1.4, minWidth: 0 }}>
-                  {detail}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ color: theme.faint || theme.muted, fontSize: "10.5px", lineHeight: 1.45 }}>
-            Use this as an information and review workflow. Confirm liquidity, risk, and your own plan before acting.
+            Informational market context only. Verify data freshness, liquidity, and your own risk plan before acting.
           </div>
           </>
           )}

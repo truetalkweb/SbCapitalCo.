@@ -35,6 +35,7 @@ export default function Tradingsidebar({
   theme,
   isDark = true,
   expanded = false,
+  accountSummary = null,
 }) {
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
@@ -197,6 +198,39 @@ export default function Tradingsidebar({
           );
         })}
       </nav>
+
+      {expanded && accountSummary && (
+        <div
+          style={{
+            borderTop: `1px solid ${sidebarBorder}`,
+            padding: "14px",
+            display: "grid",
+            gap: "10px",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ color: inactiveIconColor, fontSize: "10px", fontWeight: 850, textTransform: "uppercase" }}>
+            Account Summary
+          </div>
+          {accountSummary.rows.map((row) => (
+            <div key={row.label}>
+              <div style={{ color: inactiveIconColor, fontSize: "10px", marginBottom: "3px" }}>
+                {row.label}
+              </div>
+              <div
+                style={{
+                  color: row.tone === "positive" ? "#00c896" : row.tone === "negative" ? "#ef5350" : activeButtonColor,
+                  fontSize: "13px",
+                  fontWeight: 850,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {row.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

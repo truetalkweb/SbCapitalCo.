@@ -2219,6 +2219,19 @@ export default function App() {
         .slice(0, 4),
     [news, selectedStock]
   );
+  const premiumAccountSummary = useMemo(() => {
+    const buyingPower = Number(primaryBrokerBalance?.buyingPower || primaryBrokerBalance?.cash || 0);
+    const netLiquidation = Number(primaryBrokerBalance?.totalEquity || primaryBrokerBalance?.marketValue || 0);
+    const dailyPnl = Number(realizedPnL || 0) + Number(totalUnrealizedPnL || 0);
+
+    return {
+      rows: [
+        ["Buying Power", buyingPower > 0 ? `$${buyingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Paper Mode", "neutral"],
+        ["Daily P&L", `${dailyPnl >= 0 ? "+" : "-"}$${Math.abs(dailyPnl).toFixed(2)}`, dailyPnl >= 0 ? "positive" : "negative"],
+        ["Net Liquidation", netLiquidation > 0 ? `$${netLiquidation.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Local Account", "neutral"],
+      ].map(([label, value, tone]) => ({ label, value, tone })),
+    };
+  }, [primaryBrokerBalance, realizedPnL, totalUnrealizedPnL]);
   const showAccountCloudInLeftDock = activeWorkspace === "settings";
   const mobileDockTabs = BROKER_TOOLS_ENABLED
     ? [
@@ -2826,7 +2839,7 @@ export default function App() {
             </div>
             <button
               type="button"
-              onClick={addSymbol}
+              onClick={() => addSymbolToWatchlist(selectedStock)}
               style={{
                 ...buttonStyle(false),
                 width: "28px",
@@ -2835,7 +2848,7 @@ export default function App() {
                 display: "grid",
                 placeItems: "center",
               }}
-              title="Add symbol"
+              title={`Add ${selectedStock} to watchlist`}
             >
               <Plus size={14} />
             </button>
@@ -2949,7 +2962,7 @@ export default function App() {
               }}
               style={{ ...buttonStyle(false), height: "34px" }}
             >
-              {hasSelectedInWatchlist ? "Watching" : "Add Alert"}
+              {hasSelectedInWatchlist ? "Watching" : "Watch"}
             </button>
           </div>
         </div>
@@ -3000,6 +3013,80 @@ export default function App() {
                 <div key={item.id || `${headline}-${index}`}>{row}</div>
               );
             })}
+          </div>
+        </div>
+
+        <div style={railCard}>
+          <div style={{ color: theme.text, textTransform: "uppercase", fontSize: "12px", fontWeight: 900, marginBottom: "10px" }}>
+            Quick Order
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 82px", gap: "8px" }}>
+            <label style={{ display: "grid", gap: "4px", minWidth: 0 }}>
+              <span style={{ color: theme.muted, fontSize: "9px", fontWeight: 850, textTransform: "uppercase" }}>Symbol</span>
+              <input
+                value={selectedStock}
+                readOnly
+                style={{
+                  height: "30px",
+                  background: isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd",
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: "6px",
+                  color: theme.text,
+                  padding: "0 8px",
+                  fontFamily: terminalMonoFont,
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "4px", minWidth: 0 }}>
+              <span style={{ color: theme.muted, fontSize: "9px", fontWeight: 850, textTransform: "uppercase" }}>Shares</span>
+              <input
+                value={quantity}
+                onChange={(event) => setQuantity(Number(event.target.value) || 1)}
+                inputMode="numeric"
+                style={{
+                  height: "30px",
+                  background: isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd",
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: "6px",
+                  color: theme.text,
+                  padding: "0 8px",
+                  fontFamily: terminalMonoFont,
+                  fontWeight: 850,
+                }}
+              />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "9px" }}>
+            {["BUY", "SELL"].map((side) => (
+              <button
+                key={side}
+                type="button"
+                onClick={() => {
+                  setOrderSide(side);
+                  setOrderConfirmed(false);
+                  setPremiumDockTab("orders");
+                  setOrderMessage(`${side} review prepared for ${selectedStock}. Use the full order ticket before submitting.`);
+                }}
+                style={{
+                  height: "34px",
+                  border: "none",
+                  borderRadius: "7px",
+                  background: side === "BUY"
+                    ? "linear-gradient(180deg, #16a67a, #0b7a5b)"
+                    : "linear-gradient(180deg, #e44848, #b82020)",
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: 900,
+                }}
+              >
+                Review {side}
+              </button>
+            ))}
+          </div>
+          <div style={{ color: theme.muted, fontSize: "9.5px", lineHeight: 1.35, marginTop: "8px" }}>
+            Review-only shortcut. It does not submit broker orders from this card.
           </div>
         </div>
       </div>
@@ -3129,6 +3216,7 @@ export default function App() {
           theme={theme}
           isDark={isDark}
           expanded={usePremiumChartShell}
+          accountSummary={usePremiumChartShell ? premiumAccountSummary : null}
         />
         </Panel>
 

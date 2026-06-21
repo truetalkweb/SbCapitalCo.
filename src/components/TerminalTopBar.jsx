@@ -118,6 +118,7 @@ export default function TerminalTopBar({
   brokerStateLabel,
   modeStatusLabel,
   brokerConnected,
+  brokerToolsEnabled = true,
   isDark,
   setThemeMode,
   saveWorkspaceToCloud,
@@ -194,6 +195,7 @@ export default function TerminalTopBar({
   const showAdvancedControls = advancedMode && !compact;
   const showChartControls = !isIntelligenceWorkspace;
   const showUtilityControls = advancedMode && !isIntelligenceWorkspace;
+  const showBrokerStatus = showUtilityControls && brokerToolsEnabled;
   const resolvedMarketDataLabel =
     marketDataStatusLabel ||
     (wsStatus === "LIVE" ? "QTRD LIVE" : wsStatus === "BACKEND" ? "QTRD PENDING" : `QTRD ${wsStatus || "PENDING"}`);
@@ -615,7 +617,7 @@ export default function TerminalTopBar({
         </span>
         )}
 
-        {showUtilityControls && (
+        {showBrokerStatus && (
         <span
           style={{
             ...topStatusLaneStyle,

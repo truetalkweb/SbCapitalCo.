@@ -49,6 +49,7 @@ export default function RiskDashboard({
   brokerPositions = [],
   brokerConnected = false,
   brokerSyncMeta = {},
+  brokerToolsEnabled = true,
 }) {
   const maxOrder = Number(maxOrderValue || 0);
   const riskCap = Number(riskPerTrade || 0);
@@ -115,7 +116,7 @@ export default function RiskDashboard({
     paperPositions.some((item) => item.stopLoss <= 0) ? "One or more paper positions has no stop reference." : null,
     maxOrder > 0 && paperPositions.some((item) => item.exposure > maxOrder) ? "A paper position exceeds the max order value guardrail." : null,
     riskCap > 0 && paperPositions.some((item) => item.openRisk > riskCap) ? "A paper position exceeds the risk/trade cap." : null,
-    brokerConnected && !primaryBrokerBalance ? "Broker connected but balances are not synced yet." : null,
+    brokerToolsEnabled && brokerConnected && !primaryBrokerBalance ? "Broker connected but balances are not synced yet." : null,
   ].filter(Boolean);
   const metricStyle = {
     background: `linear-gradient(180deg, ${theme.panel3 || theme.panel2}, ${theme.panel2})`,
@@ -160,7 +161,7 @@ export default function RiskDashboard({
         <div>
           <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 950 }}>Portfolio Risk</h3>
           <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
-            Paper portfolio + broker balance view
+            {brokerToolsEnabled ? "Paper portfolio + broker balance view" : "Paper portfolio risk view"}
           </div>
         </div>
         <span
@@ -183,7 +184,9 @@ export default function RiskDashboard({
         {metric("Account Equity", primaryBrokerBalance ? money(brokerEquity) : money(paperEquity), primaryBrokerBalance ? theme.green : theme.text)}
         {metric("Cash", primaryBrokerBalance ? money(brokerCash) : money(paperCash), theme.text)}
         {metric("Buying Power", primaryBrokerBalance ? money(brokerBuyingPower) : money(paperBuyingPower), theme.blue)}
-        {metric("Broker Exposure", money(brokerExposure), brokerExposure > 0 ? theme.amber : theme.text)}
+        {brokerToolsEnabled
+          ? metric("Broker Exposure", money(brokerExposure), brokerExposure > 0 ? theme.amber : theme.text)
+          : metric("Mode", "Paper Only", theme.blue)}
       </div>
 
       <div style={{ ...metricStyle, display: "grid", gap: "8px" }}>
@@ -198,6 +201,7 @@ export default function RiskDashboard({
         </div>
       </div>
 
+      {brokerToolsEnabled && (
       <div style={metricStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", flexWrap: "wrap", fontSize: "10px" }}>
           <span style={{ color: theme.muted, fontWeight: 950 }}>Daily Loss Lockout</span>
@@ -230,6 +234,7 @@ export default function RiskDashboard({
           </b>
         </div>
       </div>
+      )}
 
       <div style={metricStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "6px", flexWrap: "wrap", marginBottom: "6px" }}>
@@ -328,7 +333,7 @@ export default function RiskDashboard({
         <div style={sectionTitleStyle}>Portfolio Risk Warnings</div>
         {warnings.length === 0 ? (
           <div style={{ color: theme.green, fontSize: "10px", fontWeight: 900, marginTop: "6px" }}>
-            Paper and broker risk checks are clear.
+            {brokerToolsEnabled ? "Paper and broker risk checks are clear." : "Paper risk checks are clear."}
           </div>
         ) : (
           <div style={{ display: "grid", gap: "4px", marginTop: "6px" }}>

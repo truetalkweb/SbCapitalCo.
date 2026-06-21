@@ -1,4 +1,9 @@
 export const BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
+export const PUBLIC_PRODUCT_MODE = String(import.meta.env.VITE_PUBLIC_PRODUCT_MODE ?? "true").toLowerCase() === "true";
+export const ENABLE_BROKER_TOOLS = String(import.meta.env.VITE_ENABLE_BROKER_TOOLS ?? "false").toLowerCase() === "true";
+export const ENABLE_LIVE_TRADING = String(import.meta.env.VITE_ENABLE_LIVE_TRADING ?? "false").toLowerCase() === "true";
+export const BROKER_TOOLS_ENABLED = !PUBLIC_PRODUCT_MODE && ENABLE_BROKER_TOOLS;
+export const LIVE_TRADING_ENABLED = BROKER_TOOLS_ENABLED && ENABLE_LIVE_TRADING;
 
 export const terminalMonoFont =
   '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';

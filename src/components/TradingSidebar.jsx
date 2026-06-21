@@ -26,11 +26,15 @@ export default function Tradingsidebar({
   activeWorkspace,
   setActiveWorkspace,
   brokerConnected,
+  brokerToolsEnabled = true,
   advancedMode = false,
   theme,
   isDark = true,
 }) {
-  const visibleItems = NAV_ITEMS.filter((item) => advancedMode || !item.advanced);
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!brokerToolsEnabled && item.id === "broker") return false;
+    return advancedMode || !item.advanced;
+  });
   const sidebarBackground = isDark
     ? "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)"
     : "linear-gradient(180deg, #ffffff 0%, #f3f7fb 100%)";
@@ -91,9 +95,9 @@ export default function Tradingsidebar({
             width: "8px",
             height: "8px",
             borderRadius: "50%",
-            background: brokerConnected ? "#00c896" : "#ef5350",
+            background: brokerToolsEnabled ? (brokerConnected ? "#00c896" : "#ef5350") : "#00c896",
             border: `1px solid ${isDark ? "#050b14" : "#ffffff"}`,
-            boxShadow: `0 0 10px ${brokerConnected ? "#00c896" : "#ef5350"}`,
+            boxShadow: `0 0 10px ${brokerToolsEnabled ? (brokerConnected ? "#00c896" : "#ef5350") : "#00c896"}`,
           }}
         />
       </div>

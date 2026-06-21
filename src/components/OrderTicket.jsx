@@ -48,8 +48,10 @@ export default function OrderTicket({
   previewLiveOrderTicket,
   submitOrderTicket,
   orderMessage,
+  liveTradingEnabled = false,
   compact = false,
 }) {
+  const effectiveTradingMode = liveTradingEnabled ? tradingMode : "paper";
   const canSubmit = safetyIssues.length === 0;
   const visibleSafetyIssues = safetyIssues.slice(0, 3);
   const liveBlockingReasons = Array.isArray(liveReadiness?.blockingReasons)
@@ -85,7 +87,7 @@ export default function OrderTicket({
     liveBlockingReasons.length === 0 &&
     liveCheckRows.every(([, ok]) => ok === true);
   const liveStatusLabel =
-    tradingMode === "paper"
+    effectiveTradingMode === "paper"
       ? "PAPER MODE"
       : liveReady
       ? "LIVE READY"
@@ -93,7 +95,7 @@ export default function OrderTicket({
       ? "LIVE BLOCKED"
       : "LIVE CHECKING";
   const liveStatusColor =
-    tradingMode === "paper"
+    effectiveTradingMode === "paper"
       ? theme.green
       : !liveReady
       ? theme.amber
@@ -119,8 +121,8 @@ export default function OrderTicket({
   const guardStatus = riskGuard?.status || (canSubmit ? "ready" : "blocked");
   const guardColor = guardStatus === "ready" ? theme.green : theme.amber;
   const guardRows = [
-    ["Mode", riskGuard?.mode || (tradingMode === "paper" ? "Paper Mode" : "Live Mode")],
-    ["Broker", riskGuard?.brokerStatus || (tradingMode === "paper" ? "Paper execution" : "Broker locked")],
+    ["Mode", riskGuard?.mode || (effectiveTradingMode === "paper" ? "Paper Mode" : "Live Mode")],
+    ["Broker", riskGuard?.brokerStatus || (effectiveTradingMode === "paper" ? "Paper execution" : "Broker locked")],
     ["Session", riskGuard?.marketSession || "Checking"],
     ["Max Order", `$${Number(riskGuard?.maxOrderValue ?? maxOrderValue ?? 0).toFixed(0)}`],
     ["Risk/Trade", `$${Number(riskGuard?.riskPerTrade ?? riskPerTrade ?? 0).toFixed(0)}`],
@@ -155,8 +157,8 @@ export default function OrderTicket({
         <span
           style={{
             color: liveStatusColor,
-            background: tradingMode === "paper" || liveReady ? "rgba(0,200,150,0.10)" : "rgba(245,184,75,0.10)",
-            border: `1px solid ${tradingMode === "paper" || liveReady ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.40)"}`,
+            background: effectiveTradingMode === "paper" || liveReady ? "rgba(0,200,150,0.10)" : "rgba(245,184,75,0.10)",
+            border: `1px solid ${effectiveTradingMode === "paper" || liveReady ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.40)"}`,
             borderRadius: "999px",
             padding: "4px 8px",
             fontSize: "9px",
@@ -270,29 +272,31 @@ export default function OrderTicket({
           <button
             onClick={() => setTradingMode("paper")}
             style={{
-              ...buttonStyle(tradingMode === "paper"),
-              background: tradingMode === "paper" ? theme.blue : theme.panel3 || theme.panel,
+              ...buttonStyle(effectiveTradingMode === "paper"),
+              background: effectiveTradingMode === "paper" ? theme.blue : theme.panel3 || theme.panel,
             }}
           >
             Paper
           </button>
 
           <button
-            onClick={() => setTradingMode("live")}
+            onClick={() => liveTradingEnabled && setTradingMode("live")}
+            disabled={!liveTradingEnabled}
             title="Open live readiness and backend broker execution checks"
             style={{
-              ...buttonStyle(tradingMode !== "paper"),
-              background: tradingMode !== "paper" ? theme.amber : theme.panel3 || theme.panel,
-              border: tradingMode !== "paper" ? "none" : `1px solid rgba(245,184,75,0.42)`,
-              color: tradingMode !== "paper" ? "#061018" : theme.amber,
-              cursor: "pointer",
+              ...buttonStyle(effectiveTradingMode !== "paper"),
+              background: effectiveTradingMode !== "paper" ? theme.amber : theme.panel3 || theme.panel,
+              border: effectiveTradingMode !== "paper" ? "none" : `1px solid rgba(245,184,75,0.42)`,
+              color: effectiveTradingMode !== "paper" ? "#061018" : theme.amber,
+              opacity: liveTradingEnabled ? 1 : 0.48,
+              cursor: liveTradingEnabled ? "pointer" : "not-allowed",
             }}
           >
-            {compact ? "Live" : "Live Readiness"}
+            {liveTradingEnabled ? (compact ? "Live" : "Live Readiness") : "Paper Only"}
           </button>
         </div>
 
-        {tradingMode !== "paper" && (
+        {effectiveTradingMode !== "paper" && (
           <div
             style={{
               ...cardStyle,
@@ -641,7 +645,7 @@ export default function OrderTicket({
           <span>I reviewed the symbol, side, quantity, price, and guardrails.</span>
         </label>
 
-        {tradingMode !== "paper" && (
+        {effectiveTradingMode !== "paper" && (
           <button
             onClick={() => previewLiveOrderTicket?.(orderSide)}
             disabled={liveOrderLoading}
@@ -675,7 +679,7 @@ export default function OrderTicket({
             cursor: "pointer",
           }}
         >
-          Submit {tradingMode === "paper" ? "Paper" : "Live"} {orderSide}
+          Submit {effectiveTradingMode === "paper" ? "Paper" : "Live"} {orderSide}
         </button>
 
         <div style={{ fontSize: "10px", color: theme.muted, lineHeight: "1.4" }}>

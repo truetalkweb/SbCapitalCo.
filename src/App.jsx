@@ -26,7 +26,9 @@ import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
+  BROKER_TOOLS_ENABLED,
   BROKER_API_URL,
+  LIVE_TRADING_ENABLED,
   defaultJournalDraft,
   defaultSmallCapMovers,
   layoutPresets,
@@ -81,8 +83,20 @@ const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
 const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
 const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
 
+const brokerRightTabIds = new Set(["broker"]);
+const brokerWorkspaceIds = new Set(["broker", "portfolio"]);
 const coreRightTabs = new Set(["intel", "health", "alerts"]);
 const advancedWorkspaceIds = new Set(["broker", "replay", "journal", "portfolio", "settings"]);
+
+function isRightTabAllowed(tabId) {
+  if (!BROKER_TOOLS_ENABLED && brokerRightTabIds.has(tabId)) return false;
+  return true;
+}
+
+function isWorkspaceAllowed(workspaceId) {
+  if (!BROKER_TOOLS_ENABLED && brokerWorkspaceIds.has(workspaceId)) return false;
+  return true;
+}
 
 function getRequestedPresetId() {
   if (typeof window === "undefined") return null;
@@ -100,7 +114,7 @@ function getRequestedMobileDockTab() {
 
   try {
     const tabId = new URLSearchParams(window.location.search).get("mobileDock");
-    return ["order", "broker", "risk", "replay", "activity", "health", "alerts"].includes(tabId) ? tabId : null;
+    return ["order", "broker", "risk", "replay", "activity", "health", "alerts", "audit"].includes(tabId) && isRightTabAllowed(tabId) ? tabId : null;
   } catch {
     return null;
   }
@@ -131,7 +145,7 @@ export default function App() {
   const [takeProfit, setTakeProfit] = useState("");
   const [orderMessage, setOrderMessage] = useState("");
   const [tradingMode, setTradingMode] = useState(() =>
-    loadSetting("sb_trading_mode", "paper")
+    LIVE_TRADING_ENABLED ? loadSetting("sb_trading_mode", "paper") : "paper"
   );
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [maxOrderValue, setMaxOrderValue] = useState(() =>
@@ -291,6 +305,7 @@ export default function App() {
   const isDark = themeMode === "dark";
   const isCompactTerminal = viewportWidth <= 1180;
   const isPhoneTerminal = viewportWidth <= 700;
+  const effectiveTradingMode = LIVE_TRADING_ENABLED ? tradingMode : "paper";
 
   const theme = {
     mode: themeMode,
@@ -563,7 +578,7 @@ export default function App() {
     selectedStockData,
     stopLoss,
     takeProfit,
-    tradingMode,
+    tradingMode: effectiveTradingMode,
   });
 
   useEffect(() => {
@@ -693,7 +708,7 @@ export default function App() {
     if (data.positions) setPositions(data.positions);
     if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
     if (Array.isArray(data.alerts)) setAlerts(data.alerts);
-    if (data.tradingMode) setTradingMode(data.tradingMode);
+    if (data.tradingMode) setTradingMode(LIVE_TRADING_ENABLED ? data.tradingMode : "paper");
     if (typeof data.maxOrderValue !== "undefined") setMaxOrderValue(data.maxOrderValue);
     if (typeof data.dailyLossLimit !== "undefined") setDailyLossLimit(data.dailyLossLimit);
     if (typeof data.riskPerTrade !== "undefined") setRiskPerTrade(data.riskPerTrade);
@@ -824,6 +839,16 @@ export default function App() {
   });
 
   const handleRefreshBroker = useCallback(async () => {
+    if (!BROKER_TOOLS_ENABLED) {
+      pushActivity({
+        type: "system",
+        status: "info",
+        title: "Broker Tools Hidden",
+        detail: "Public product mode keeps personal broker tools disabled.",
+      });
+      return;
+    }
+
     pushActivity({
       type: "broker",
       status: "info",
@@ -849,7 +874,7 @@ export default function App() {
 
     try {
       await Promise.allSettled([
-        refreshBroker(),
+        BROKER_TOOLS_ENABLED ? refreshBroker() : Promise.resolve(),
         refreshScanner(),
         refreshNews(),
       ]);
@@ -859,6 +884,8 @@ export default function App() {
   }, [healthRefreshing, pushActivity, refreshBroker, refreshScanner, refreshNews]);
 
   const handleLoadBrokerAccountData = useCallback(async (accountNumber) => {
+    if (!BROKER_TOOLS_ENABLED) return;
+
     pushActivity({
       type: "broker",
       status: "info",
@@ -962,7 +989,7 @@ export default function App() {
       onRun: () => applyLayoutPreset(id),
     }));
 
-    const workspaceActions = workspaceViews.map((view) => ({
+    const workspaceActions = workspaceViews.filter((view) => isWorkspaceAllowed(view.id)).map((view) => ({
       id: `workspace-${view.id}`,
       label: `Go to ${view.label}`,
       detail: "Switch workspace",
@@ -971,7 +998,7 @@ export default function App() {
       onRun: () => setActiveWorkspace(view.id),
     }));
 
-    const rightTabActions = rightPanelTabs.map((tab) => ({
+    const rightTabActions = rightPanelTabs.filter((tab) => isRightTabAllowed(tab.id)).map((tab) => ({
       id: `right-tab-${tab.id}`,
       label: `Open ${tab.label} Panel`,
       detail: "Switch right trading console tab",
@@ -1235,9 +1262,9 @@ export default function App() {
       orderRisk: Number(overrides.orderRisk ?? orderRisk ?? 0),
       orderReward: Number(overrides.orderReward ?? orderReward ?? 0),
       riskReward: Number(overrides.riskReward ?? riskReward ?? 0),
-      tradingMode,
-      brokerConnected,
-      accountId: selectedBrokerAccount,
+      tradingMode: effectiveTradingMode,
+      brokerConnected: BROKER_TOOLS_ENABLED && brokerConnected,
+      accountId: BROKER_TOOLS_ENABLED ? selectedBrokerAccount : null,
       result,
       reason,
       requestId: overrides.requestId,
@@ -1331,7 +1358,7 @@ export default function App() {
       return;
     }
 
-    if (tradingMode !== "paper") {
+    if (effectiveTradingMode !== "paper") {
       if (safetyIssues.length > 0) {
         setOrderMessage(safetyIssues[0]);
         pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", safetyIssues[0], { entryPrice }));
@@ -1756,6 +1783,7 @@ export default function App() {
 
 
   useEffect(() => {
+    if (!BROKER_TOOLS_ENABLED) return;
     if (brokerBootstrappedRef.current) return;
 
     brokerBootstrappedRef.current = true;
@@ -1763,12 +1791,14 @@ export default function App() {
   }, [handleRefreshBroker]);
 
   useEffect(() => {
+    if (!BROKER_TOOLS_ENABLED) return;
     if (selectedBrokerAccount) {
       Promise.resolve().then(() => handleLoadBrokerAccountData(selectedBrokerAccount));
     }
   }, [handleLoadBrokerAccountData, selectedBrokerAccount]);
 
   useEffect(() => {
+    if (!BROKER_TOOLS_ENABLED || !LIVE_TRADING_ENABLED) return;
     if (brokerConnected && selectedBrokerAccount) {
       Promise.resolve().then(() => loadLiveReadiness(selectedBrokerAccount));
     }
@@ -2028,9 +2058,9 @@ export default function App() {
 
   const showRightDock =
     activeWorkspace === "charts" ||
-    activeWorkspace === "broker" ||
+    (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") ||
     activeWorkspace === "replay" ||
-    activeWorkspace === "portfolio" ||
+    (BROKER_TOOLS_ENABLED && activeWorkspace === "portfolio") ||
     activeWorkspace === "alerts";
   const showLeftDockPanel = showLeftDock && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
@@ -2046,9 +2076,9 @@ export default function App() {
     100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
 
   const isFourChartLayout = activeWorkspace === "charts" && layoutMode !== "1" && gridMode === "4";
-  const showTickerTape = activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay";
+  const showTickerTape = activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay";
   const showWorkspaceNewsPanel =
-    (activeWorkspace === "charts" || activeWorkspace === "broker" || activeWorkspace === "replay") &&
+    (activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay") &&
     !isFourChartLayout;
   const centerRows =
     activeWorkspace === "intelligence" ||
@@ -2135,8 +2165,12 @@ export default function App() {
     [newsMeta, qtrdHealth, scannerMeta, selectedStock, selectedStockData]
   );
   const visibleRightPanelTabs = useMemo(
-    () => rightPanelTabs.filter((tab) => advancedMode || coreRightTabs.has(tab.id)),
+    () => rightPanelTabs.filter((tab) => isRightTabAllowed(tab.id) && (advancedMode || coreRightTabs.has(tab.id))),
     [advancedMode]
+  );
+  const visibleWorkspaceViews = useMemo(
+    () => workspaceViews.filter((view) => isWorkspaceAllowed(view.id)),
+    []
   );
   const selectedDockStock = selectedScannerStock?.symbol === selectedStock
     ? selectedScannerStock
@@ -2160,7 +2194,7 @@ export default function App() {
   }, [advancedMode]);
 
   useEffect(() => {
-    if (!advancedMode && advancedWorkspaceIds.has(activeWorkspace)) {
+    if (!isWorkspaceAllowed(activeWorkspace) || (!advancedMode && advancedWorkspaceIds.has(activeWorkspace))) {
       setActiveWorkspace("charts");
     }
   }, [activeWorkspace, advancedMode, setActiveWorkspace]);
@@ -2491,7 +2525,7 @@ export default function App() {
     >
         <TerminalTopBar
         theme={theme}
-        workspaceViews={workspaceViews}
+        workspaceViews={visibleWorkspaceViews}
         activeWorkspace={activeWorkspace}
         setActiveWorkspace={setActiveWorkspace}
         layoutMode={layoutMode}
@@ -2507,10 +2541,11 @@ export default function App() {
         mainChartStatus={mainChartStatus}
         marketDataStatusLabel={resolvedMarketDataStatusLabel}
         chartStatusLabel={mainChartSourceLabel}
-        brokerStateLabel={brokerSourceLabel}
+        brokerStateLabel={BROKER_TOOLS_ENABLED ? brokerSourceLabel : "PUBLIC MODE"}
         modeStatusLabel={modeSourceLabel}
-        brokerStatus={brokerStatus}
-        brokerConnected={brokerConnected}
+        brokerStatus={BROKER_TOOLS_ENABLED ? brokerStatus : "Public mode"}
+        brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
+        brokerToolsEnabled={BROKER_TOOLS_ENABLED}
         isDark={isDark}
         setThemeMode={setThemeMode}
         saveWorkspaceToCloud={saveWorkspaceToCloud}
@@ -2554,6 +2589,7 @@ export default function App() {
         lastCheckedAt={healthLastCheckedAt}
         onRefresh={handleRefreshProductionHealth}
         refreshing={healthRefreshing}
+        brokerToolsEnabled={BROKER_TOOLS_ENABLED}
       />
 
       <PanelGroup
@@ -2576,7 +2612,8 @@ export default function App() {
           <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
-          brokerConnected={brokerConnected}
+          brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
+          brokerToolsEnabled={BROKER_TOOLS_ENABLED}
           advancedMode={advancedMode}
           brokerStatus={brokerStatus}
           theme={theme}
@@ -3078,8 +3115,9 @@ export default function App() {
                       riskReward={riskReward}
                       orderRisk={orderRisk}
                       orderReward={orderReward}
-                      tradingMode={tradingMode}
+                      tradingMode={effectiveTradingMode}
                       setTradingMode={setTradingMode}
+                      liveTradingEnabled={LIVE_TRADING_ENABLED}
                       orderConfirmed={orderConfirmed}
                       setOrderConfirmed={setOrderConfirmed}
                       maxOrderValue={maxOrderValue}
@@ -3101,7 +3139,7 @@ export default function App() {
                     />
                   )}
 
-                  {rightTab === "broker" && (
+                  {BROKER_TOOLS_ENABLED && rightTab === "broker" && (
                     <>
                       <BrokerHeader
                         theme={theme}
@@ -3146,10 +3184,11 @@ export default function App() {
                         dailyLossLimit={dailyLossLimit}
                         maxOrderValue={maxOrderValue}
                         riskPerTrade={riskPerTrade}
-                        primaryBrokerBalance={primaryBrokerBalance}
-                        brokerPositions={brokerPositions}
-                        brokerConnected={brokerConnected}
-                        brokerSyncMeta={brokerSyncMeta}
+                        primaryBrokerBalance={BROKER_TOOLS_ENABLED ? primaryBrokerBalance : null}
+                        brokerPositions={BROKER_TOOLS_ENABLED ? brokerPositions : []}
+                        brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
+                        brokerSyncMeta={BROKER_TOOLS_ENABLED ? brokerSyncMeta : {}}
+                        brokerToolsEnabled={BROKER_TOOLS_ENABLED}
                       />
 
                       <PaperAccountPanel
@@ -3392,8 +3431,9 @@ export default function App() {
                   riskReward={riskReward}
                   orderRisk={orderRisk}
                   orderReward={orderReward}
-                  tradingMode={tradingMode}
+                  tradingMode={effectiveTradingMode}
                   setTradingMode={setTradingMode}
+                  liveTradingEnabled={LIVE_TRADING_ENABLED}
                   orderConfirmed={orderConfirmed}
                   setOrderConfirmed={setOrderConfirmed}
                   maxOrderValue={maxOrderValue}
@@ -3428,10 +3468,11 @@ export default function App() {
                     dailyLossLimit={dailyLossLimit}
                     maxOrderValue={maxOrderValue}
                     riskPerTrade={riskPerTrade}
-                    primaryBrokerBalance={primaryBrokerBalance}
-                    brokerPositions={brokerPositions}
-                    brokerConnected={brokerConnected}
-                    brokerSyncMeta={brokerSyncMeta}
+                    primaryBrokerBalance={BROKER_TOOLS_ENABLED ? primaryBrokerBalance : null}
+                    brokerPositions={BROKER_TOOLS_ENABLED ? brokerPositions : []}
+                    brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
+                    brokerSyncMeta={BROKER_TOOLS_ENABLED ? brokerSyncMeta : {}}
+                    brokerToolsEnabled={BROKER_TOOLS_ENABLED}
                   />
 
                   <PaperAccountPanel
@@ -3445,7 +3486,7 @@ export default function App() {
                 </>
               )}
 
-              {rightTab === "broker" && (
+              {BROKER_TOOLS_ENABLED && rightTab === "broker" && (
                 <>
                   <BrokerHeader
                     theme={theme}
@@ -3570,7 +3611,7 @@ export default function App() {
                 ["Backend", backendHealthLabel],
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
-                ["Broker", brokerSourceLabel],
+                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel]] : []),
                 ["Mode", modeSourceLabel],
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]
@@ -3579,7 +3620,7 @@ export default function App() {
                 ["Backend", backendHealthLabel],
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
-                ["Broker", brokerSourceLabel],
+                ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel]] : []),
                 ["Mode", modeSourceLabel],
                 ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
               ]

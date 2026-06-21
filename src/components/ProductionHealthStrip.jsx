@@ -86,12 +86,13 @@ export default function ProductionHealthStrip({
   lastCheckedAt,
   onRefresh,
   refreshing = false,
+  brokerToolsEnabled = true,
 }) {
   const checkedLabel = formatHealthTime(lastCheckedAt);
   const dataLabel = resolveDataLabel(scannerLabel, newsLabel);
   const detailsTitle = [
     `Backend: ${formatTerminalStatusLabel(backendLabel)}`,
-    `Questrade: ${formatTerminalStatusLabel(qtrdHealth.label)}`,
+    `${brokerToolsEnabled ? "Questrade" : "Market Data"}: ${formatTerminalStatusLabel(qtrdHealth.label)}`,
     `Scanner: ${formatTerminalStatusLabel(scannerLabel)}`,
     getCleanProviderMessage(scannerMessage, ""),
     `News: ${formatTerminalStatusLabel(newsLabel)}`,
@@ -127,7 +128,7 @@ export default function ProductionHealthStrip({
       <HealthCell
         theme={theme}
         terminalMonoFont={terminalMonoFont}
-        label="QTRD"
+        label={brokerToolsEnabled ? "QTRD" : "Market"}
         value={qtrdHealth.label}
         detail={qtrdHealth.rawMessage || qtrdHealth.message}
         status={qtrdHealth.status}
@@ -156,7 +157,7 @@ export default function ProductionHealthStrip({
         type="button"
         onClick={onRefresh}
         disabled={refreshing}
-        title="Refresh backend, Questrade, scanner, and news status"
+        title={brokerToolsEnabled ? "Refresh backend, Questrade, scanner, and news status" : "Refresh backend, market data, scanner, and news status"}
         style={{
           marginLeft: "auto",
           display: "inline-flex",

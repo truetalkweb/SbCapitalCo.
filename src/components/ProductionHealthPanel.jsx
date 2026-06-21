@@ -84,6 +84,7 @@ export default function ProductionHealthPanel({
   refreshBroker,
   buttonStyle,
   qtrdHealth,
+  brokerToolsEnabled = true,
 }) {
   const tokenStatus = brokerDetails?.tokenStatus || platformHealth?.broker?.token || {};
   const tokenStore = brokerDetails?.tokenStore || platformHealth?.broker?.tokenStore || {};
@@ -162,14 +163,16 @@ export default function ProductionHealthPanel({
           <div>
             <h3 style={{ margin: 0, fontSize: "13px", fontWeight: 950 }}>Production Health</h3>
             <div style={{ color: theme.muted, fontSize: "10px", marginTop: "2px" }}>
-              Frontend, Railway, scanner, and broker diagnostics without exposing secrets.
+              {brokerToolsEnabled
+                ? "Frontend, Railway, scanner, and broker diagnostics without exposing secrets."
+                : "Frontend, Railway, scanner, news, and AI health for public product mode."}
             </div>
           </div>
           <span
             style={{
-              color: backendOnline && brokerConnected ? theme.green : theme.amber,
-              border: `1px solid ${backendOnline && brokerConnected ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.35)"}`,
-              background: backendOnline && brokerConnected ? "rgba(0,200,150,0.08)" : "rgba(245,184,75,0.08)",
+              color: backendOnline && (!brokerToolsEnabled || brokerConnected) ? theme.green : theme.amber,
+              border: `1px solid ${backendOnline && (!brokerToolsEnabled || brokerConnected) ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.35)"}`,
+              background: backendOnline && (!brokerToolsEnabled || brokerConnected) ? "rgba(0,200,150,0.08)" : "rgba(245,184,75,0.08)",
               borderRadius: "999px",
               padding: "4px 8px",
               fontSize: "9px",
@@ -177,7 +180,7 @@ export default function ProductionHealthPanel({
               whiteSpace: "nowrap",
             }}
           >
-            {backendOnline && brokerConnected ? "OPERATIONAL" : "DEGRADED"}
+            {backendOnline && (!brokerToolsEnabled || brokerConnected) ? "OPERATIONAL" : "DEGRADED"}
           </span>
         </div>
       </div>
@@ -221,6 +224,7 @@ export default function ProductionHealthPanel({
         status={aiLive ? "ok" : aiHealth.configured ? "warn" : "info"}
         detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. Persistent cache: ${aiPersistentCache.enabled ? "Firestore" : "disabled"}${aiPersistentCache.lastHitAt ? `, last hit ${formatDateTime(aiPersistentCache.lastHitAt)}` : ""}. ${aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError || "Gemini catalyst intelligence ready when data is available."}`}
       />
+      {brokerToolsEnabled && (
       <HealthRow
         theme={theme}
         label="Questrade Connection"
@@ -228,6 +232,8 @@ export default function ProductionHealthPanel({
         status={brokerConnected ? "ok" : resolvedQtrdHealth.status === "bad" ? "bad" : "warn"}
         detail={resolvedQtrdHealth.rawMessage || resolvedQtrdHealth.message || "Broker status endpoint responded without an active error."}
       />
+      )}
+      {brokerToolsEnabled && (
       <HealthRow
         theme={theme}
         label="Token Persistence"
@@ -235,6 +241,8 @@ export default function ProductionHealthPanel({
         status={tokenPersisted ? "ok" : "warn"}
         detail={`Expiry: ${formatExpiry(tokenStatus, brokerDetails)}.`}
       />
+      )}
+      {brokerToolsEnabled && (
       <HealthRow
         theme={theme}
         label="Last Broker Sync"
@@ -242,8 +250,9 @@ export default function ProductionHealthPanel({
         status={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError ? "bad" : "ok"}
         detail={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError || "No broker sync error recorded."}
       />
+      )}
 
-      {(brokerWarnings.length > 0 || scannerWarning || brokerError) && (
+      {((brokerToolsEnabled && (brokerWarnings.length > 0 || brokerError)) || scannerWarning) && (
         <div
           style={{
             ...cardStyle,
@@ -253,7 +262,7 @@ export default function ProductionHealthPanel({
           }}
         >
           <div style={{ color: theme.text, fontWeight: 950, marginBottom: "4px" }}>API Warnings</div>
-          {[...brokerWarnings.slice(0, 3), scannerWarning, brokerError]
+          {[...(brokerToolsEnabled ? brokerWarnings.slice(0, 3) : []), scannerWarning, brokerToolsEnabled ? brokerError : null]
             .filter(Boolean)
             .map((warning, index) => (
               <div
@@ -272,7 +281,7 @@ export default function ProductionHealthPanel({
         onClick={refreshBroker}
         style={{ ...(buttonStyle ? buttonStyle(false) : {}), width: "100%" }}
       >
-        Retry Broker + Health
+        {brokerToolsEnabled ? "Retry Broker + Health" : "Retry Health"}
       </button>
     </div>
   );

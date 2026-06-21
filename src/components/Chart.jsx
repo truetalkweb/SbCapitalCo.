@@ -754,7 +754,7 @@ function Chart({
         if (cleanBrokerApiUrl) {
           const backendData = await fetchJsonWithTimeout(
             `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?timeframe=${encodeURIComponent(timeframe)}`,
-            9000
+            3500
           );
           const backendCandles = normalizeBackendCandles(backendData.candles);
 

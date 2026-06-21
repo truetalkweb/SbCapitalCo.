@@ -2829,6 +2829,7 @@ export default function App() {
     const selectedMove = Number.parseFloat(String(selectedStockData?.change || selectedStockData?.changePercent || "0").replace("%", ""));
     const moveColor = selectedMove >= 0 ? theme.green : theme.red;
     const latestRows = (selectedTickerNews.length ? selectedTickerNews : news).slice(0, 4);
+    const latestArticleRows = latestRows.filter((item) => !item.fallback && String(item.url || item.source || "").trim()).slice(0, 4);
 
     return (
       <div style={{ display: "grid", gap: "8px", height: "100%", overflow: "auto" }}>
@@ -2972,7 +2973,7 @@ export default function App() {
             Latest News
           </div>
           <div style={{ display: "grid", gap: "10px" }}>
-            {latestRows.length === 0 && (
+            {latestArticleRows.length === 0 && (
               <div
                 style={{
                   color: theme.muted,
@@ -2983,10 +2984,10 @@ export default function App() {
                   padding: "12px",
                 }}
               >
-                News feed is loading or provider-limited. Chart, scanner, and watchlist context remain active.
+                Real article feed is loading or provider-limited. Scanner and chart context remain active.
               </div>
             )}
-            {latestRows.map((item, index) => {
+            {latestArticleRows.map((item, index) => {
               const headline = String(item.headline || item.summary || "Market update").trim();
               const row = (
                 <div>

@@ -84,29 +84,37 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
         let rows = [];
         let meta = { ...DEFAULT_NEWS_META };
         const providerWarnings = [];
+        const tickerNewsUrl = `${brokerApiUrl}/api/news/${encodeURIComponent(selectedStock)}?limit=${limit}`;
+        const marketNewsUrl = `${brokerApiUrl}/api/news?limit=${limit}`;
+        const fetchNewsPayload = async (url, label) => {
+          try {
+            const response = await fetchWithTimeout(url, 5000);
 
-        try {
-          const symbolResponse = await fetchWithTimeout(
-            `${brokerApiUrl}/api/news/${encodeURIComponent(selectedStock)}?limit=${limit}`,
-            8000
-          );
+            if (!response.ok) throw new Error(`${label} HTTP ${response.status}`);
 
-          if (!symbolResponse.ok) throw new Error(`Ticker news HTTP ${symbolResponse.status}`);
+            return { payload: await response.json(), error: null };
+          } catch (error) {
+            return { payload: null, error: error.message || `${label} unavailable` };
+          }
+        };
+        const tickerNewsRequest = fetchNewsPayload(tickerNewsUrl, "Ticker news");
+        const marketNewsRequest = fetchNewsPayload(marketNewsUrl, "Market news");
 
-          const symbolPayload = await symbolResponse.json();
+        const symbolResult = await tickerNewsRequest;
+
+        if (symbolResult.payload) {
+          const symbolPayload = symbolResult.payload;
           rows = Array.isArray(symbolPayload.news) ? symbolPayload.news : [];
           meta = symbolPayload;
-        } catch (error) {
-          providerWarnings.push(error.message || "Ticker news unavailable");
+        } else if (symbolResult.error) {
+          providerWarnings.push(symbolResult.error);
         }
 
         if (rows.length < 6) {
-          try {
-            const marketResponse = await fetchWithTimeout(`${brokerApiUrl}/api/news?limit=${limit}`, 8000);
+          const marketResult = await marketNewsRequest;
 
-            if (!marketResponse.ok) throw new Error(`Market news HTTP ${marketResponse.status}`);
-
-            const marketPayload = await marketResponse.json();
+          if (marketResult.payload) {
+            const marketPayload = marketResult.payload;
             const marketRows = Array.isArray(marketPayload.news) ? marketPayload.news : [];
 
             rows = mergeNewsRows(rows, marketRows);
@@ -125,8 +133,8 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
                   ],
                 }
               : meta;
-          } catch (error) {
-            providerWarnings.push(error.message || "Market news unavailable");
+          } else if (marketResult.error) {
+            providerWarnings.push(marketResult.error);
           }
         }
 

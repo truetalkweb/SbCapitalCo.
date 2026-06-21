@@ -2080,29 +2080,32 @@ export default function App() {
     activeWorkspace === "replay" ||
     (BROKER_TOOLS_ENABLED && activeWorkspace === "portfolio") ||
     activeWorkspace === "alerts";
-  const usePremiumChartShell = activeWorkspace === "charts" && !isCompactTerminal;
-  const showLeftDockPanel = showLeftDock && !usePremiumChartShell && (!isCompactTerminal || activeWorkspace !== "charts");
-  const showRightDockPanel = showRightDock && (!isCompactTerminal || activeWorkspace !== "charts");
+  const usePremiumShell = !isCompactTerminal;
+  const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
+  const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
+  const showRightDockPanel = usePremiumShell || (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
   const sidebarPanelSize = isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
-      ? usePremiumChartShell ? 11 : 3
+      ? usePremiumShell ? 11 : 3
       : isCompactTerminal
         ? 5
-        : usePremiumChartShell ? 10 : 4.2;
+        : usePremiumShell ? 10 : 4.2;
   const workspaceMinSize = isCompactTerminal && (showLeftDockPanel || showRightDockPanel) ? 46 : isCompactTerminal ? 82 : 28;
   const workspaceDefaultSize =
-    100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? 20 : 0);
+    100 - sidebarPanelSize - (showLeftDockPanel ? 18 : 0) - (showRightDockPanel ? (usePremiumShell ? 24 : 20) : 0);
 
   const isFourChartLayout = activeWorkspace === "charts" && layoutMode !== "1" && gridMode === "4";
   const showTickerTape = activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay";
   const showWorkspaceNewsPanel =
-    !usePremiumChartShell &&
+    !usePremiumShell &&
     (activeWorkspace === "charts" || (BROKER_TOOLS_ENABLED && activeWorkspace === "broker") || activeWorkspace === "replay") &&
     !isFourChartLayout;
   const centerRows =
-    usePremiumChartShell
+    usePremiumShell && activeWorkspace === "charts"
       ? "minmax(0, 1fr) 250px 116px"
+      : usePremiumShell
+        ? "minmax(0, 1fr)"
       :
     activeWorkspace === "intelligence" ||
     activeWorkspace === "scanner" ||
@@ -2252,10 +2255,10 @@ export default function App() {
   }, [advancedMode]);
 
   useEffect(() => {
-    if (!isWorkspaceAllowed(activeWorkspace) || (!advancedMode && advancedWorkspaceIds.has(activeWorkspace))) {
+    if (!isWorkspaceAllowed(activeWorkspace) || (!usePremiumShell && !advancedMode && advancedWorkspaceIds.has(activeWorkspace))) {
       setActiveWorkspace("charts");
     }
-  }, [activeWorkspace, advancedMode, setActiveWorkspace]);
+  }, [activeWorkspace, advancedMode, setActiveWorkspace, usePremiumShell]);
 
   useEffect(() => {
     if (!visibleRightPanelTabs.some((tab) => tab.id === rightTab)) {
@@ -2288,7 +2291,7 @@ export default function App() {
         replayTrades={replayTrades}
         brokerApiUrl={BROKER_API_URL}
         advancedMode={advancedMode}
-        premiumShell={usePremiumChartShell}
+        premiumShell={usePremiumShell}
       />
     );
   }
@@ -3095,6 +3098,447 @@ export default function App() {
     );
   }
 
+  function renderPremiumMainWorkspace() {
+    const pagePanel = (title, subtitle, content, extra = {}) => (
+      <div
+        style={panelStyle({
+          height: "100%",
+          overflow: "hidden",
+          display: "grid",
+          gridTemplateRows: "auto 1fr",
+          padding: "14px 16px",
+          ...extra,
+        })}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: "12px",
+            paddingBottom: "10px",
+            borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+            minWidth: 0,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: theme.text, fontSize: "14px", fontWeight: 950, textTransform: "uppercase" }}>
+              {title}
+            </div>
+            {subtitle && (
+              <div style={{ color: theme.muted, fontSize: "11px", marginTop: "3px" }}>
+                {subtitle}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ minHeight: 0, overflow: "auto", paddingTop: "10px" }}>{content}</div>
+      </div>
+    );
+
+    const metricCard = (label, value, tone = "neutral") => (
+      <div
+        key={label}
+        style={{
+          background: isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd",
+          border: `1px solid ${theme.borderSoft || theme.border}`,
+          borderRadius: "8px",
+          padding: "12px",
+          minWidth: 0,
+        }}
+      >
+        <div style={{ color: theme.muted, fontSize: "10px", fontWeight: 850, textTransform: "uppercase" }}>
+          {label}
+        </div>
+        <div
+          style={{
+            marginTop: "7px",
+            color: tone === "positive" ? theme.green : tone === "negative" ? theme.red : theme.text,
+            fontFamily: terminalMonoFont,
+            fontSize: "18px",
+            fontWeight: 900,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+    );
+
+    if (activeWorkspace === "charts") {
+      return (
+        <>
+          <WorkspaceGrid
+            theme={theme}
+            layoutMode={layoutMode}
+            gridMode={gridMode}
+            renderChartPanel={renderChartPanel}
+            selectedStock={selectedStock}
+            setMainSymbol={selectMainSymbol}
+            secondarySymbol={secondarySymbol}
+            setSecondarySymbol={setSecondarySymbol}
+            timeframe={timeframe}
+            setMainTimeframe={setMainTimeframe}
+            secondaryTimeframe={secondaryTimeframe}
+            setSecondaryTimeframe={setSecondaryTimeframe}
+            selectedStockData={selectedStockData}
+            secondaryStockData={secondaryStockData}
+            allSymbols={allSymbols}
+            mainChartStatus={mainChartStatus}
+            secondaryChartStatus={secondaryChartStatus}
+            setMainChartStatus={setMainChartStatus}
+            setSecondaryChartStatus={setSecondaryChartStatus}
+            syncCharts={syncCharts}
+            compact={isPhoneTerminal}
+          />
+          {renderPremiumScannerBoard()}
+          {renderPremiumBottomDock()}
+        </>
+      );
+    }
+
+    if (activeWorkspace === "chart-analysis") {
+      return (
+        <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 116px", gap: "6px", height: "100%", minHeight: 0 }}>
+          <WorkspaceGrid
+            theme={theme}
+            layoutMode={layoutMode}
+            gridMode={gridMode}
+            renderChartPanel={renderChartPanel}
+            selectedStock={selectedStock}
+            setMainSymbol={selectMainSymbol}
+            secondarySymbol={secondarySymbol}
+            setSecondarySymbol={setSecondarySymbol}
+            timeframe={timeframe}
+            setMainTimeframe={setMainTimeframe}
+            secondaryTimeframe={secondaryTimeframe}
+            setSecondaryTimeframe={setSecondaryTimeframe}
+            selectedStockData={selectedStockData}
+            secondaryStockData={secondaryStockData}
+            allSymbols={allSymbols}
+            mainChartStatus={mainChartStatus}
+            secondaryChartStatus={secondaryChartStatus}
+            setMainChartStatus={setMainChartStatus}
+            setSecondaryChartStatus={setSecondaryChartStatus}
+            syncCharts={syncCharts}
+            compact={isPhoneTerminal}
+          />
+          {renderPremiumBottomDock()}
+        </div>
+      );
+    }
+
+    if (activeWorkspace === "scanner") {
+      return renderPremiumScannerBoard();
+    }
+
+    if (activeWorkspace === "watchlist") {
+      return pagePanel(
+        "Watchlist",
+        `${liveStocks.length} tracked symbols / ${selectedStock} selected`,
+        <div style={{ display: "grid", gap: "8px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 90px 120px", gap: "12px", color: theme.muted, fontSize: "10px", fontWeight: 850, textTransform: "uppercase", padding: "0 6px 6px", borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+            <span>Symbol</span>
+            <span style={{ textAlign: "right" }}>Last</span>
+            <span style={{ textAlign: "right" }}>Change</span>
+            <span style={{ textAlign: "right" }}>Volume</span>
+          </div>
+          {liveStocks.map((stock) => {
+            const move = Number.parseFloat(String(stock.change || stock.changePercent || "0").replace("%", ""));
+            return (
+              <button
+                key={stock.symbol}
+                type="button"
+                onClick={() => selectMainSymbol(stock.symbol)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 110px 90px 120px",
+                  gap: "12px",
+                  alignItems: "center",
+                  minHeight: "38px",
+                  border: "none",
+                  borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
+                  background: stock.symbol === selectedStock ? "linear-gradient(90deg, rgba(45,140,255,0.18), transparent)" : "transparent",
+                  color: theme.text,
+                  cursor: "pointer",
+                  padding: "0 6px",
+                  fontFamily: terminalMonoFont,
+                  fontSize: "12px",
+                }}
+              >
+                <span style={{ textAlign: "left", fontWeight: 900 }}>{stock.symbol}</span>
+                <span style={{ textAlign: "right" }}>{Number(stock.price || 0) > 0 ? `$${Number(stock.price).toFixed(2)}` : "Quote"}</span>
+                <span style={{ textAlign: "right", color: move >= 0 ? theme.green : theme.red, fontWeight: 850 }}>{Number.isFinite(move) ? `${move >= 0 ? "+" : ""}${move.toFixed(2)}%` : "Live"}</span>
+                <span style={{ textAlign: "right", color: theme.muted }}>{stock.volume || "Live"}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (activeWorkspace === "news" || activeWorkspace === "intelligence") {
+      return pagePanel(
+        activeWorkspace === "news" ? "Market News" : "Market Intelligence",
+        `${selectedStock} / backend feed / ${news.length} rows`,
+        activeWorkspace === "intelligence" ? (
+          <Suspense fallback={<LoadingPanel theme={theme} label="Loading market intelligence" />}>
+            <MarketIntelligenceTerminal
+              theme={theme}
+              brokerApiUrl={BROKER_API_URL}
+              user={user}
+              localWatchlist={liveStocks}
+              addSymbolToWatchlist={addSymbolToWatchlist}
+              removeWatchlistSymbol={removeWatchlistSymbol}
+              selectMainSymbol={selectMainSymbol}
+              selectedStock={selectedStock}
+            />
+          </Suspense>
+        ) : (
+          <MarketNewsPanel
+            news={news}
+            newsLoading={newsLoading}
+            newsMeta={newsMeta}
+            selectedStock={selectedStock}
+            dataConfidence={selectedDataConfidence}
+            theme={theme}
+            terminalMonoFont={terminalMonoFont}
+          />
+        ),
+        { padding: activeWorkspace === "intelligence" ? "0" : "14px 16px" }
+      );
+    }
+
+    if (activeWorkspace === "orders") {
+      return pagePanel(
+        "Orders",
+        "Review-only order ticket and recent activity",
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading order ticket" height="240px" />}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 420px) minmax(0, 1fr)", gap: "10px", alignItems: "start" }}>
+            <OrderTicket
+              theme={theme}
+              buttonStyle={buttonStyle}
+              orderSide={orderSide}
+              setOrderSide={setOrderSide}
+              orderType={orderType}
+              setOrderType={setOrderType}
+              quantity={quantity}
+              setQuantity={setQuantity}
+              limitPrice={limitPrice}
+              setLimitPrice={setLimitPrice}
+              stopLoss={stopLoss}
+              setStopLoss={setStopLoss}
+              takeProfit={takeProfit}
+              setTakeProfit={setTakeProfit}
+              selectedStock={selectedStock}
+              selectedStockData={selectedStockData}
+              orderEntryPrice={orderEntryPrice}
+              estimatedValue={estimatedValue}
+              riskReward={riskReward}
+              orderRisk={orderRisk}
+              orderReward={orderReward}
+              tradingMode={effectiveTradingMode}
+              setTradingMode={setTradingMode}
+              liveTradingEnabled={LIVE_TRADING_ENABLED}
+              orderConfirmed={orderConfirmed}
+              setOrderConfirmed={setOrderConfirmed}
+              maxOrderValue={maxOrderValue}
+              setMaxOrderValue={setMaxOrderValue}
+              dailyLossLimit={dailyLossLimit}
+              setDailyLossLimit={setDailyLossLimit}
+              riskPerTrade={riskPerTrade}
+              setRiskPerTrade={setRiskPerTrade}
+              orderPreview={orderPreview}
+              riskGuard={riskGuard}
+              liveReadiness={liveReadiness}
+              liveOrderPreview={liveOrderPreview}
+              liveOrderLoading={liveOrderLoading}
+              orderConfirmationKey={orderConfirmationKey}
+              safetyIssues={safetyIssues}
+              previewLiveOrderTicket={previewLiveOrderTicket}
+              submitOrderTicket={submitOrderTicket}
+              orderMessage={orderMessage}
+            />
+            <RecentOrdersPanel theme={theme} orders={orders} />
+          </div>
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "positions") {
+      return pagePanel(
+        "Positions",
+        "Paper account, open exposure, and recent executions",
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading positions" height="240px" />}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 360px) minmax(0, 1fr)", gap: "10px" }}>
+            <PaperAccountPanel theme={theme} selectedStock={selectedStock} selectedStockData={selectedStockData} orders={orders} realizedPnL={realizedPnL} totalUnrealizedPnL={totalUnrealizedPnL} />
+            <div style={{ display: "grid", gap: "10px" }}>
+              <OpenPositionsPanel theme={theme} positions={positions} allSymbols={allSymbols} />
+              <RecentOrdersPanel theme={theme} orders={orders} />
+            </div>
+          </div>
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "risk") {
+      return pagePanel(
+        "Risk",
+        "Exposure, limits, and account controls",
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading risk dashboard" height="240px" />}>
+          <RiskDashboard
+            theme={theme}
+            positions={positions}
+            allSymbols={allSymbols}
+            orders={orders}
+            realizedPnL={realizedPnL}
+            totalUnrealizedPnL={totalUnrealizedPnL}
+            dailyLossLimit={dailyLossLimit}
+            maxOrderValue={maxOrderValue}
+            riskPerTrade={riskPerTrade}
+            primaryBrokerBalance={BROKER_TOOLS_ENABLED ? primaryBrokerBalance : null}
+            brokerPositions={BROKER_TOOLS_ENABLED ? brokerPositions : []}
+            brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
+            brokerSyncMeta={BROKER_TOOLS_ENABLED ? brokerSyncMeta : {}}
+            brokerToolsEnabled={BROKER_TOOLS_ENABLED}
+          />
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "performance") {
+      const dailyPnl = Number(realizedPnL || 0) + Number(totalUnrealizedPnL || 0);
+      return pagePanel(
+        "Performance",
+        "Trading account summary and execution quality",
+        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "10px", height: "100%" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
+            {metricCard("Daily P&L", `${dailyPnl >= 0 ? "+" : "-"}$${Math.abs(dailyPnl).toFixed(2)}`, dailyPnl >= 0 ? "positive" : "negative")}
+            {metricCard("Realized P&L", `$${Number(realizedPnL || 0).toFixed(2)}`, Number(realizedPnL || 0) >= 0 ? "positive" : "negative")}
+            {metricCard("Orders", orders.length, "neutral")}
+            {metricCard("Alerts", alerts.length, "neutral")}
+          </div>
+          {renderPremiumBottomDock()}
+        </div>
+      );
+    }
+
+    if (activeWorkspace === "replay") {
+      return pagePanel(
+        "Replay",
+        `${selectedStock} replay controls and trade review`,
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading replay" height="240px" />}>
+          <ReplayPanel
+            theme={theme}
+            buttonStyle={buttonStyle}
+            replayPlaying={replayPlaying}
+            setReplayPlaying={setReplayPlaying}
+            stepReplay={stepReplay}
+            resetReplay={resetReplay}
+            replaySpeed={replaySpeed}
+            setReplaySpeed={setReplaySpeed}
+            replayBuy={replayBuy}
+            replaySell={replaySell}
+            replayIndex={replayIndex}
+            mainReplayData={mainReplayData}
+            replayCandle={replayCandle}
+            replayStats={replayStats}
+            replayTrades={replayTrades}
+            replayEquity={replayEquity}
+            selectedStock={selectedStock}
+            openReplayJournal={openReplayJournal}
+          />
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "alerts") {
+      return pagePanel(
+        "Alerts",
+        `${alerts.length} alert rules`,
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading alerts" height="220px" />}>
+          <AlertsPanel
+            theme={theme}
+            buttonStyle={buttonStyle}
+            alertInput={alertInput}
+            setAlertInput={setAlertInput}
+            alertDirection={alertDirection}
+            setAlertDirection={setAlertDirection}
+            addPriceAlert={addPriceAlert}
+            alerts={alerts}
+            removeAlert={removeAlert}
+            alertNotifications={alertNotifications}
+            enableAlertNotifications={enableAlertNotifications}
+            selectedStockData={selectedStockData}
+          />
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "journal") {
+      return pagePanel(
+        "Journal",
+        "Trading notes, screenshots, and review exports",
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading journal" height="240px" />}>
+          <JournalPanel
+            theme={theme}
+            buttonStyle={buttonStyle}
+            draft={journalDraft}
+            setDraft={setJournalDraft}
+            entries={journalEntries}
+            addEntry={addJournalEntry}
+            deleteEntry={deleteJournalEntry}
+            selectedStock={selectedStock}
+            realizedPnL={realizedPnL}
+            totalUnrealizedPnL={totalUnrealizedPnL}
+            orders={orders}
+            exportJournalCsv={exportJournalCsv}
+            exportTradeSummaryCsv={exportTradeSummaryCsv}
+            exportDailyReport={exportDailyReport}
+            exportWeeklyReport={exportWeeklyReport}
+            exportScreenshotJournalLink={exportScreenshotJournalLink}
+          />
+        </Suspense>
+      );
+    }
+
+    if (activeWorkspace === "settings") {
+      return pagePanel(
+        "Settings",
+        "Workspace controls and data status",
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {metricCard("Preset", layoutPresets[activePreset]?.label || "Custom")}
+            {metricCard("Layout", `${layoutMode} Chart / Grid ${gridMode}`)}
+            {metricCard("Theme", isDark ? "Dark" : "Light")}
+            {metricCard("Cloud", user ? "Signed In" : "Local")}
+          </div>
+          <Suspense fallback={<LoadingPanel theme={theme} label="Loading health" height="240px" />}>
+            <ProductionHealthPanel
+              theme={theme}
+              brokerApiUrl={BROKER_API_URL}
+              platformHealth={platformHealth}
+              brokerConnected={brokerConnected}
+              brokerDetails={brokerDetails}
+              brokerError={brokerError}
+              brokerSyncMeta={brokerSyncMeta}
+              scannerMeta={scannerMeta}
+              scannerLoading={scannerLoading}
+              wsStatus={wsStatus}
+              mainChartStatus={mainChartStatus}
+              refreshBroker={handleRefreshProductionHealth}
+              qtrdHealth={visibleMarketDataHealth}
+              brokerToolsEnabled={BROKER_TOOLS_ENABLED}
+              buttonStyle={buttonStyle}
+            />
+          </Suspense>
+        </div>
+      );
+    }
+
+    return renderPremiumScannerBoard();
+  }
+
   return (
     <div
       className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"}`}
@@ -3153,10 +3597,10 @@ export default function App() {
         selectedSymbol={selectedStock}
         onSymbolCommit={selectMainSymbol}
         onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
-        premiumShell={usePremiumChartShell}
+        premiumShell={usePremiumShell}
       />
 
-      {usePremiumChartShell ? (
+      {usePremiumShell ? (
         <div style={{ padding: "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
@@ -3172,7 +3616,7 @@ export default function App() {
         />
       )}
 
-      {!usePremiumChartShell && (
+      {!usePremiumShell && (
       <ProductionHealthStrip
         theme={theme}
         terminalMonoFont={terminalMonoFont}
@@ -3206,7 +3650,7 @@ export default function App() {
           order={1}
           defaultSize={sidebarPanelSize}
           minSize={sidebarPanelSize}
-          maxSize={isPhoneTerminal ? 12 : usePremiumChartShell ? 14 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
+          maxSize={isPhoneTerminal ? 12 : usePremiumShell ? 13 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
         >
           <TradingSidebar
           activeWorkspace={activeWorkspace}
@@ -3217,8 +3661,8 @@ export default function App() {
           brokerStatus={brokerStatus}
           theme={theme}
           isDark={isDark}
-          expanded={usePremiumChartShell}
-          accountSummary={usePremiumChartShell ? premiumAccountSummary : null}
+          expanded={usePremiumShell}
+          accountSummary={usePremiumShell ? premiumAccountSummary : null}
         />
         </Panel>
 
@@ -3591,7 +4035,9 @@ export default function App() {
             overflow: "hidden",
           }}
         >
-          {activeWorkspace === "intelligence" ? (
+          {usePremiumShell ? (
+            renderPremiumMainWorkspace()
+          ) : activeWorkspace === "intelligence" ? (
             <Suspense fallback={<LoadingPanel theme={theme} label="Loading market intelligence" />}>
               <MarketIntelligenceTerminal
                 theme={theme}
@@ -3650,16 +4096,22 @@ export default function App() {
 
         <RightTradingPanel showRightDock={showRightDockPanel}>
             <PanelResizeHandle id="right-dock-resize-handle" style={verticalResizeHandleStyle} />
-            <Panel id="right-dock-panel" order={4} defaultSize={20} minSize={15} maxSize={35}>
+            <Panel
+              id="right-dock-panel"
+              order={4}
+              defaultSize={usePremiumShell ? 24 : 20}
+              minSize={isPhoneTerminal ? 0 : usePremiumShell ? 21 : 15}
+              maxSize={usePremiumShell ? 27 : 35}
+            >
               <div
                 style={panelStyle({
                   height: "100%",
-                  overflowY: usePremiumChartShell ? "hidden" : "auto",
+                  overflowY: usePremiumShell ? "hidden" : "auto",
                 })}
               >
-                {panelTitle(usePremiumChartShell ? "Market Console" : BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
+                {panelTitle(usePremiumShell ? "Market Console" : BROKER_TOOLS_ENABLED && advancedMode ? "Advanced Console" : "Market Intelligence")}
 
-                {usePremiumChartShell ? (
+                {usePremiumShell ? (
                   renderPremiumRightRail()
                 ) : (
                   <>
@@ -4218,7 +4670,7 @@ export default function App() {
         />
       )}
 
-      {!usePremiumChartShell && (
+      {!usePremiumShell && (
       <TerminalStatusBar
         theme={theme}
         terminalMonoFont={terminalMonoFont}

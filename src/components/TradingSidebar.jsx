@@ -10,17 +10,20 @@ import {
   Star,
   Briefcase,
   Newspaper,
+  Activity,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { id: "charts", label: "Dashboard", group: "Main", icon: BarChart3 },
   { id: "scanner", label: "Scanner", group: "Main", icon: Search },
+  { id: "chart-analysis", label: "Charts", group: "Main", icon: BarChart3 },
   { id: "watchlist", label: "Watchlist", group: "Main", icon: Star },
-  { id: "intelligence", label: "News", group: "Main", icon: Newspaper },
+  { id: "news", label: "News", group: "Main", icon: Newspaper },
   { id: "alerts", label: "Alerts", group: "Main", icon: Bell },
-  { id: "broker", label: "Orders", group: "Advanced", icon: DollarSign, advanced: true },
-  { id: "portfolio", label: "Positions", group: "Advanced", icon: Briefcase, advanced: true },
-  { id: "alerts", label: "Risk", group: "Advanced", icon: Brain, advanced: true },
+  { id: "orders", label: "Orders", group: "Advanced", icon: DollarSign, advanced: true },
+  { id: "positions", label: "Positions", group: "Advanced", icon: Briefcase, advanced: true },
+  { id: "risk", label: "Risk", group: "Advanced", icon: Brain, advanced: true },
+  { id: "performance", label: "Performance", group: "Advanced", icon: Activity, advanced: true },
   { id: "replay", label: "Replay", group: "Advanced", icon: Play, advanced: true },
   { id: "journal", label: "Journal", group: "Advanced", icon: BookOpen, advanced: true },
   { id: "settings", label: "Settings", group: "Advanced", icon: Settings, advanced: true },
@@ -39,6 +42,7 @@ export default function Tradingsidebar({
 }) {
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
+    if (expanded) return true;
     return advancedMode || !item.advanced;
   });
   const sidebarBackground = isDark

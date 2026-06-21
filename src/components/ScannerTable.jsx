@@ -5,8 +5,8 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
     fontFamily: terminalMonoFont,
     fontVariantNumeric: "tabular-nums",
   };
-  const visibleRows = rows.slice(0, 9);
-  const gridColumns = "minmax(58px, 1fr) 64px 62px 44px 48px";
+  const visibleRows = rows.slice(0, 12);
+  const gridColumns = "minmax(92px, 1.15fr) 82px 78px 70px 72px";
   const isDark = theme.isDark !== false;
   const rowHoverBackground = isDark ? "rgba(255,255,255,0.026)" : "rgba(45,140,255,0.055)";
   const rowBackground = isDark ? "transparent" : "rgba(255,255,255,0.58)";
@@ -80,7 +80,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
           display: "grid",
           gridTemplateColumns: gridColumns,
           gap: "6px",
-          padding: "7px 8px",
+          padding: "8px 10px",
           color: theme.muted,
           fontSize: "9px",
           fontWeight: 950,
@@ -115,8 +115,8 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
               gridTemplateColumns: gridColumns,
               gap: "6px",
               alignItems: "center",
-              minHeight: "44px",
-              padding: "7px 8px",
+              minHeight: "42px",
+              padding: "7px 10px",
               background: rowBackground,
               border: "none",
               borderBottom:
@@ -136,7 +136,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
                   display: "block",
                   marginTop: "2px",
                   color: theme.muted,
-                  fontSize: "8px",
+                  fontSize: "8.5px",
                   fontWeight: 800,
                   overflow: "hidden",
                   textOverflow: "ellipsis",

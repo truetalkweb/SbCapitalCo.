@@ -2580,7 +2580,7 @@ export default function App() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
-            <div style={{ color: theme.text, fontSize: "14px", fontWeight: 900, letterSpacing: 0 }}>
+            <div style={{ color: theme.text, fontSize: "13px", fontWeight: 900, letterSpacing: 0, textTransform: "uppercase" }}>
               Scanner
             </div>
             {["gainers", "losers", "active", "momentum", "relativeVolume"].map((tab) => (
@@ -2599,14 +2599,14 @@ export default function App() {
               </button>
             ))}
           </div>
-          <div style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: "10px", fontWeight: 800 }}>
-            Results: {scannerStocks.length}
+          <div style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: "10px", fontWeight: 800, whiteSpace: "nowrap" }}>
+            {scannerSourceLabel ? formatTerminalStatusLabel(scannerSourceLabel) : "Scanner"} / {scannerStocks.length} rows
           </div>
         </div>
 
         <div style={{ minHeight: 0, overflow: "auto", paddingTop: "8px" }}>
           <ScannerTable
-            rows={scannerStocks.slice(0, 18)}
+            rows={scannerStocks.slice(0, 24)}
             onPick={selectMainSymbol}
             theme={theme}
           />
@@ -2770,6 +2770,20 @@ export default function App() {
             Latest News
           </div>
           <div style={{ display: "grid", gap: "10px" }}>
+            {latestRows.length === 0 && (
+              <div
+                style={{
+                  color: theme.muted,
+                  fontSize: "11px",
+                  lineHeight: 1.45,
+                  border: `1px dashed ${theme.borderSoft || theme.border}`,
+                  borderRadius: "7px",
+                  padding: "12px",
+                }}
+              >
+                News feed is loading or provider-limited. Chart, scanner, and watchlist context remain active.
+              </div>
+            )}
             {latestRows.map((item, index) => {
               const headline = String(item.headline || item.summary || "Market update").trim();
               const row = (
@@ -2861,6 +2875,7 @@ export default function App() {
         selectedSymbol={selectedStock}
         onSymbolCommit={selectMainSymbol}
         onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
+        premiumShell={usePremiumChartShell}
       />
 
       {usePremiumChartShell ? (
@@ -2879,6 +2894,7 @@ export default function App() {
         />
       )}
 
+      {!usePremiumChartShell && (
       <ProductionHealthStrip
         theme={theme}
         terminalMonoFont={terminalMonoFont}
@@ -2895,6 +2911,7 @@ export default function App() {
         refreshing={healthRefreshing}
         brokerToolsEnabled={BROKER_TOOLS_ENABLED}
       />
+      )}
 
       <PanelGroup
         direction="horizontal"

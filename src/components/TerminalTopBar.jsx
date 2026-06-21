@@ -139,6 +139,7 @@ export default function TerminalTopBar({
   selectedSymbol,
   onSymbolCommit,
   onOpenHelp,
+  premiumShell = false,
 }) {
   const now = new Date();
 
@@ -194,7 +195,7 @@ export default function TerminalTopBar({
   const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const isIntelligenceWorkspace = activeWorkspace === "intelligence";
   const showAdvancedControls = advancedMode && !compact;
-  const showChartControls = !isIntelligenceWorkspace;
+  const showChartControls = !isIntelligenceWorkspace && !premiumShell;
   const showUtilityControls = advancedMode && !isIntelligenceWorkspace;
   const showBrokerStatus = showUtilityControls && brokerToolsEnabled;
   const showModeStatus = showUtilityControls && brokerToolsEnabled;
@@ -278,12 +279,12 @@ export default function TerminalTopBar({
   return (
     <div
       style={{
-        minHeight: compact ? "66px" : "78px",
+        minHeight: compact ? "66px" : premiumShell ? "64px" : "78px",
         background: chromeBackground,
         borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         display: "flex",
         alignItems: "center",
-        padding: compact ? "14px 8px 16px" : "4px 12px 3px",
+        padding: compact ? "14px 8px 16px" : premiumShell ? "8px 14px" : "4px 12px 3px",
         gap: compact ? "8px" : "10px",
         flexWrap: "wrap",
         alignContent: compact ? "flex-start" : "center",
@@ -299,7 +300,7 @@ export default function TerminalTopBar({
           alignItems: "center",
           whiteSpace: "nowrap",
           flexShrink: 0,
-          minWidth: compact ? "100%" : "154px",
+          minWidth: compact ? "100%" : premiumShell ? "160px" : "154px",
         }}
       >
         <div style={{ minWidth: 0 }}>
@@ -312,8 +313,8 @@ export default function TerminalTopBar({
       <div
         style={{
           position: "relative",
-          width: compact ? "100%" : "238px",
-          minWidth: compact ? "190px" : "214px",
+          width: compact ? "100%" : premiumShell ? "330px" : "238px",
+          minWidth: compact ? "190px" : premiumShell ? "280px" : "214px",
           flexShrink: 0,
         }}
       >
@@ -347,11 +348,11 @@ export default function TerminalTopBar({
           placeholder="Search ticker"
           style={{
             width: "100%",
-            height: "46px",
+            height: premiumShell ? "40px" : "46px",
             background: searchBackground,
             border: `1px solid ${theme.borderSoft || theme.border}`,
             color: theme.text,
-            borderRadius: "12px",
+            borderRadius: premiumShell ? "9px" : "12px",
             padding: "0 14px 0 37px",
             fontFamily: monoFont,
             fontSize: "13px",
@@ -365,12 +366,12 @@ export default function TerminalTopBar({
       {!compact && (
       <div
         style={{
-          height: "46px",
+          height: premiumShell ? "40px" : "46px",
           display: "flex",
           alignItems: "center",
           gap: "9px",
           padding: "0 10px",
-          borderRadius: "12px",
+          borderRadius: premiumShell ? "9px" : "12px",
           background: controlClusterBackground,
           border: `1px solid ${theme.borderSoft || theme.border}`,
           whiteSpace: "nowrap",
@@ -402,6 +403,7 @@ export default function TerminalTopBar({
       </div>
       )}
 
+      {!premiumShell && (
       <div
         style={{
           display: "flex",
@@ -426,8 +428,9 @@ export default function TerminalTopBar({
           </button>
         ))}
       </div>
+      )}
 
-      {advancedMode && !compact && (
+      {advancedMode && !compact && !premiumShell && (
       <div
         style={{
           width: "1px",
@@ -438,7 +441,7 @@ export default function TerminalTopBar({
       />
       )}
 
-      {showAdvancedControls && (
+      {showAdvancedControls && !premiumShell && (
       <label
         style={{
           display: "flex",
@@ -477,7 +480,7 @@ export default function TerminalTopBar({
       </label>
       )}
 
-      {showAdvancedControls && (
+      {showAdvancedControls && !premiumShell && (
       <label
         style={{
           display: "flex",

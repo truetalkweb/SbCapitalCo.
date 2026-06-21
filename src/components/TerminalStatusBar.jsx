@@ -20,7 +20,7 @@ function getCellWidth(label) {
   return widths[label] || "110px";
 }
 
-export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }) {
+export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [], disclosure = "" }) {
   return (
     <div
       className="terminal-status-bar"
@@ -77,6 +77,28 @@ export default function TerminalStatusBar({ theme, terminalMonoFont, rows = [] }
         </span>
         );
       })}
+      {disclosure && (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "0 8px",
+            minHeight: "16px",
+            minWidth: "320px",
+            flex: "1 1 320px",
+            color: theme.faint || theme.muted,
+            fontSize: "9px",
+            fontWeight: 750,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            borderRight: "none",
+          }}
+          title={disclosure}
+        >
+          {disclosure}
+        </span>
+      )}
     </div>
   );
 }

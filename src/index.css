@@ -273,6 +273,11 @@ h3 {
   max-width: calc(100vw - 36px) !important;
 }
 
+.public-focus-control:focus-visible {
+  outline: 2px solid #2d8cff;
+  outline-offset: 2px;
+}
+
 @media (max-width: 560px) {
   .public-onboarding-panel {
     width: calc(100vw - 36px) !important;
@@ -343,6 +348,12 @@ h3 {
 
   .terminal-status-bar > span:nth-child(n + 6) {
     display: none;
+  }
+
+  .terminal-status-bar > span:last-child {
+    display: inline-flex;
+    min-width: 260px;
+    flex-basis: 260px;
   }
 
   input,

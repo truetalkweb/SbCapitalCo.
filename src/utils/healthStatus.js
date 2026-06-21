@@ -22,7 +22,7 @@ export function getCleanProviderMessage(message, fallback = "Provider limited by
   if (/429|rate|quota|cooling down/i.test(value)) return "Provider limited by API plan or rate limit. Showing cached or fallback context.";
   if (/restricted|subscription|plan/i.test(value)) return "Provider limited by API plan or rate limit. Showing cached or fallback context.";
   if (/news/i.test(value) && /limited|fallback|unavailable/i.test(value)) return "News provider limited. Showing available headlines or fallback context.";
-  if (/bad request/i.test(value)) return "Provider rejected the latest request. Showing cached or fallback context.";
+  if (/bad request/i.test(value)) return "Provider request unavailable. Showing cached or fallback context.";
 
   return value.length > 90 ? fallback : value;
 }

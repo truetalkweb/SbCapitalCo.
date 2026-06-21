@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { terminalMonoFont, terminalSansFont } from "../config/terminalConfig";
 
 const steps = [
@@ -25,12 +26,34 @@ const statusNotes = [
   ["Market data pending", "Quote data is still loading or the provider is not fully available."],
 ];
 
+const dataSources = [
+  ["Scanner", "Ranked movers from available market data, volume, relative volume, gaps, and intraday movement."],
+  ["News", "Provider-backed headlines when available, with broader market headlines used when ticker coverage is thin."],
+  ["AI / Intelligence", "A summary and context layer for faster review. It is not financial advice or a trade recommendation."],
+  ["Provider limited", "API plan limits, rate limits, or cached fallback data may reduce freshness or coverage."],
+];
+
 export default function PublicOnboarding({
   theme,
   isOpen,
   onClose,
   onDontShowAgain,
 }) {
+  const [activeView, setActiveView] = useState("quick");
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const isDark = theme.isDark !== false;
@@ -58,7 +81,7 @@ export default function PublicOnboarding({
       <div
         className="public-onboarding-panel"
         style={{
-          width: "clamp(320px, 43vw, 620px)",
+          width: "clamp(320px, 36vw, 620px)",
           maxWidth: "620px",
           maxHeight: "min(720px, calc(100vh - 36px))",
           overflow: "auto",
@@ -112,6 +135,7 @@ export default function PublicOnboarding({
               </div>
             </div>
             <button
+              className="public-focus-control"
               type="button"
               onClick={onClose}
               aria-label="Close onboarding"
@@ -133,6 +157,44 @@ export default function PublicOnboarding({
         </div>
 
         <div style={{ padding: "16px 18px 18px", display: "grid", gap: "14px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "6px",
+              padding: "4px",
+              border: `1px solid ${theme.borderSoft || theme.border}`,
+              borderRadius: "8px",
+              background: stepBg,
+            }}
+          >
+            {[
+              ["quick", "Quick Start"],
+              ["sources", "About / Data Sources"],
+            ].map(([id, label]) => (
+              <button
+                className="public-focus-control"
+                key={id}
+                type="button"
+                onClick={() => setActiveView(id)}
+                style={{
+                  height: "28px",
+                  flex: "1 1 0",
+                  border: `1px solid ${activeView === id ? theme.blue : "transparent"}`,
+                  borderRadius: "6px",
+                  background: activeView === id ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
+                  color: activeView === id ? "#ffffff" : theme.text,
+                  cursor: "pointer",
+                  fontSize: "11px",
+                  fontWeight: 900,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {activeView === "quick" && (
+          <>
           <div className="public-onboarding-steps" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
             {steps.map((step, index) => (
               <div
@@ -211,9 +273,50 @@ export default function PublicOnboarding({
           <div style={{ color: theme.faint || theme.muted, fontSize: "10.5px", lineHeight: 1.45 }}>
             Use this as an information and review workflow. Confirm liquidity, risk, and your own plan before acting.
           </div>
+          </>
+          )}
+
+          {activeView === "sources" && (
+          <>
+          <div
+            style={{
+              border: `1px solid ${theme.borderSoft || theme.border}`,
+              borderRadius: "9px",
+              overflow: "hidden",
+            }}
+          >
+            {dataSources.map(([label, detail], index) => (
+              <div
+                key={label}
+                className="public-onboarding-status-row"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                  gap: "10px",
+                  padding: "10px 11px",
+                  borderBottom: index === dataSources.length - 1 ? "none" : `1px solid ${theme.borderSoft || theme.border}`,
+                  background: index % 2 === 0 ? "transparent" : stepBg,
+                }}
+              >
+                <div style={{ color: theme.cyan || theme.blue, fontFamily: terminalMonoFont, fontSize: "10px", fontWeight: 850 }}>
+                  {label}
+                </div>
+                <div style={{ color: theme.muted, fontSize: "11px", lineHeight: 1.45 }}>
+                  {detail}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ color: theme.faint || theme.muted, fontSize: "10.5px", lineHeight: 1.45 }}>
+            Data can be delayed, cached, incomplete, or limited by provider plans. Scanner and news context are informational only.
+          </div>
+          </>
+          )}
 
           <div className="public-onboarding-actions" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
             <button
+              className="public-focus-control"
               type="button"
               onClick={onClose}
               style={{
@@ -230,6 +333,7 @@ export default function PublicOnboarding({
               Start using terminal
             </button>
             <button
+              className="public-focus-control"
               type="button"
               onClick={onDontShowAgain}
               style={{

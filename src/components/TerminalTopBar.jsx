@@ -666,6 +666,7 @@ export default function TerminalTopBar({
         {!compact && onOpenHelp && (
         <button
           onClick={onOpenHelp}
+          aria-label="Open help and data sources"
           style={{
             ...compactButton(false),
             ...quietButton,

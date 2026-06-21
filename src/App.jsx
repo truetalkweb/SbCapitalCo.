@@ -3655,6 +3655,11 @@ export default function App() {
       <TerminalStatusBar
         theme={theme}
         terminalMonoFont={terminalMonoFont}
+        disclosure={
+          !BROKER_TOOLS_ENABLED
+            ? "Market data may be delayed or provider-limited. Scanner/news context is informational only; verify before acting."
+            : ""
+        }
         rows={
           advancedMode
             ? [

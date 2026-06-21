@@ -478,6 +478,75 @@ function makeOrders(selectedSymbol) {
   ].map(([time, symbol, side, type, qty, price, status, filled, remaining, tif, id]) => ({ time, symbol, side, type, qty, price, status, filled, remaining, tif, id }));
 }
 
+function makeJournalTrades(entries, stocks) {
+  const fallback = [
+    ["Jun 7, 2024 10:15:30", "AAPL", "VWAP Bounce", "Long", 100, "189.12", "190.28", 116, "+0.61%", "+0.78R", "1h 05m", "Win", "A+ Setup", "Strong bounce at VWAP + volume"],
+    ["Jun 7, 2024 09:34:12", "NVDA", "Breakout", "Long", 50, "1075.00", "1087.50", 625, "+1.16%", "+1.35R", "2h 10m", "Win", "News", "Earnings momentum continued"],
+    ["Jun 6, 2024 14:12:05", "TSLA", "Pullback", "Long", 25, "178.00", "174.20", -95, "-2.13%", "-1.02R", "1h 40m", "Loss", "Choppy", "Market faded near EOD"],
+    ["Jun 6, 2024 11:01:22", "AMD", "Breakout", "Long", 30, "168.50", "169.90", 42, "+0.83%", "+0.56R", "45m", "Win", "High RVOL", "Broader market strong"],
+    ["Jun 5, 2024 10:03:44", "SOFI", "VWAP Reclaim", "Long", 100, "7.95", "8.23", 28, "+3.52%", "+1.11R", "1h 20m", "Win", "A+ Setup", "Reclaimed VWAP with volume"],
+    ["Jun 5, 2024 09:45:18", "COIN", "Breakdown", "Short", 40, "243.00", "247.80", -192, "-1.98%", "-1.26R", "1h 15m", "Loss", "Weak Mkt", "Breakdown failed quickly"],
+    ["Jun 4, 2024 13:22:10", "AMZN", "Range Fade", "Short", 10, "182.00", "180.50", 15, "+0.82%", "+0.41R", "30m", "Win", "Range", "Fade into resistance"],
+    ["Jun 4, 2024 10:15:05", "META", "Breakout", "Long", 15, "503.00", "510.25", 108.75, "+1.44%", "+1.18R", "2h 05m", "Win", "News", "Strong news catalyst"],
+  ];
+
+  const real = (entries || []).map((entry, index) => {
+    const stock = stocks[index % Math.max(stocks.length, 1)] || {};
+    const pnl = num(entry.pnl ?? entry.netPnl ?? entry.resultAmount, index % 3 === 0 ? 116 : -95);
+    return {
+      date: entry.createdAt ? new Date(entry.createdAt).toLocaleString() : entry.date || `Jun ${7 - index}, 2024`,
+      symbol: entry.symbol || stock.symbol || "AAPL",
+      setup: entry.setup || entry.tags || "Review",
+      side: entry.bias || entry.side || "Long",
+      qty: entry.quantity || entry.qty || 100,
+      entry: entry.entryPrice || entry.entry || num(stock.price, 189.12).toFixed(2),
+      exit: entry.exitPrice || entry.exit || (num(stock.price, 190.28) + 1.12).toFixed(2),
+      pnl,
+      pnlPct: entry.pnlPct || `${pnl >= 0 ? "+" : ""}${(pnl / 190).toFixed(2)}%`,
+      r: entry.rMultiple || entry.r || `${pnl >= 0 ? "+" : ""}${(pnl / 145).toFixed(2)}R`,
+      hold: entry.holdTime || "1h 05m",
+      outcome: entry.result || entry.outcome || (pnl >= 0 ? "Win" : "Loss"),
+      notes: entry.notes || entry.review || "Reviewed trade setup",
+    };
+  });
+
+  return (real.length ? real : fallback.map(([date, symbol, setup, side, qty, entry, exit, pnl, pnlPct, r, hold, outcome, tag, notes]) => ({
+    date,
+    symbol,
+    setup,
+    side,
+    qty,
+    entry,
+    exit,
+    pnl,
+    pnlPct,
+    r,
+    hold,
+    outcome,
+    tag,
+    notes,
+  }))).slice(0, 12);
+}
+
+function makeReplayTrades(replayTrades, selectedSymbol) {
+  const fallback = [
+    ["09:45:12", selectedSymbol, "Buy", 100, "188.62", "--"],
+    ["10:15:30", selectedSymbol, "Sell", 100, "189.35", "+$73.00"],
+    ["10:22:05", "TSLA", "Buy", 50, "200.45", "--"],
+    ["11:02:15", "TSLA", "Sell", 50, "201.92", "+$73.50"],
+    ["12:45:10", "NVDA", "Short", 25, "916.30", "--"],
+  ];
+  const real = (replayTrades || []).map((trade, index) => ({
+    time: trade.time || trade.timestamp?.slice(11, 19) || `10:${String(15 + index).padStart(2, "0")}:30`,
+    symbol: trade.symbol || selectedSymbol,
+    side: trade.type || trade.side || "Buy",
+    qty: trade.quantity || trade.qty || 100,
+    price: trade.price || trade.fillPrice || "188.62",
+    pnl: trade.pnl ? money(trade.pnl) : "--",
+  }));
+  return (real.length ? real : fallback.map(([time, symbol, side, qty, price, pnl]) => ({ time, symbol, side, qty, price, pnl }))).slice(0, 10);
+}
+
 export default function PremiumWorkspace({
   activeWorkspace,
   theme,
@@ -509,6 +578,11 @@ export default function PremiumWorkspace({
   loadWorkspaceFromCloud,
   resetWorkspace,
   brokerConnected,
+  journalEntries,
+  replayPlaying,
+  replaySpeed,
+  replayStats,
+  replayTrades,
 }) {
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData);
   const selected = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
@@ -566,6 +640,11 @@ export default function PremiumWorkspace({
         created: "Jun 1, 2025 09:15 AM",
         next: index === 6 ? "Triggered" : "-",
       }));
+  const journalRows = makeJournalTrades(journalEntries, stocks);
+  const replayRows = makeReplayTrades(replayTrades, selectedStock);
+  const journalNet = journalRows.reduce((total, row) => total + num(row.pnl), 0) || 2814.72;
+  const replayNet = num(replayStats?.netPnL, 2653.21);
+  const replayWinRate = replayStats?.winRate || "66.67";
 
   const page = {
     minHeight: 0,
@@ -877,6 +956,205 @@ export default function PremiumWorkspace({
             <PremiumCard theme={theme} title="Export Reports"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme}>PDF <Download size={14} /></ActionButton><ActionButton theme={theme}>CSV <Download size={14} /></ActionButton></div></PremiumCard>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (activeWorkspace === "journal") {
+    const wins = journalRows.filter((row) => row.outcome === "Win").length || 46;
+    const losses = journalRows.filter((row) => row.outcome === "Loss").length || 26;
+    const tradeCount = journalRows.length || 74;
+    const winRate = `${((wins / Math.max(tradeCount, 1)) * 100).toFixed(2)}%`;
+    return (
+      <div style={page}>
+        <PremiumCard theme={theme} style={{ minHeight: "100%" }}>
+          <div style={{ padding: 18, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+            <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
+            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Setups", "Daily Log", "Notes", "Lessons", "Statistics", "Exports"]} active="Overview" />
+            <div style={{ marginTop: 14 }}>
+              <FilterBar theme={theme} items={["May 10 - Jun 8, 2024", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />
+            </div>
+          </div>
+          <div style={{ padding: 12, display: "grid", gap: 10 }}>
+            <PremiumCard theme={theme}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))" }}>
+                {[
+                  ["Net P&L", money(journalNet), "good", "+2.81%"],
+                  ["Total Trades", String(tradeCount), "neutral"],
+                  ["Win Rate", winRate, "good"],
+                  ["Profit Factor", "1.96", "good"],
+                  ["Avg Win", "+$154.92", "good"],
+                  ["Avg Loss", "-$89.92", "bad"],
+                  ["Expectancy", "+$38.04", "good"],
+                  ["Best Trade", "+$1,152.36", "good"],
+                  ["Worst Trade", "-$842.17", "bad"],
+                  ["Avg Hold Time", "2h 13m", "neutral"],
+                ].map(([label, value, tone, detail]) => (
+                  <MetricTile key={label} theme={theme} label={label} value={value} tone={tone} detail={detail} />
+                ))}
+              </div>
+            </PremiumCard>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) 300px 0.85fr", gap: 10 }}>
+              <PremiumCard theme={theme} title="Equity Curve">
+                <div style={{ padding: 16, height: 310 }}>
+                  <div style={{ width: 170, marginBottom: 12 }}>
+                    <ActionButton theme={theme}>Net Liquidation</ActionButton>
+                  </div>
+                  <div style={{ height: 220, borderLeft: `1px solid ${theme.borderSoft || theme.border}`, borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingTop: 12 }}>
+                    <MiniSparkline theme={theme} seed={9} height={190} />
+                  </div>
+                  <div style={{ textAlign: "center", color: theme.muted, fontSize: 12, marginTop: 8 }}>Net Liquidation</div>
+                </div>
+              </PremiumCard>
+              <PremiumCard theme={theme} title="Trades By Outcome">
+                <div style={{ padding: 18, display: "grid", gridTemplateColumns: "150px 1fr", gap: 18, alignItems: "center", minHeight: 310 }}>
+                  <div style={{ width: 138, height: 138, borderRadius: "50%", background: `conic-gradient(${theme.green} 0 62%, ${theme.red} 62% 97%, ${theme.muted} 97% 100%)`, display: "grid", placeItems: "center" }}>
+                    <div style={{ width: 76, height: 76, borderRadius: "50%", background: theme.bg, display: "grid", placeItems: "center", textAlign: "center", color: theme.text, fontFamily: terminalMonoFont }}>
+                      <b>{tradeCount}</b>
+                      <span style={{ color: theme.muted, fontSize: 10 }}>Total Trades</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 10, fontSize: 12 }}>
+                    <span style={{ color: theme.green }}>Won {wins}</span>
+                    <span style={{ color: theme.red }}>Lost {losses}</span>
+                    <span style={{ color: theme.muted }}>Breakeven 2</span>
+                  </div>
+                </div>
+              </PremiumCard>
+              <PremiumCard theme={theme} title="P&L Distribution">
+                <div style={{ padding: 18, height: 310, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", alignItems: "end", gap: 14 }}>
+                  {[-26, -54, -72, 138, 86, 52, 24].map((height, index) => (
+                    <div key={index} style={{ display: "grid", gap: 8, alignItems: "end" }}>
+                      <div style={{ height: Math.abs(height), background: height > 0 ? theme.green : theme.red, opacity: 0.86, borderRadius: "4px 4px 0 0" }} />
+                      <span style={{ color: theme.muted, fontSize: 10, textAlign: "center" }}>{["< -400", "-400", "-200", "0-200", "200", "400", ">600"][index]}</span>
+                    </div>
+                  ))}
+                </div>
+              </PremiumCard>
+            </div>
+            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active>+ Add Trade</ActionButton>}>
+              <PremiumTable
+                theme={theme}
+                columns={[
+                  { key: "date", label: "Date/Time", width: "150px" },
+                  { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true },
+                  { key: "setup", label: "Setup", width: "120px" },
+                  { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green },
+                  { key: "qty", label: "Qty", width: "70px", mono: true },
+                  { key: "entry", label: "Entry", width: "85px", mono: true },
+                  { key: "exit", label: "Exit", width: "85px", mono: true },
+                  { key: "pnl", label: "P&L (USD)", width: "100px", mono: true, color: (row) => num(row.pnl) >= 0 ? theme.green : theme.red, render: (row) => money(row.pnl) },
+                  { key: "pnlPct", label: "P&L (%)", width: "90px", mono: true, color: (row) => String(row.pnlPct).startsWith("-") ? theme.red : theme.green },
+                  { key: "r", label: "R Multiple", width: "90px", mono: true, color: (row) => String(row.r).startsWith("-") ? theme.red : theme.green },
+                  { key: "hold", label: "Hold Time", width: "90px" },
+                  { key: "outcome", label: "Outcome", width: "80px", color: (row) => row.outcome === "Loss" ? theme.red : theme.green },
+                  { key: "tag", label: "Notes", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.outcome === "Loss" ? "warn" : "neutral"}>{row.tag || row.setup}</StatusPill> },
+                  { key: "notes", label: "Review", width: "1fr" },
+                ]}
+                rows={journalRows}
+              />
+              <div style={{ padding: "12px 16px", color: theme.muted, fontSize: 12, display: "flex", justifyContent: "space-between" }}>
+                <span>Showing 1 to {Math.min(journalRows.length, 8)} of {Math.max(74, journalRows.length)} trades</span>
+                <span style={{ fontFamily: terminalMonoFont }}>1 2 3 4 5 ... 10</span>
+              </div>
+            </PremiumCard>
+          </div>
+        </PremiumCard>
+      </div>
+    );
+  }
+
+  if (activeWorkspace === "replay") {
+    const replayPositions = [
+      { symbol: "AAPL", side: "Long", qty: 100, avg: "189.12", last: "189.18", pnl: "+$6.00", pct: "+0.03%" },
+      { symbol: "TSLA", side: "Long", qty: 50, avg: "200.45", last: "201.23", pnl: "+$39.00", pct: "+0.39%" },
+      { symbol: "NVDA", side: "Short", qty: 25, avg: "916.30", last: "914.80", pnl: "+$37.50", pct: "+0.16%" },
+    ];
+    return (
+      <div style={page}>
+        <PremiumCard theme={theme} style={{ minHeight: "100%" }}>
+          <div style={{ padding: 18, display: "flex", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+            <SectionTitle theme={theme} title="Replay" subtitle="Practice trading with historical market data. All orders are simulated." />
+            <ActionButton theme={theme}>Replay Settings</ActionButton>
+          </div>
+          <div style={{ padding: 12, display: "grid", gap: 10 }}>
+            <PremiumCard theme={theme}>
+              <div style={{ padding: 12, display: "grid", gridTemplateColumns: "160px 170px 160px 160px 120px 1fr", gap: 8, alignItems: "center" }}>
+                {["Stocks (US)", "May 15, 2024", "09:30 AM", "04:00 PM", `${replaySpeed || 1}x`].map((value, index) => (
+                  <label key={`${value}-${index}`} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase" }}>
+                    {["Market", "Date", "Start Time", "End Time", "Speed"][index]}
+                    <input readOnly value={value} style={{ height: 32, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px", fontFamily: terminalMonoFont }} />
+                  </label>
+                ))}
+                <div style={{ display: "flex", gap: 8, justifyContent: "end" }}>
+                  <ActionButton theme={theme}>Skip to Open</ActionButton>
+                  <ActionButton theme={theme}>Skip to Now</ActionButton>
+                  <ActionButton theme={theme} good>{replayPlaying ? "Pause Replay" : "Start Replay"}</ActionButton>
+                </div>
+              </div>
+            </PremiumCard>
+            <div style={{ display: "grid", gridTemplateColumns: "250px minmax(0, 1fr) 310px", gap: 10 }}>
+              <PremiumCard theme={theme} title="Replay Controls">
+                <div style={{ padding: 14, display: "grid", gap: 18 }}>
+                  <div>
+                    <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Speed</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                      {["0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x", "50x", "100x"].map((speed) => <ActionButton key={speed} theme={theme} active={speed === `${replaySpeed || 1}x`}>{speed}</ActionButton>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Jump to Time</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => <ActionButton key={label} theme={theme}>{label}</ActionButton>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+                      <span>Bookmarks</span><ActionButton theme={theme}>+ Add</ActionButton>
+                    </div>
+                    <div style={{ display: "grid", gap: 11 }}>
+                      {["Opening Range Breakout 09:45", "AAPL Spike 10:15", "TSLA Breakout 11:02", "GOOG Pullback 12:45", "Power Hour 15:00"].map((bookmark) => (
+                        <div key={bookmark} style={{ display: "flex", justifyContent: "space-between", color: theme.text, fontSize: 12 }}>
+                          <span>{bookmark}</span><MoreVertical size={14} color={theme.muted} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </PremiumCard>
+              <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 76px", gap: 10, minHeight: 0 }}>
+                <PremiumCard theme={theme} title={`${selectedStock} Replay Chart`} action={<span style={{ color: theme.green, fontFamily: terminalMonoFont }}>O 189.15 H 189.22 L 189.10 C 189.18 +0.02%</span>}>
+                  <div style={{ height: 260 }}>{renderChartGrid?.({ layoutMode: "1", compact: true })}</div>
+                  <div style={{ height: 60, borderTop: `1px solid ${theme.borderSoft || theme.border}`, padding: 8 }}>
+                    <div style={{ color: theme.muted, fontSize: 12 }}>RSI 14 <span style={{ color: "#a56dff" }}>55.37</span></div>
+                    <MiniSparkline theme={theme} seed={12} negative={false} height={32} />
+                  </div>
+                </PremiumCard>
+                <PremiumCard theme={theme}>
+                  <div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 16 }}>
+                    <div>
+                      <div style={{ height: 4, background: theme.panel2, borderRadius: 99 }}>
+                        <div style={{ width: "38%", height: "100%", background: theme.blue, borderRadius: 99 }} />
+                      </div>
+                      <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont }}>10:15:30 / 16:00:00</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>{["|<", "<", replayPlaying ? "||" : ">", ">>", ">|", "Reset"].map((label) => <ActionButton key={label} theme={theme}>{label}</ActionButton>)}</div>
+                  </div>
+                </PremiumCard>
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                <PremiumCard theme={theme} title="Simulation Summary"><div style={{ padding: 14, display: "grid", gap: 11 }}>{[["Starting Cash", "$100,000.00"], ["Net Liquidation", "$102,653.21"], ["Total P&L", money(replayNet)], ["Realized P&L", "$1,842.15"], ["Unrealized P&L", "$811.06"], ["Total Trades", replayRows.length], ["Win Rate", `${replayWinRate}%`], ["Profit Factor", "2.35"], ["Max Drawdown", "-$1,243.35"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", color: theme.muted }}><span>{a}</span><b style={{ color: String(b).startsWith("-") ? theme.red : String(b).startsWith("$102") || String(b).startsWith("+") ? theme.green : theme.text }}>{b}</b></div>)}</div></PremiumCard>
+                <PremiumCard theme={theme} title="Market Replay Status"><div style={{ padding: 14, display: "grid", gap: 11 }}>{[["Replay Date", "May 15, 2024"], ["Current Time", "10:15:30 ET"], ["Data Speed", `${replaySpeed || 1}x`], ["Data Source", "Historical"], ["Market Hours", "09:30 - 16:00 ET"], ["Status", "On Replay"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", color: theme.muted }}><span>{a}</span><b style={{ color: b === "On Replay" ? theme.green : theme.text }}>{b}</b></div>)}</div></PremiumCard>
+                <PremiumCard theme={theme} title="Market Events"><div style={{ padding: 14, display: "grid", gap: 10 }}>{["09:30 Market Open", "10:15 High Volume Detected", "11:02 Breakout Above 200 MA", "12:30 Fed Speaker", "15:00 Power Hour Start", "16:00 Market Close"].map((event, index) => <div key={event} style={{ color: theme.text, fontSize: 12 }}><span style={{ color: [theme.green, theme.blue, theme.amber, theme.red][index % 4], marginRight: 8 }}>*</span>{event}</div>)}</div></PremiumCard>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1fr) 280px", gap: 10 }}>
+              <PremiumCard theme={theme} title="Open Positions (Replay)"><PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: () => theme.green }, { key: "pct", label: "P&L (%)", width: "80px", color: () => theme.green }]} rows={replayPositions} /></PremiumCard>
+              <PremiumCard theme={theme} title="Trade History (Replay)"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "Sell" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => String(row.pnl).startsWith("+") ? theme.green : theme.muted }]} rows={replayRows} /></PremiumCard>
+              <PremiumCard theme={theme} title="Replay Notes"><div style={{ padding: 14, display: "grid", gap: 12 }}><textarea placeholder="Add notes for this replay session..." style={{ minHeight: 170, resize: "vertical", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, padding: 12 }} /><ActionButton theme={theme}>Save Notes</ActionButton></div></PremiumCard>
+            </div>
+          </div>
+        </PremiumCard>
       </div>
     );
   }

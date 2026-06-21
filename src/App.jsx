@@ -3608,6 +3608,11 @@ export default function App() {
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
         resetWorkspace={resetWorkspace}
         brokerConnected={brokerConnected}
+        journalEntries={journalEntries}
+        replayPlaying={replayPlaying}
+        replaySpeed={replaySpeed}
+        replayStats={replayStats}
+        replayTrades={replayTrades}
       />
     );
   }
@@ -3673,7 +3678,7 @@ export default function App() {
         premiumShell={usePremiumShell}
       />
 
-      {usePremiumShell ? (
+      {usePremiumShell && !["replay", "journal"].includes(activeWorkspace) ? (
         <div style={{ padding: "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
@@ -3681,7 +3686,7 @@ export default function App() {
             onPick={selectMainSymbol}
           />
         </div>
-      ) : showTickerTape && (
+      ) : !usePremiumShell && showTickerTape && (
         <TickerTape
           theme={theme}
           stocks={tickerTapeSymbols.slice(0, 12)}

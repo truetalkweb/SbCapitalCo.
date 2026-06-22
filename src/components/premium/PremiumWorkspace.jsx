@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   CheckCircle2,
   ChevronRight,
@@ -132,6 +133,7 @@ function PremiumCard({ theme, children, style = {}, title, action }) {
 }
 
 function PremiumTabs({ theme, tabs, active, onChange }) {
+  const interactive = typeof onChange === "function";
   return (
     <div role="tablist" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
       {tabs.map((tab) => {
@@ -144,6 +146,8 @@ function PremiumTabs({ theme, tabs, active, onChange }) {
             type="button"
             role="tab"
             aria-selected={selected}
+            disabled={!interactive}
+            title={interactive ? "" : "Tab switching is visual in this premium pass"}
             onClick={() => onChange?.(id)}
             style={{
               height: 30,
@@ -154,7 +158,8 @@ function PremiumTabs({ theme, tabs, active, onChange }) {
               color: selected ? "#fff" : theme.muted,
               fontSize: 12,
               fontWeight: 800,
-              cursor: "pointer",
+              cursor: interactive ? "pointer" : "not-allowed",
+              opacity: interactive ? 1 : 0.72,
               outlineOffset: 2,
             }}
           >
@@ -191,7 +196,7 @@ function StatusPill({ theme, children, tone = "neutral" }) {
   );
 }
 
-function ActionButton({ theme, children, active = false, danger = false, good = false, style = {}, ...props }) {
+function ActionButton({ theme, children, active = false, danger = false, good = false, disabled = false, style = {}, ...props }) {
   const bg = danger
     ? "linear-gradient(180deg, #d43f3f, #a91f1f)"
     : good
@@ -202,17 +207,19 @@ function ActionButton({ theme, children, active = false, danger = false, good = 
   return (
     <button
       type="button"
+      disabled={disabled}
       {...props}
       style={{
         height: 34,
-        border: `1px solid ${active || danger || good ? "rgba(255,255,255,0.12)" : theme.borderSoft || theme.border}`,
+        border: `1px solid ${disabled ? theme.borderSoft || theme.border : active || danger || good ? "rgba(255,255,255,0.12)" : theme.borderSoft || theme.border}`,
         borderRadius: 6,
-        background: bg,
-        color: active || danger || good ? "#fff" : theme.text,
+        background: disabled ? "rgba(255,255,255,0.015)" : bg,
+        color: disabled ? theme.muted : active || danger || good ? "#fff" : theme.text,
         padding: "0 13px",
         fontSize: 12,
         fontWeight: 850,
-        cursor: "pointer",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.62 : 1,
         outlineOffset: 2,
         ...style,
       }}
@@ -243,11 +250,11 @@ function FilterBar({ theme, items = [], search = "Search..." }) {
         />
       </label>
       {items.map((item) => (
-        <ActionButton key={item} theme={theme} style={{ minWidth: 116, justifyContent: "space-between" }}>
+        <ActionButton key={item} theme={theme} disabled title="Filter controls are visual in this premium pass" style={{ minWidth: 116, justifyContent: "space-between" }}>
           {item}
         </ActionButton>
       ))}
-      <ActionButton theme={theme}>
+      <ActionButton theme={theme} disabled title="Advanced filters are visual in this premium pass">
         <Filter size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
         Filters
       </ActionButton>
@@ -553,11 +560,11 @@ function makeJournalTrades(entries, stocks) {
 
 function makeReplayTrades(replayTrades, selectedSymbol) {
   const fallback = [
-    ["09:45:12", selectedSymbol, "Buy", 100, "188.62", "--"],
+    ["09:45:12", selectedSymbol, "Buy", 100, "188.62", "Pending"],
     ["10:15:30", selectedSymbol, "Sell", 100, "189.35", "+$73.00"],
-    ["10:22:05", "TSLA", "Buy", 50, "200.45", "--"],
+    ["10:22:05", "TSLA", "Buy", 50, "200.45", "Pending"],
     ["11:02:15", "TSLA", "Sell", 50, "201.92", "+$73.50"],
-    ["12:45:10", "NVDA", "Short", 25, "916.30", "--"],
+    ["12:45:10", "NVDA", "Short", 25, "916.30", "Pending"],
   ];
   const real = (replayTrades || []).map((trade, index) => ({
     time: trade.time || trade.timestamp?.slice(11, 19) || `10:${String(15 + index).padStart(2, "0")}:30`,
@@ -565,7 +572,7 @@ function makeReplayTrades(replayTrades, selectedSymbol) {
     side: trade.type || trade.side || "Buy",
     qty: trade.quantity || trade.qty || 100,
     price: trade.price || trade.fillPrice || "188.62",
-    pnl: trade.pnl ? money(trade.pnl) : "--",
+    pnl: trade.pnl ? money(trade.pnl) : "Pending",
   }));
   return (real.length ? real : fallback.map(([time, symbol, side, qty, price, pnl]) => ({ time, symbol, side, qty, price, pnl }))).slice(0, 10);
 }
@@ -607,6 +614,15 @@ export default function PremiumWorkspace({
   replaySpeed,
   replayStats,
   replayTrades,
+  setReplayPlaying,
+  setReplaySpeed,
+  stepReplay,
+  resetReplay,
+  openReplayJournal,
+  journalDraft,
+  addJournalEntry,
+  exportJournalCsv,
+  exportTradeSummaryCsv,
 }) {
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData);
   const selected = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
@@ -683,6 +699,27 @@ export default function PremiumWorkspace({
   const journalNet = journalRows.reduce((total, row) => total + num(row.pnl), 0) || 2814.72;
   const replayNet = num(replayStats?.netPnL, 2653.21);
   const replayWinRate = replayStats?.winRate || "66.67";
+  const [selectedNewsId, setSelectedNewsId] = useState(null);
+  const [selectedAlertSymbol, setSelectedAlertSymbol] = useState(null);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [selectedPositionSymbol, setSelectedPositionSymbol] = useState(null);
+  const selectedStory = headlines.find((item) => item.id === selectedNewsId) || headlines.find((item) => item.symbol === selected.symbol) || headlines[0];
+  const selectedAlert = alertRows.find((row) => row.symbol === selectedAlertSymbol) || alertRows.find((row) => row.symbol === selected.symbol) || alertRows[0];
+  const selectedOrder = orderRows.find((row) => row.id === selectedOrderId) || orderRows.find((row) => row.symbol === selected.symbol) || orderRows[0];
+  const selectedPosition = positionRows.find((row) => row.symbol === selectedPositionSymbol) || positionRows.find((row) => row.symbol === selected.symbol) || positionRows[0];
+
+  function prepareReviewAction(label, symbol = selected.symbol) {
+    setPremiumDockTab?.("orders");
+    setOrderConfirmed?.(false);
+    setOrderMessage?.(`${label} prepared for ${symbol}. This premium shortcut is review-only.`);
+  }
+
+  function prepareOrderReview(side, symbol = selected.symbol) {
+    setOrderSide?.(side);
+    setOrderConfirmed?.(false);
+    setPremiumDockTab?.("orders");
+    setOrderMessage?.(`${side} review prepared for ${symbol}. Use the full order ticket before any paper/live submission.`);
+  }
 
   const page = {
     minHeight: 0,
@@ -758,9 +795,11 @@ export default function PremiumWorkspace({
       <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(selected.symbol)}>
         Open Chart
       </ActionButton>
-      <ActionButton theme={theme}>Add Alert</ActionButton>
-      <ActionButton theme={theme} good onClick={() => addSymbolToWatchlist?.(selected.symbol)}>
-        Trade
+      <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", selected.symbol)}>
+        Alert Review
+      </ActionButton>
+      <ActionButton theme={theme} good onClick={() => prepareOrderReview("BUY", selected.symbol)}>
+        Review Order
       </ActionButton>
     </div>
   );
@@ -769,9 +808,11 @@ export default function PremiumWorkspace({
       <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(dashboard.selected.symbol)}>
         Open Chart
       </ActionButton>
-      <ActionButton theme={theme}>Add Alert</ActionButton>
-      <ActionButton theme={theme} good onClick={() => addSymbolToWatchlist?.(dashboard.selected.symbol)}>
-        Trade
+      <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", dashboard.selected.symbol)}>
+        Alert Review
+      </ActionButton>
+      <ActionButton theme={theme} good onClick={() => prepareOrderReview("BUY", dashboard.selected.symbol)}>
+        Review Order
       </ActionButton>
     </div>
   );
@@ -841,7 +882,7 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
-                <SectionTitle theme={theme} title="Watchlist" subtitle="Track symbols, monitor moves, and organize trade ideas." action={<ActionButton theme={theme}><Edit3 size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />Edit</ActionButton>} />
+                <SectionTitle theme={theme} title="Watchlist" subtitle="Track symbols, monitor moves, and organize trade ideas." action={<ActionButton theme={theme} onClick={() => addSymbolToWatchlist?.(selected.symbol)}><Edit3 size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />Add Selected</ActionButton>} />
                 <PremiumTabs theme={theme} tabs={["Main Watchlist", "Momentum", "Swing Ideas", "ETFs", "Earnings", "+"]} active="Main Watchlist" />
                 <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search symbol..." items={["All Sectors", "Price Any", "Change % Any"]} /></div>
               </div>
@@ -874,7 +915,6 @@ export default function PremiumWorkspace({
   }
 
   if (activeWorkspace === "news") {
-    const selectedStory = headlines.find((item) => item.symbol === selected.symbol) || headlines[0];
     return (
       <div style={page}>
         <div style={mainTwoCol}>
@@ -899,6 +939,8 @@ export default function PremiumWorkspace({
                 selectedKey={selectedStory.id}
                 keyField="id"
                 onSelect={(row) => {
+                  setSelectedNewsId(row.id);
+                  if (row.symbol) selectMainSymbol?.(row.symbol);
                   if (row.url) window.open(row.url, "_blank", "noopener,noreferrer");
                 }}
               />
@@ -912,7 +954,11 @@ export default function PremiumWorkspace({
                 <div style={{ color: theme.muted, marginTop: 10 }}>{selectedStory.source} / {selectedStory.time}</div>
                 <div style={{ marginTop: 16, lineHeight: 1.55, color: theme.text }}>This catalyst is attracting active trader attention and may affect liquidity, sentiment, and near-term momentum.</div>
                 <ul style={{ color: theme.green, lineHeight: 1.8 }}>{["Shares moving on catalyst flow", "Expected to attract momentum volume", "Institutional context improving"].map((x) => <li key={x}>{x}</li>)}</ul>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}><ActionButton theme={theme} active>Open Chart</ActionButton><ActionButton theme={theme}>Add Alert</ActionButton><ActionButton theme={theme} good>Save Story</ActionButton></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
+                  <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(selectedStory.symbol || selected.symbol)}>Open Chart</ActionButton>
+                  <ActionButton theme={theme} onClick={() => prepareReviewAction("News alert review", selectedStory.symbol || selected.symbol)}>Alert Review</ActionButton>
+                  <ActionButton theme={theme} good onClick={() => addSymbolToWatchlist?.(selectedStory.symbol || selected.symbol)}>Watch Symbol</ActionButton>
+                </div>
               </div>
             </PremiumCard>
             <PremiumCard theme={theme} title="AI News Summary"><div style={{ padding: 14, display: "grid", gap: 9 }}>{[["Catalyst Strength", "High"], ["Sentiment", "Bullish"], ["Volume Reaction", "+8.6%"], ["Risk Level", "Medium"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between" }}><span>{a}</span><b style={{ color: b === "Medium" ? theme.amber : theme.green }}>{b}</b></div>)}</div></PremiumCard>
@@ -929,12 +975,12 @@ export default function PremiumWorkspace({
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
-              <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><SectionTitle theme={theme} title="Alerts" subtitle="Manage price, volume, technical, and risk alerts." action={<ActionButton theme={theme} active>Create Alert <Plus size={14} style={{ verticalAlign: "-2px", marginLeft: 6 }} /></ActionButton>} /><PremiumTabs theme={theme} tabs={["Active Alerts", "Triggered", "Create Alert", "Watchlist Alerts", "Risk Alerts"]} active="Active Alerts" /><div style={{ marginTop: 12 }}><FilterBar theme={theme} search="Search alerts..." items={["All Categories", "All Priorities", "All Channels"]} /></div></div>
-              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.amber} fill={theme.amber} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}</> }, { key: "type", label: "Alert Type", width: "130px" }, { key: "condition", label: "Condition", width: "1.4fr" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => num(row.last).toFixed(2) }, { key: "target", label: "Target", width: "90px", align: "right", mono: true }, { key: "status", label: "Status", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.status === "Triggered" ? "bad" : row.status === "Snoozed" ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "created", label: "Created", width: "150px" }, { key: "next", label: "Last Trigger / Next", width: "150px" }]} rows={alertRows} selectedKey={selected.symbol} />
+              <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><SectionTitle theme={theme} title="Alerts" subtitle="Manage price, volume, technical, and risk alerts." action={<ActionButton theme={theme} active onClick={() => prepareReviewAction("Create alert review", selected.symbol)}>Create Alert <Plus size={14} style={{ verticalAlign: "-2px", marginLeft: 6 }} /></ActionButton>} /><PremiumTabs theme={theme} tabs={["Active Alerts", "Triggered", "Create Alert", "Watchlist Alerts", "Risk Alerts"]} active="Active Alerts" /><div style={{ marginTop: 12 }}><FilterBar theme={theme} search="Search alerts..." items={["All Categories", "All Priorities", "All Channels"]} /></div></div>
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.amber} fill={theme.amber} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}</> }, { key: "type", label: "Alert Type", width: "130px" }, { key: "condition", label: "Condition", width: "1.4fr" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => num(row.last).toFixed(2) }, { key: "target", label: "Target", width: "90px", align: "right", mono: true }, { key: "status", label: "Status", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.status === "Triggered" ? "bad" : row.status === "Snoozed" ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "created", label: "Created", width: "150px" }, { key: "next", label: "Last Trigger / Next", width: "150px" }]} rows={alertRows} selectedKey={selectedAlert?.symbol} onSelect={(row) => { setSelectedAlertSymbol(row.symbol); selectMainSymbol?.(row.symbol); }} />
             </PremiumCard>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 390px", gap: 10 }}>{bottomDock}{quickOrder}</div>
           </div>
-          {selectedRail(<><PremiumCard theme={theme} title="Alert Logic / AI Insight"><div style={{ padding: 14, lineHeight: 1.6 }}>{selected.symbol} is approaching a key psychological resistance level with supportive momentum and above-average volume.</div></PremiumCard><PremiumCard theme={theme} title="Recent Alert Activity"><div style={{ padding: 14, display: "grid", gap: 12 }}>{alertRows.slice(0, 3).map((row, index) => <div key={`${row.symbol}-${index}`} style={{ display: "flex", justifyContent: "space-between" }}><span>{row.symbol} {row.type}</span><span style={{ color: theme.red }}>{row.status}</span></div>)}</div></PremiumCard></>)}
+          {selectedRail(<><PremiumCard theme={theme} title="Selected Alert"><div style={{ padding: 14, display: "grid", gap: 9 }}><b>{selectedAlert?.symbol} {selectedAlert?.type}</b><span>{selectedAlert?.condition}</span><StatusPill theme={theme} tone={selectedAlert?.status === "Triggered" ? "bad" : "good"}>{selectedAlert?.status}</StatusPill><ActionButton theme={theme} onClick={() => prepareReviewAction("Alert edit review", selectedAlert?.symbol || selected.symbol)}>Edit Review</ActionButton></div></PremiumCard><PremiumCard theme={theme} title="Alert Logic / AI Insight"><div style={{ padding: 14, lineHeight: 1.6 }}>{selectedAlert?.symbol || selected.symbol} is approaching a key monitored level with supportive momentum and above-average volume.</div></PremiumCard><PremiumCard theme={theme} title="Recent Alert Activity"><div style={{ padding: 14, display: "grid", gap: 12 }}>{alertRows.slice(0, 3).map((row, index) => <div key={`${row.symbol}-${index}`} style={{ display: "flex", justifyContent: "space-between" }}><span>{row.symbol} {row.type}</span><span style={{ color: row.status === "Triggered" ? theme.red : theme.green }}>{row.status}</span></div>)}</div></PremiumCard></>)}
         </div>
       </div>
     );
@@ -947,14 +993,14 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><PremiumTabs theme={theme} tabs={["Orders", "All Orders", "Working", "Filled", "Cancelled", "Rejected"]} active="Orders" /><div style={{ marginTop: 14 }}><FilterBar theme={theme} search="All Symbols" items={["Jun 7 - Jun 8, 2024"]} /></div></div>
-              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px", mono: true }, { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "BUY" ? theme.green : theme.red, strong: true }, { key: "type", label: "Type", width: "90px" }, { key: "qty", label: "Qty", width: "70px", align: "right", mono: true }, { key: "price", label: "Price", width: "100px", align: "right", mono: true }, { key: "status", label: "Status", width: "140px", render: (row) => <StatusPill theme={theme} tone={row.status === "REJECTED" ? "bad" : row.status.includes("WORK") ? "neutral" : row.status.includes("PART") ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "filled", label: "Filled", width: "80px", align: "right", mono: true }, { key: "remaining", label: "Remaining", width: "100px", align: "right", mono: true }, { key: "tif", label: "TIF", width: "70px" }, { key: "id", label: "Order ID", width: "110px", mono: true }]} rows={orderRows} />
+              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px", mono: true }, { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "BUY" ? theme.green : theme.red, strong: true }, { key: "type", label: "Type", width: "90px" }, { key: "qty", label: "Qty", width: "70px", align: "right", mono: true }, { key: "price", label: "Price", width: "100px", align: "right", mono: true }, { key: "status", label: "Status", width: "140px", render: (row) => <StatusPill theme={theme} tone={row.status === "REJECTED" ? "bad" : row.status.includes("WORK") ? "neutral" : row.status.includes("PART") ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "filled", label: "Filled", width: "80px", align: "right", mono: true }, { key: "remaining", label: "Remaining", width: "100px", align: "right", mono: true }, { key: "tif", label: "TIF", width: "70px" }, { key: "id", label: "Order ID", width: "110px", mono: true }]} rows={orderRows} selectedKey={selectedOrder?.id} keyField="id" onSelect={(row) => { setSelectedOrderId(row.id); selectMainSymbol?.(row.symbol); }} />
             </PremiumCard>
             <PremiumCard theme={theme} title="Order Activity"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "event", label: "Event", width: "1fr" }, { key: "status", label: "Status", width: "140px", color: () => theme.green }]} rows={orderRows.slice(0, 5).map((row) => ({ time: row.time, event: `${row.symbol} ${row.side} ${row.qty} @ ${row.price}`, status: row.status }))} /></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Place New Order"><div style={{ padding: 16 }}>{quickOrder.props.children}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Order Value", "$29,810.00"], ["Buying Power Impact", "$29,810.00"], ["Commission (Est.)", "$1.00"], ["Total (Est.)", "$29,811.00"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between" }}><span>{a}</span><b>{b}</b></div>)}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Quick Actions"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}><ActionButton theme={theme} danger><X size={14} /><br />Cancel All</ActionButton><ActionButton theme={theme}><Lock size={14} /><br />Close All</ActionButton><ActionButton theme={theme}><Shield size={14} /><br />Flatten Day</ActionButton></div></PremiumCard>
+            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(num(selectedOrder?.price, selected.price) * num(selectedOrder?.qty, quantity))], ["Mode", "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Quick Actions"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}><ActionButton theme={theme} danger onClick={() => prepareReviewAction("Cancel orders review", selectedOrder?.symbol || selected.symbol)}><X size={14} /><br />Cancel Review</ActionButton><ActionButton theme={theme} onClick={() => prepareReviewAction("Close positions review", selected.symbol)}><Lock size={14} /><br />Close Review</ActionButton><ActionButton theme={theme} onClick={() => prepareReviewAction("Flatten day review", selected.symbol)}><Shield size={14} /><br />Flatten Review</ActionButton></div></PremiumCard>
           </div>
         </div>
       </div>
@@ -969,7 +1015,7 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><SectionTitle theme={theme} title="Positions" /><PremiumTabs theme={theme} tabs={["Open Positions", "Closed Positions", "Holdings", "Allocations"]} active="Open Positions" /><div style={{ marginTop: 14 }}><FilterBar theme={theme} search="All Symbols" items={["All Accounts", "All Sectors", "Sort: P&L %"]} /></div></div>
-              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true }, { key: "side", label: "Side", width: "80px", color: () => theme.green }, { key: "qty", label: "Qty", width: "70px", align: "right" }, { key: "avg", label: "Avg Price", width: "100px", align: "right", mono: true, render: (row) => row.avg.toFixed(2) }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => row.last.toFixed(2) }, { key: "marketValue", label: "Market Value", width: "120px", align: "right", mono: true, render: (row) => money(row.marketValue) }, { key: "dayPnl", label: "Day P&L", width: "100px", align: "right", mono: true, color: (row) => row.dayPnl >= 0 ? theme.green : theme.red, render: (row) => money(row.dayPnl) }, { key: "totalPnl", label: "Total P&L", width: "100px", align: "right", mono: true, color: (row) => row.totalPnl >= 0 ? theme.green : theme.red, render: (row) => money(row.totalPnl) }, { key: "exposure", label: "Exposure", width: "90px", align: "right" }, { key: "risk", label: "Risk", width: "70px", align: "center", render: (row) => <StatusPill theme={theme} tone="warn">{row.risk}</StatusPill> }]} rows={enriched} selectedKey={selected.symbol} />
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true }, { key: "side", label: "Side", width: "80px", color: () => theme.green }, { key: "qty", label: "Qty", width: "70px", align: "right" }, { key: "avg", label: "Avg Price", width: "100px", align: "right", mono: true, render: (row) => row.avg.toFixed(2) }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => row.last.toFixed(2) }, { key: "marketValue", label: "Market Value", width: "120px", align: "right", mono: true, render: (row) => money(row.marketValue) }, { key: "dayPnl", label: "Day P&L", width: "100px", align: "right", mono: true, color: (row) => row.dayPnl >= 0 ? theme.green : theme.red, render: (row) => money(row.dayPnl) }, { key: "totalPnl", label: "Total P&L", width: "100px", align: "right", mono: true, color: (row) => row.totalPnl >= 0 ? theme.green : theme.red, render: (row) => money(row.totalPnl) }, { key: "exposure", label: "Exposure", width: "90px", align: "right" }, { key: "risk", label: "Risk", width: "70px", align: "center", render: (row) => <StatusPill theme={theme} tone="warn">{row.risk}</StatusPill> }]} rows={enriched} selectedKey={selectedPosition?.symbol} onSelect={(row) => { setSelectedPositionSymbol(row.symbol); selectMainSymbol?.(row.symbol); }} />
             </PremiumCard>
             <PremiumCard theme={theme} title="Position Activity"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "120px" }, { key: "symbol", label: "Symbol", width: "100px", mono: true }, { key: "action", label: "Action", width: "120px", color: () => theme.green }, { key: "side", label: "Side", width: "90px" }, { key: "qty", label: "Qty", width: "80px" }, { key: "note", label: "Reason / Note", width: "1fr" }]} rows={enriched.slice(0, 5).map((row, i) => ({ time: `09:${32 - i}:14`, symbol: row.symbol, action: i === 3 ? "Trimmed" : "Added", side: i === 3 ? "SELL" : "BUY", qty: row.qty, note: i === 3 ? "Reduce into strength" : "Breakout above resistance" }))} /></PremiumCard>
           </div>
@@ -986,7 +1032,7 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><SectionTitle theme={theme} title="Risk" /><PremiumTabs theme={theme} tabs={["Overview", "Limits", "Exposure", "Stress Test", "Margin"]} active="Overview" /><div style={{ marginTop: 14 }}><FilterBar theme={theme} search="All Accounts" items={["All Symbols", "Risk Model: Standard"]} /></div></div>
-              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true }, { key: "side", label: "Side", width: "80px", color: () => theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => row.last.toFixed(2) }, { key: "market", label: "Market Value", width: "120px", align: "right", mono: true, render: (row) => money(row.last * row.qty) }, { key: "day", label: "Day P&L", width: "100px", align: "right", color: () => theme.green, render: (row) => money((row.last - row.avg) * row.qty) }, { key: "exposure", label: "Exposure %", width: "90px", align: "right" }, { key: "beta", label: "Beta", width: "70px", render: (_, i) => (1.23 + i * 0.08).toFixed(2) }, { key: "var", label: "VaR (1D)", width: "100px", align: "right", color: () => theme.red, render: (_, i) => `-$${(742 + i * 83).toFixed(2)}` }, { key: "risk", label: "Risk Score", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.risk > 70 ? "good" : "warn"}>{row.risk}</StatusPill> }]} rows={positionRows} />
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true }, { key: "side", label: "Side", width: "80px", color: () => theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => row.last.toFixed(2) }, { key: "market", label: "Market Value", width: "120px", align: "right", mono: true, render: (row) => money(row.last * row.qty) }, { key: "day", label: "Day P&L", width: "100px", align: "right", color: () => theme.green, render: (row) => money((row.last - row.avg) * row.qty) }, { key: "exposure", label: "Exposure %", width: "90px", align: "right" }, { key: "beta", label: "Beta", width: "70px", render: (_, i) => (1.23 + i * 0.08).toFixed(2) }, { key: "var", label: "VaR (1D)", width: "100px", align: "right", color: () => theme.red, render: (_, i) => `-$${(742 + i * 83).toFixed(2)}` }, { key: "risk", label: "Risk Score", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.risk > 70 ? "good" : "warn"}>{row.risk}</StatusPill> }]} rows={positionRows} selectedKey={selectedPosition?.symbol} onSelect={(row) => { setSelectedPositionSymbol(row.symbol); selectMainSymbol?.(row.symbol); }} />
             </PremiumCard>
             <PremiumCard theme={theme} title="Risk Events & Limits"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "type", label: "Type", width: "180px" }, { key: "severity", label: "Severity", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.severity === "High" ? "bad" : "warn"}>{row.severity}</StatusPill> }, { key: "message", label: "Message", width: "1fr" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "status", label: "Status", width: "100px" }]} rows={[{ time: "09:32:14", type: "Concentration Warning", severity: "High", message: "NVDA concentration exceeds 20% of portfolio", symbol: "NVDA", status: "Active" }, { time: "09:28:41", type: "Margin Warning", severity: "Medium", message: "Margin usage above 30% threshold", symbol: "Portfolio", status: "Active" }, { time: "09:25:07", type: "Daily Loss Threshold", severity: "Medium", message: "Approaching daily loss limit", symbol: "Portfolio", status: "Active" }]} /></PremiumCard>
           </div>
@@ -1018,7 +1064,7 @@ export default function PremiumWorkspace({
             <PremiumCard theme={theme} title="Performance Summary"><div style={{ padding: 14, display: "grid", gap: 12 }}>{[["Starting Net Liquidation", "$99,838.49"], ["Ending Net Liquidation", "$102,653.21"], ["Change", money(net)], ["Return", "+2.81%"], ["Alpha", "+1.53%"], ["Beta", "0.92"], ["Sharpe Ratio", "1.78"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between" }}><span>{a}</span><b style={{ color: String(b).startsWith("+") || String(b).startsWith("$2") ? theme.green : theme.text }}>{b}</b></div>)}</div></PremiumCard>
             <PremiumCard theme={theme} title="Risk Metrics"><div style={{ padding: 14, display: "grid", gap: 12 }}>{["Max Drawdown -$1,243.35", "Drawdown Duration 5d", "Best Day $1,152.36", "Worst Day -$842.17"].map((x) => <div key={x}>{x}</div>)}</div></PremiumCard>
             <PremiumCard theme={theme} title="Monthly Returns"><div style={{ padding: 16, height: 150, display: "flex", alignItems: "end", gap: 18 }}>{[36, -24, 28, 48, -18, 58].map((h, i) => <div key={i} style={{ width: 18, height: Math.abs(h), background: h > 0 ? theme.green : theme.red }} />)}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Export Reports"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme}>PDF <Download size={14} /></ActionButton><ActionButton theme={theme}>CSV <Download size={14} /></ActionButton></div></PremiumCard>
+            <PremiumCard theme={theme} title="Export Reports"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme} disabled title="PDF report export is not wired yet">PDF <Download size={14} /></ActionButton><ActionButton theme={theme} onClick={exportTradeSummaryCsv}>CSV <Download size={14} /></ActionButton></div></PremiumCard>
           </div>
         </div>
       </div>
@@ -1032,15 +1078,44 @@ export default function PremiumWorkspace({
     const winRate = `${((wins / Math.max(tradeCount, 1)) * 100).toFixed(2)}%`;
     return (
       <div style={page}>
-        <PremiumCard theme={theme} style={{ minHeight: "100%" }}>
-          <div style={{ padding: 18, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
-            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Setups", "Daily Log", "Notes", "Lessons", "Statistics", "Exports"]} active="Overview" />
-            <div style={{ marginTop: 14 }}>
-              <FilterBar theme={theme} items={["May 10 - Jun 8, 2024", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <ActionButton theme={theme} onClick={() => setOrderMessage?.("Journal filters reset locally for this view.")}>Reset</ActionButton>
+              <ActionButton theme={theme} active onClick={addJournalEntry}>+ Add Trade</ActionButton>
+              <ActionButton theme={theme} onClick={exportJournalCsv}>Export CSV</ActionButton>
             </div>
           </div>
-          <div style={{ padding: 12, display: "grid", gap: 10 }}>
+          <PremiumCard theme={theme}>
+            <div style={{ padding: 12, display: "grid", gap: 12 }}>
+            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Setups", "Daily Log", "Notes", "Lessons", "Statistics", "Exports"]} active="Overview" />
+              <FilterBar theme={theme} items={["May 10 - Jun 8, 2024", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />
+            </div>
+          </PremiumCard>
+          {journalDraft?.setup && (
+            <PremiumCard theme={theme} title="Prepared Journal Draft">
+              <div style={{ padding: 14, display: "grid", gridTemplateColumns: "120px 150px 90px 1fr", gap: 12, alignItems: "center" }}>
+                <div>
+                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Symbol</div>
+                  <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 900 }}>{journalDraft.symbol || selectedStock}</div>
+                </div>
+                <div>
+                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Setup</div>
+                  <div style={{ color: theme.text, fontWeight: 850 }}>{journalDraft.setup}</div>
+                </div>
+                <div>
+                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Grade</div>
+                  <StatusPill theme={theme} tone={journalDraft.grade === "A" || journalDraft.grade === "B" ? "good" : "warn"}>
+                    {journalDraft.grade || "Review"}
+                  </StatusPill>
+                </div>
+                <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.45, minWidth: 0 }}>
+                  {journalDraft.review || journalDraft.plan || "Draft prepared for review before saving."}
+                </div>
+              </div>
+            </PremiumCard>
+          )}
             <PremiumCard theme={theme}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))" }}>
                 {[
@@ -1063,7 +1138,7 @@ export default function PremiumWorkspace({
               <PremiumCard theme={theme} title="Equity Curve">
                 <div style={{ padding: 16, height: 310 }}>
                   <div style={{ width: 170, marginBottom: 12 }}>
-                    <ActionButton theme={theme}>Net Liquidation</ActionButton>
+                    <ActionButton theme={theme} disabled title="Journal equity metric switching is not wired in this pass">Net Liquidation</ActionButton>
                   </div>
                   <div style={{ height: 220, borderLeft: `1px solid ${theme.borderSoft || theme.border}`, borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingTop: 12 }}>
                     <MiniSparkline theme={theme} seed={9} height={190} />
@@ -1097,7 +1172,7 @@ export default function PremiumWorkspace({
                 </div>
               </PremiumCard>
             </div>
-            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active>+ Add Trade</ActionButton>}>
+            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active onClick={addJournalEntry}>+ Add Trade</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[
@@ -1123,8 +1198,7 @@ export default function PremiumWorkspace({
                 <span style={{ fontFamily: terminalMonoFont }}>1 2 3 4 5 ... 10</span>
               </div>
             </PremiumCard>
-          </div>
-        </PremiumCard>
+        </div>
       </div>
     );
   }
@@ -1137,12 +1211,11 @@ export default function PremiumWorkspace({
     ];
     return (
       <div style={page}>
-        <PremiumCard theme={theme} style={{ minHeight: "100%" }}>
-          <div style={{ padding: 18, display: "flex", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
             <SectionTitle theme={theme} title="Replay" subtitle="Practice trading with historical market data. All orders are simulated." />
-            <ActionButton theme={theme}>Replay Settings</ActionButton>
+            <ActionButton theme={theme} disabled title="Replay settings editing is not wired in this pass">Replay Settings</ActionButton>
           </div>
-          <div style={{ padding: 12, display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 12, display: "grid", gridTemplateColumns: "160px 170px 160px 160px 120px 1fr", gap: 8, alignItems: "center" }}>
                 {["Stocks (US)", "May 15, 2024", "09:30 AM", "04:00 PM", `${replaySpeed || 1}x`].map((value, index) => (
@@ -1152,9 +1225,11 @@ export default function PremiumWorkspace({
                   </label>
                 ))}
                 <div style={{ display: "flex", gap: 8, justifyContent: "end" }}>
-                  <ActionButton theme={theme}>Skip to Open</ActionButton>
-                  <ActionButton theme={theme}>Skip to Now</ActionButton>
-                  <ActionButton theme={theme} good>{replayPlaying ? "Pause Replay" : "Start Replay"}</ActionButton>
+                  <ActionButton theme={theme} onClick={() => resetReplay?.()}>Skip to Open</ActionButton>
+                  <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
+                  <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                    {replayPlaying ? "Pause Replay" : "Start Replay"}
+                  </ActionButton>
                 </div>
               </div>
             </PremiumCard>
@@ -1164,18 +1239,35 @@ export default function PremiumWorkspace({
                   <div>
                     <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Speed</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                      {["0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x", "50x", "100x"].map((speed) => <ActionButton key={speed} theme={theme} active={speed === `${replaySpeed || 1}x`}>{speed}</ActionButton>)}
+                      {["0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x", "50x", "100x"].map((speed) => (
+                        <ActionButton
+                          key={speed}
+                          theme={theme}
+                          active={Number(speed.replace("x", "")) === Number(replaySpeed || 1)}
+                          onClick={() => setReplaySpeed?.(Number(speed.replace("x", "")))}
+                        >
+                          {speed}
+                        </ActionButton>
+                      ))}
                     </div>
                   </div>
                   <div>
                     <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Jump to Time</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => <ActionButton key={label} theme={theme}>{label}</ActionButton>)}
+                      {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => (
+                        <ActionButton
+                          key={label}
+                          theme={theme}
+                          onClick={() => (label === "Market Open" ? resetReplay?.() : stepReplay?.())}
+                        >
+                          {label}
+                        </ActionButton>
+                      ))}
                     </div>
                   </div>
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-                      <span>Bookmarks</span><ActionButton theme={theme}>+ Add</ActionButton>
+                      <span>Bookmarks</span><ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay bookmark noted locally for review.")}>+ Add</ActionButton>
                     </div>
                     <div style={{ display: "grid", gap: 11 }}>
                       {["Opening Range Breakout 09:45", "AAPL Spike 10:15", "TSLA Breakout 11:02", "GOOG Pullback 12:45", "Power Hour 15:00"].map((bookmark) => (
@@ -1203,7 +1295,16 @@ export default function PremiumWorkspace({
                       </div>
                       <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont }}>10:15:30 / 16:00:00</div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>{["|<", "<", replayPlaying ? "||" : ">", ">>", ">|", "Reset"].map((label) => <ActionButton key={label} theme={theme}>{label}</ActionButton>)}</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <ActionButton theme={theme} onClick={() => resetReplay?.()}>|&lt;</ActionButton>
+                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&lt;</ActionButton>
+                      <ActionButton theme={theme} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                        {replayPlaying ? "||" : ">"}
+                      </ActionButton>
+                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;&gt;</ActionButton>
+                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;|</ActionButton>
+                      <ActionButton theme={theme} onClick={() => resetReplay?.()}>Reset</ActionButton>
+                    </div>
                   </div>
                 </PremiumCard>
               </div>
@@ -1216,10 +1317,9 @@ export default function PremiumWorkspace({
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1fr) 280px", gap: 10 }}>
               <PremiumCard theme={theme} title="Open Positions (Replay)"><PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: () => theme.green }, { key: "pct", label: "P&L (%)", width: "80px", color: () => theme.green }]} rows={replayPositions} /></PremiumCard>
               <PremiumCard theme={theme} title="Trade History (Replay)"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "Sell" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => String(row.pnl).startsWith("+") ? theme.green : theme.muted }]} rows={replayRows} /></PremiumCard>
-              <PremiumCard theme={theme} title="Replay Notes"><div style={{ padding: 14, display: "grid", gap: 12 }}><textarea placeholder="Add notes for this replay session..." style={{ minHeight: 170, resize: "vertical", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, padding: 12 }} /><ActionButton theme={theme}>Save Notes</ActionButton></div></PremiumCard>
+              <PremiumCard theme={theme} title="Replay Notes"><div style={{ padding: 14, display: "grid", gap: 12 }}><textarea placeholder="Add notes for this replay session..." style={{ minHeight: 170, resize: "vertical", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, padding: 12 }} /><ActionButton theme={theme} onClick={() => openReplayJournal?.()}>Send to Journal</ActionButton></div></PremiumCard>
             </div>
-          </div>
-        </PremiumCard>
+        </div>
       </div>
     );
   }
@@ -1237,12 +1337,12 @@ export default function PremiumWorkspace({
             {group("Workspace Preferences", [["Theme", settingSelect(themeMode === "dark" ? "Dark" : "Light")], ["Compact mode", settingToggle(false)], ["Default landing tab", settingSelect("Dashboard")], ["Time zone", settingSelect("Pacific (PT)")], ["Currency display", settingSelect("USD")]])}
             {group("Trading Preferences", [["Default order type", settingSelect("Limit")], ["Confirm before order", settingToggle(true)], ["Default TIF", settingSelect("Day")], ["Hotkeys enabled", settingToggle(true)], ["Risk warnings enabled", settingToggle(true)]])}
             {group("Chart & Scanner Defaults", [["Default chart timeframe", settingSelect("1D")], ["Show volume", settingToggle(true)], ["Scanner auto refresh", settingToggle(true)], ["Default universe", settingSelect("US Stocks")], ["Relative volume threshold", settingSelect("1.50")]])}
-            <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>{["Trader", "Research", "Minimal", "Risk"].map((x, i) => <button key={x} type="button" style={{ minHeight: 72, border: `1px solid ${i === 0 ? theme.blue : theme.borderSoft}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12 }}>{x}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>Chart, Watchlist, Orders</div></button>)}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>{["Trader", "Research", "Minimal", "Risk"].map((x, i) => <button key={x} type="button" onClick={() => setOrderMessage?.(`${x} layout preset selected for local review.`)} style={{ minHeight: 72, border: `1px solid ${i === 0 ? theme.blue : theme.borderSoft}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12, cursor: "pointer" }}>{x}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>Chart, Watchlist, Orders</div></button>)}</div></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="good">Live</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} active>Manage Connection</ActionButton> <ActionButton theme={theme}><RefreshCw size={14} /></ActionButton></span>]])}
+            {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="good">Live</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} disabled title="Connection management stays in backend/Railway settings">Manage Connection</ActionButton> <ActionButton theme={theme} onClick={() => setOrderMessage?.("Refresh backend status from the main health controls.")}><RefreshCw size={14} /></ActionButton></span>]])}
             {group("Notification Settings", [["Price alerts", settingToggle(true)], ["Order fills", settingToggle(true)], ["News catalyst alerts", settingToggle(true)], ["Daily summary email", settingToggle(true)], ["Sound alerts", settingToggle(true)]])}
-            {group("Security", [["Two-factor authentication", <StatusPill key="s" theme={theme} tone="good">Enabled</StatusPill>], ["Login session timeout", settingSelect("30 minutes")], ["Device management", <ActionButton key="m" theme={theme}>Manage Devices</ActionButton>], ["Password", <ActionButton key="p" theme={theme}>Change Password</ActionButton>]])}
+            {group("Security", [["Two-factor authentication", <StatusPill key="s" theme={theme} tone="good">Enabled</StatusPill>], ["Login session timeout", settingSelect("30 minutes")], ["Device management", <ActionButton key="m" theme={theme} disabled title="Device management requires auth backend work">Manage Devices</ActionButton>], ["Password", <ActionButton key="p" theme={theme} disabled title="Password changes require auth backend work">Change Password</ActionButton>]])}
             {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", "June 8, 2024 05:12 AM ET"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]])}
             <PremiumCard theme={theme} title="Recent Changes"><div style={{ padding: 14, display: "grid", gap: 10 }}>{["Daily summary email Enabled", "Default order type Limit", "Scanner auto refresh Enabled", "Layout preset Trader"].map((x) => <div key={x} style={{ color: theme.text }}><span style={{ color: theme.green }}>*</span> {x}</div>)}</div></PremiumCard>
           </div>
@@ -1352,7 +1452,7 @@ export default function PremiumWorkspace({
         <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "2 / 3" }}>
           <div style={{ padding: "12px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <PremiumTabs theme={theme} tabs={["Scanner", "Gainers", "Losers", "Active", "Momentum", "High RVOL", "News", "Earnings"]} active="Gainers" />
-            <ActionButton theme={theme}>Save Scan</ActionButton>
+            <ActionButton theme={theme} onClick={() => setOrderMessage?.(`Scanner view saved locally for ${selected.symbol}.`)}>Save Scan</ActionButton>
           </div>
           {scannerTable(dashboard.scannerRows.slice(0, 5), dashboard.selected.symbol)}
         </PremiumCard>

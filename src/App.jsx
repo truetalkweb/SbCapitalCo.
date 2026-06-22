@@ -90,7 +90,7 @@ const publicRightTabIds = new Set(["intel", "risk", "health", "alerts"]);
 const brokerRightTabIds = new Set(["broker", "order", "audit", "replay", "activity", "dom", "keys"]);
 const brokerWorkspaceIds = new Set(["broker", "portfolio"]);
 const coreRightTabs = new Set(["intel", "health", "alerts"]);
-const advancedWorkspaceIds = new Set(["broker", "replay", "journal", "portfolio", "settings"]);
+const advancedWorkspaceIds = new Set(["broker", "portfolio"]);
 
 function isRightTabAllowed(tabId) {
   if (!BROKER_TOOLS_ENABLED) return publicRightTabIds.has(tabId);
@@ -873,7 +873,7 @@ export default function App() {
       type: "broker",
       status: "info",
       title: "Broker Refresh Requested",
-      detail: "Refreshing Questrade status, accounts, balances, positions, and orders.",
+      detail: "Refreshing broker status, accounts, balances, positions, and orders.",
     });
 
     await refreshBroker();
@@ -889,7 +889,7 @@ export default function App() {
       type: "system",
       status: "info",
       title: "Health Refresh Requested",
-      detail: "Refreshing backend, Questrade, scanner, and news status.",
+      detail: "Refreshing backend, broker, scanner, and news status.",
     });
 
     try {
@@ -1414,7 +1414,7 @@ export default function App() {
         null;
 
       if (response?.submitted) {
-        setOrderMessage(`${sideOverride} ${qty} ${selectedStock} submitted to Questrade.`);
+        setOrderMessage(`${sideOverride} ${qty} ${selectedStock} submitted through broker route.`);
         setOrderConfirmed(false);
         pushOrderAudit(buildOrderAuditRecord(sideOverride, "submitted", "Live order submitted through backend safety gate.", {
           entryPrice,
@@ -3615,6 +3615,15 @@ export default function App() {
         replaySpeed={replaySpeed}
         replayStats={replayStats}
         replayTrades={replayTrades}
+        setReplayPlaying={setReplayPlaying}
+        setReplaySpeed={setReplaySpeed}
+        stepReplay={stepReplay}
+        resetReplay={resetReplay}
+        openReplayJournal={openReplayJournal}
+        journalDraft={journalDraft}
+        addJournalEntry={addJournalEntry}
+        exportJournalCsv={exportJournalCsv}
+        exportTradeSummaryCsv={exportTradeSummaryCsv}
       />
     );
   }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
+import { BROKER_TOOLS_ENABLED } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { loadSetting, saveSetting } from "../utils/storage";
 
@@ -49,7 +50,9 @@ export function useBrokerData(brokerApiUrl) {
 
     try {
       const [statusResponse, healthResponse] = await Promise.allSettled([
-        axios.get(`${brokerApiUrl}/api/questrade/status`, { timeout: 6000 }),
+        BROKER_TOOLS_ENABLED
+          ? axios.get(`${brokerApiUrl}/api/questrade/status`, { timeout: 6000 })
+          : Promise.resolve({ data: null }),
         axios.get(`${brokerApiUrl}/api/health/deep`, { timeout: 7000 }),
       ]);
       let resolvedHealthResponse = healthResponse;
@@ -72,6 +75,20 @@ export function useBrokerData(brokerApiUrl) {
             ...(healthData.broker?.sync || healthData.questrade?.sync || {}),
           }));
         }
+      }
+
+      if (!BROKER_TOOLS_ENABLED) {
+        setBrokerConnected(false);
+        setBrokerDetails(null);
+        setBrokerError("");
+        setBrokerStatus("Public mode");
+        setLastHealthCheckedAt(new Date().toISOString());
+
+        return {
+          connected: false,
+          details: null,
+          error: "",
+        };
       }
 
       if (!response) throw statusResponse.reason;

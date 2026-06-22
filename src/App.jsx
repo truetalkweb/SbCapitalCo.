@@ -3690,11 +3690,12 @@ export default function App() {
       />
 
       {usePremiumShell && !["replay", "journal"].includes(activeWorkspace) ? (
-        <div style={{ padding: "0 10px 8px", flexShrink: 0 }}>
+        <div style={{ padding: activeWorkspace === "charts" ? "0 10px 5px" : "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
             stocks={allSymbols}
             onPick={selectMainSymbol}
+            compact={activeWorkspace === "charts"}
           />
         </div>
       ) : !usePremiumShell && showTickerTape && (

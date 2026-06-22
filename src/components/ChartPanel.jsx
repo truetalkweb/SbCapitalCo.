@@ -402,7 +402,7 @@ export default function ChartPanel({
               </div>
             )}
           </div>
-          {advancedMode && (
+          {(advancedMode || premiumShell) && (
           <button style={toolButtonStyle} onClick={takeScreenshot} title="Screenshot">
             <Camera size={14} style={toolIconStyle} />
             {!isPhoneChart && "Screenshot"}

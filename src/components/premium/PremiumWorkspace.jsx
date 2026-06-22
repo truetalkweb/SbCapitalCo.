@@ -14,6 +14,14 @@ import {
   X,
 } from "lucide-react";
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
+import { useDashboardData } from "../../hooks/useDashboardData";
+import {
+  formatCompactNumber,
+  formatMultiple,
+  formatPercent,
+  formatPrice,
+  formatSignedCurrency,
+} from "../../utils/dashboardFormatters";
 
 function num(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
@@ -35,6 +43,19 @@ function moveOf(row) {
 
 function toneColor(theme, value) {
   return num(value) >= 0 ? theme.green : theme.red;
+}
+
+function formatDetailValue(label, value) {
+  if (label === "Volume" || label === "Avg Vol") {
+    return typeof value === "string" ? value : formatCompactNumber(value, 2);
+  }
+  if (label === "Market Cap" || label === "Float") {
+    return typeof value === "string" ? value : formatCompactNumber(value, 2);
+  }
+  if (label === "P/E" || label === "Beta" || label === "EPS") {
+    return Number.isFinite(Number(value)) ? Number(value).toFixed(2) : String(value);
+  }
+  return Number.isFinite(Number(value)) ? formatPrice(value) : String(value);
 }
 
 function sparkPoints(seed = 1, negative = false) {
@@ -253,8 +274,9 @@ function PremiumTable({ theme, columns, rows, selectedKey, onSelect, keyField = 
         ))}
       </div>
       {rows.map((row, index) => {
-        const rowKey = row[keyField] || row.id || index;
-        const selected = rowKey === selectedKey;
+        const rowValue = row[keyField] || row.id || index;
+        const rowKey = `${rowValue}-${index}`;
+        const selected = rowValue === selectedKey;
         return (
           <button
             key={rowKey}
@@ -385,16 +407,16 @@ function DetailRail({ theme, selected, children, title = "Selected Symbol", acti
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginTop: 14 }}>
             {[
-              ["Day High", "298.22"],
-              ["Day Low", "293.41"],
-              ["Volume", selected.volume || "55.21M"],
-              ["Float", selected.float || "15.76B"],
-              ["P/E", "28.41"],
-              ["Beta", "1.23"],
+              ["Day High", selected.dayHigh ?? selected.high ?? selected.price],
+              ["Day Low", selected.dayLow ?? selected.low ?? selected.price],
+              ["Volume", selected.volume],
+              ["Float", selected.floatShares ?? selected.float],
+              ["P/E", selected.peRatio ?? selected.pe],
+              ["Beta", selected.beta],
             ].map(([label, value]) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 8, color: theme.muted, fontSize: 12 }}>
                 <span>{label}</span>
-                <span style={{ color: theme.text, fontFamily: terminalMonoFont }}>{value}</span>
+                <span style={{ color: theme.text, fontFamily: terminalMonoFont }}>{formatDetailValue(label, value ?? selected.price)}</span>
               </div>
             ))}
           </div>
@@ -560,6 +582,7 @@ export default function PremiumWorkspace({
   orders,
   positions,
   allSymbols,
+  accountSummary,
   realizedPnL,
   totalUnrealizedPnL,
   quantity,
@@ -587,6 +610,20 @@ export default function PremiumWorkspace({
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData);
   const selected = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
   const headlines = makeNews(news, selectedStock);
+  const dashboard = useDashboardData({
+    selectedStock,
+    selectedStockData,
+    liveStocks,
+    scannerStocks,
+    news,
+    positions,
+    orders,
+    alerts,
+    allSymbols,
+    accountSummary,
+    realizedPnL,
+    totalUnrealizedPnL,
+  });
   const orderRows = (orders?.length ? orders : makeOrders(selectedStock)).map((order, index) => ({
     time: order.time || order.createdAt?.slice(11, 19) || `09:${String(32 - index).padStart(2, "0")}:14`,
     symbol: order.symbol || selectedStock,
@@ -726,8 +763,19 @@ export default function PremiumWorkspace({
       </ActionButton>
     </div>
   );
+  const dashboardSelectedActions = (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9, marginTop: 16 }}>
+      <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(dashboard.selected.symbol)}>
+        Open Chart
+      </ActionButton>
+      <ActionButton theme={theme}>Add Alert</ActionButton>
+      <ActionButton theme={theme} good onClick={() => addSymbolToWatchlist?.(dashboard.selected.symbol)}>
+        Trade
+      </ActionButton>
+    </div>
+  );
 
-  function scannerTable(rows = stocks.slice(0, 8)) {
+  function scannerTable(rows = stocks.slice(0, 8), selectedKey = selected.symbol) {
     return (
       <PremiumTable
         theme={theme}
@@ -735,16 +783,16 @@ export default function PremiumWorkspace({
           { key: "symbol", label: "Symbol", width: "1.5fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.muted} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}<span style={{ display: "block", color: theme.muted, fontFamily: terminalSansFont, fontSize: 10, fontWeight: 500 }}>{row.name}</span></> },
           { key: "price", label: "Price", width: "90px", align: "right", mono: true, render: (row) => num(row.price).toFixed(2) },
           { key: "change", label: "Chg%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) },
-          { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: () => theme.green, render: (_, i) => pct(2.41 - i * 0.17) },
-          { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true },
-          { key: "volume", label: "Volume", width: "95px", align: "right", mono: true },
-          { key: "float", label: "Float", width: "90px", align: "right", mono: true },
-          { key: "setup", label: "Catalyst", width: "130px" },
+          { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, row.gapPercent ?? moveOf(row)), render: (row) => pct(row.gapPercent ?? moveOf(row)) },
+          { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true, render: (row) => row.rvolLabel || row.rvol || formatMultiple(row.relativeVolume) },
+          { key: "volume", label: "Volume", width: "95px", align: "right", mono: true, render: (row) => row.volumeLabel || (typeof row.volume === "string" ? row.volume : formatCompactNumber(row.volume, 1)) },
+          { key: "float", label: "Float", width: "90px", align: "right", mono: true, render: (row) => row.floatLabel || row.float || (row.floatShares ? formatCompactNumber(row.floatShares, 2) : "Context") },
+          { key: "setup", label: "Catalyst", width: "130px", render: (row) => row.catalyst || row.setup },
           { key: "score", label: "Score", width: "70px", align: "center", render: (row) => <StatusPill theme={theme} tone={row.score >= 70 ? "good" : "warn"}>{row.score}</StatusPill> },
           { key: "risk", label: "Risk", width: "70px", align: "right", color: (row) => row.risk === "Low" ? theme.green : theme.amber },
         ]}
         rows={rows}
-        selectedKey={selected.symbol}
+        selectedKey={selectedKey}
         onSelect={(row) => selectMainSymbol?.(row.symbol)}
       />
     );
@@ -869,7 +917,7 @@ export default function PremiumWorkspace({
             </PremiumCard>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 390px", gap: 10 }}>{bottomDock}{quickOrder}</div>
           </div>
-          {selectedRail(<><PremiumCard theme={theme} title="Alert Logic / AI Insight"><div style={{ padding: 14, lineHeight: 1.6 }}>{selected.symbol} is approaching a key psychological resistance level with supportive momentum and above-average volume.</div></PremiumCard><PremiumCard theme={theme} title="Recent Alert Activity"><div style={{ padding: 14, display: "grid", gap: 12 }}>{alertRows.slice(0, 3).map((row) => <div key={row.symbol} style={{ display: "flex", justifyContent: "space-between" }}><span>{row.symbol} {row.type}</span><span style={{ color: theme.red }}>{row.status}</span></div>)}</div></PremiumCard></>)}
+          {selectedRail(<><PremiumCard theme={theme} title="Alert Logic / AI Insight"><div style={{ padding: 14, lineHeight: 1.6 }}>{selected.symbol} is approaching a key psychological resistance level with supportive momentum and above-average volume.</div></PremiumCard><PremiumCard theme={theme} title="Recent Alert Activity"><div style={{ padding: 14, display: "grid", gap: 12 }}>{alertRows.slice(0, 3).map((row, index) => <div key={`${row.symbol}-${index}`} style={{ display: "flex", justifyContent: "space-between" }}><span>{row.symbol} {row.type}</span><span style={{ color: theme.red }}>{row.status}</span></div>)}</div></PremiumCard></>)}
         </div>
       </div>
     );
@@ -1206,22 +1254,135 @@ export default function PremiumWorkspace({
         <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "1 / 2" }}>{renderChartGrid?.({ layoutMode: "1" })}</PremiumCard>
         <div style={{ gridColumn: "2 / 3", gridRow: "1 / 4", display: "grid", gap: 10, minHeight: 0 }}>
           <PremiumCard theme={theme} title="My Watchlist" action={<Plus size={16} color={theme.muted} />}>
-          <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true }, { key: "price", label: "Last", width: "90px", align: "right", mono: true, render: (row) => num(row.price).toFixed(2) }, { key: "change", label: "Chg%", width: "80px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) }, { key: "volume", label: "Vol", width: "80px", align: "right", mono: true }]} rows={stocks.slice(0, 7)} selectedKey={selected.symbol} onSelect={(row) => selectMainSymbol?.(row.symbol)} />
+            <PremiumTable
+              theme={theme}
+              columns={[
+                { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
+                { key: "price", label: "Last", width: "90px", align: "right", mono: true, render: (row) => formatPrice(row.price) },
+                { key: "change", label: "Chg%", width: "80px", align: "right", mono: true, color: (row) => toneColor(theme, row.changePercent), render: (row) => formatPercent(row.changePercent) },
+                { key: "volume", label: "Vol", width: "80px", align: "right", mono: true, render: (row) => row.volumeLabel || formatCompactNumber(row.volume, 2) },
+              ]}
+              rows={dashboard.watchlistRows.slice(0, 7)}
+              selectedKey={dashboard.selected.symbol}
+              onSelect={(row) => selectMainSymbol?.(row.symbol)}
+            />
           </PremiumCard>
-          {selectedRail()}
-          <PremiumCard theme={theme} title="Latest News"><div style={{ padding: 14, display: "grid", gap: 12 }}>{headlines.slice(0, 3).map((item) => <div key={item.id}><div style={{ color: theme.muted, fontSize: 11 }}>{item.source}</div><div style={{ color: theme.text, fontSize: 12, lineHeight: 1.4 }}>{item.headline}</div></div>)}</div></PremiumCard>
-          {quickOrder}
+          <DetailRail theme={theme} selected={dashboard.selected} actions={dashboardSelectedActions}>
+            <PremiumCard theme={theme} title="Latest News">
+              <div style={{ padding: 14, display: "grid", gap: 12 }}>
+                {dashboard.newsRows.slice(0, 3).map((item) => {
+                  const content = (
+                    <>
+                      <div style={{ color: theme.muted, fontSize: 11 }}>
+                        <span style={{ fontFamily: terminalMonoFont }}>{item.time}</span> · {item.source}
+                      </div>
+                      <div style={{ color: theme.text, fontSize: 12, lineHeight: 1.4 }}>{item.headline}</div>
+                    </>
+                  );
+                  return item.url ? (
+                    <a
+                      key={item.id}
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: "none", outlineOffset: 3 }}
+                    >
+                      {content}
+                    </a>
+                  ) : (
+                    <div key={item.id}>{content}</div>
+                  );
+                })}
+              </div>
+            </PremiumCard>
+          </DetailRail>
+          <PremiumCard theme={theme} title="Quick Order">
+            <div style={{ padding: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 92px 88px", gap: 8 }}>
+                {["Symbol", "Shares", "Order Type", "Limit Price"].map((label, index) => (
+                  <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase" }}>
+                    {label}
+                    <input
+                      value={index === 0 ? dashboard.selected.symbol : index === 1 ? quantity : index === 2 ? "LIMIT" : formatPrice(dashboard.selected.price)}
+                      onChange={(event) => index === 1 && setQuantity?.(Number(event.target.value) || 1)}
+                      readOnly={index !== 1}
+                      style={{ height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 8px", fontFamily: terminalMonoFont }}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
+                {["BUY", "SELL"].map((side) => (
+                  <ActionButton
+                    key={side}
+                    theme={theme}
+                    good={side === "BUY"}
+                    danger={side === "SELL"}
+                    onClick={() => {
+                      setOrderSide?.(side);
+                      setOrderConfirmed?.(false);
+                      setPremiumDockTab?.("orders");
+                      setOrderMessage?.(`${side} review prepared for ${dashboard.selected.symbol}. This shortcut is review-only.`);
+                    }}
+                  >
+                    {side === "BUY" ? "Buy" : "Sell"}
+                  </ActionButton>
+                ))}
+              </div>
+            </div>
+          </PremiumCard>
         </div>
         <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "2 / 3" }}>
           <div style={{ padding: "12px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <PremiumTabs theme={theme} tabs={["Scanner", "Gainers", "Losers", "Active", "Momentum", "High RVOL", "News", "Earnings"]} active="Gainers" />
             <ActionButton theme={theme}>Save Scan</ActionButton>
           </div>
-          {scannerTable(stocks.slice(0, 5))}
+          {scannerTable(dashboard.scannerRows.slice(0, 5), dashboard.selected.symbol)}
         </PremiumCard>
         <div style={{ gridColumn: "1 / 2", gridRow: "3 / 4", display: "grid", gridTemplateColumns: "minmax(0, 1fr) 240px", gap: 10 }}>
-          {bottomDock}
-          <PremiumCard theme={theme} title="Risk Overview"><div style={{ padding: 12, display: "grid", gap: 10 }}>{["Max Risk/Trade 1.00%", "Daily Loss Limit 3.00%", "Margin Usage 34.6%", "Buying Power $24,850.45"].map((x) => <div key={x} style={{ color: theme.text, fontSize: 12 }}>{x}</div>)}</div></PremiumCard>
+          <PremiumCard theme={theme} style={{ height: 116 }}>
+            <PremiumTabs
+              theme={theme}
+              tabs={[
+                `Positions (${dashboard.positionRows.length})`,
+                `Orders (${dashboard.orders?.length || 0})`,
+                `Alerts (${dashboard.alerts?.length || 0})`,
+                "Executions",
+                "Messages",
+              ]}
+              active={`Positions (${dashboard.positionRows.length})`}
+            />
+            <PremiumTable
+              theme={theme}
+              columns={[
+                { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
+                { key: "side", label: "Side", width: "80px", color: (row) => row.side === "SHORT" ? theme.red : theme.green, mono: true },
+                { key: "quantity", label: "Qty", width: "80px", align: "right", mono: true },
+                { key: "averagePrice", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => formatPrice(row.averagePrice) },
+                { key: "lastPrice", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => formatPrice(row.lastPrice) },
+                { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => toneColor(theme, row.pnl), render: (row) => formatSignedCurrency(row.pnl) },
+              ]}
+              rows={dashboard.positionRows.slice(0, 1)}
+              style={{ maxHeight: 78 }}
+            />
+          </PremiumCard>
+          <PremiumCard theme={theme} title="Risk Overview">
+            <div style={{ padding: 12, display: "grid", gap: 9 }}>
+              {dashboard.riskOverview.map((row) => (
+                <div key={row.label} style={{ display: "grid", gap: 5 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: theme.text, fontSize: 12 }}>
+                    <span>{row.label}</span>
+                    <span style={{ color: row.tone === "good" ? theme.green : row.tone === "warn" ? theme.amber : theme.text, fontFamily: terminalMonoFont }}>
+                      {row.value}
+                    </span>
+                  </div>
+                  <div style={{ height: 4, borderRadius: 99, background: theme.panel2 }}>
+                    <div style={{ width: `${row.percent}%`, height: "100%", borderRadius: 99, background: row.tone === "warn" ? theme.amber : theme.green }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </PremiumCard>
         </div>
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { dashboardMockMarketIndexes } from "../mocks/dashboardMockData";
+
 function parseNumber(value) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
   return Number.isFinite(parsed) ? parsed : null;
@@ -28,17 +30,11 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick }) {
   const monoFont =
     '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const wanted = ["SPY", "QQQ", "DIA", "IWM", "VIX"];
-  const fallback = [
-    { symbol: "SPY", price: 532.48, change: "+0.24%" },
-    { symbol: "QQQ", price: 451.12, change: "+0.38%" },
-    { symbol: "DIA", price: 398.41, change: "+0.20%" },
-    { symbol: "IWM", price: 205.78, change: "-0.07%" },
-    { symbol: "VIX", price: 15.62, change: "-2.19%" },
-  ];
   const rows = wanted.map((symbol, index) => {
     const match = stocks.find((stock) => String(stock.symbol || "").toUpperCase() === symbol);
+    const fallback = dashboardMockMarketIndexes[index];
     return {
-      ...fallback[index],
+      ...fallback,
       ...match,
       symbol,
     };

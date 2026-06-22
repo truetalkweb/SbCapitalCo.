@@ -3585,6 +3585,7 @@ export default function App() {
         orders={orders}
         positions={positions}
         allSymbols={allSymbols}
+        accountSummary={premiumAccountSummary}
         realizedPnL={realizedPnL}
         totalUnrealizedPnL={totalUnrealizedPnL}
         quantity={quantity}

@@ -13,6 +13,7 @@ import {
   parseMarketVolume,
   parsePercent,
 } from "../utils/marketUtils";
+import { normalizeScannerRow, rankScannerRows } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
 
 function normalizeTerminalSymbol(symbol) {
@@ -109,7 +110,13 @@ export function useTerminalSymbols({
     liveStocks[0];
 
   const scannerStocks = useMemo(() => {
-    const fallbackStocks = liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes));
+    const normalizeRows = (rows, source = "Provider Data") =>
+      rankScannerRows(
+        rows
+          .map((stock) => applyLiveQuote(stock, liveQuotes))
+          .map((stock, index) => normalizeScannerRow(stock, { source, updatedAt: stock.lastUpdated }, index))
+      );
+    const fallbackStocks = normalizeRows(liveStocks, "Watchlist Context");
     const scannerUniverse = [
       ...fmpGainers,
       ...fmpLosers,
@@ -119,47 +126,38 @@ export function useTerminalSymbols({
       ...fmpAiMovers,
       ...liveSmallCapMovers,
       ...fallbackStocks,
-    ]
-      .map((stock) => applyLiveQuote(stock, liveQuotes))
-      .filter((stock, index, stocks) =>
-        stock.symbol && stocks.findIndex((item) => item.symbol === stock.symbol) === index
-      );
+    ];
+    const normalizedUniverse = normalizeRows(scannerUniverse, "Scanner Context");
 
     if (scannerTab === "Gainers") {
-      return (fmpGainers.length ? fmpGainers : fallbackStocks)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpGainers.length ? normalizeRows(fmpGainers, "FMP Scanner") : fallbackStocks)
         .sort((a, b) => parsePercent(b.change) - parsePercent(a.change));
     }
 
     if (scannerTab === "Losers") {
-      return (fmpLosers.length ? fmpLosers : fallbackStocks)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpLosers.length ? normalizeRows(fmpLosers, "FMP Scanner") : fallbackStocks)
         .sort((a, b) => parsePercent(a.change) - parsePercent(b.change));
     }
 
     if (scannerTab === "Active") {
-      return (fmpActive.length ? fmpActive : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpActive.length ? normalizeRows(fmpActive, "FMP Scanner") : normalizedUniverse)
         .sort((a, b) => parseMarketVolume(b.volume) - parseMarketVolume(a.volume));
     }
 
     if (scannerTab === "Momentum") {
-      return (fmpMomentum.length ? fmpMomentum : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpMomentum.length ? normalizeRows(fmpMomentum, "FMP Scanner") : normalizedUniverse)
         .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
         .slice(0, 20);
     }
 
     if (scannerTab === "Relative Volume") {
-      return (fmpRelativeVolume.length ? fmpRelativeVolume : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpRelativeVolume.length ? normalizeRows(fmpRelativeVolume, "FMP Scanner") : normalizedUniverse)
         .sort((a, b) => getRelativeVolumeScore(b) - getRelativeVolumeScore(a))
         .slice(0, 20);
     }
 
     if (scannerTab === "AI Movers") {
-      return (fmpAiMovers.length ? fmpAiMovers : scannerUniverse)
-        .map((stock) => applyLiveQuote(stock, liveQuotes))
+      return (fmpAiMovers.length ? normalizeRows(fmpAiMovers, "FMP Scanner") : normalizedUniverse)
         .filter((stock) => parsePercent(stock.change) > 0)
         .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
         .slice(0, 20);

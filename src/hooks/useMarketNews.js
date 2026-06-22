@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { fetchWithTimeout } from "../utils/marketUtils";
 import {
-  createMarketNewsFallback,
-  fetchWithTimeout,
-  normalizePanelNewsItem,
-} from "../utils/marketUtils";
+  cleanConfidenceLabel,
+  createNormalizedNewsFallback,
+  mergeNewsRows,
+  normalizeNewsRow,
+} from "../utils/scannerNewsAdapters";
 
 const DEFAULT_NEWS_META = {
   source: "Backend News",
@@ -18,21 +20,6 @@ const DEFAULT_NEWS_META = {
   providerStatus: null,
   backendTime: null,
 };
-
-function mergeNewsRows(primaryRows, marketRows) {
-  const seen = new Set(primaryRows.map((item) => item.url || item.id || item.headline));
-
-  return [
-    ...primaryRows,
-    ...marketRows.filter((item) => {
-      const key = item.url || item.id || item.headline;
-
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
-  ];
-}
 
 function buildNewsMeta(meta, normalizedRows) {
   const fallbackRows = normalizedRows.filter((item) => item.fallback).length;
@@ -51,6 +38,7 @@ function buildNewsMeta(meta, normalizedRows) {
     statusLabel: meta.statusLabel || null,
     providerStatus: meta.providerStatus || null,
     backendTime: meta.backendTime || null,
+    confidenceLabel: cleanConfidenceLabel(meta),
     fallbackRows,
     rowCount: normalizedRows.length,
   };
@@ -71,7 +59,7 @@ export function getNewsStatusLabel(newsMeta = {}) {
   return "NEWS PENDING";
 }
 
-export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
+export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], limit = 14 }) {
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsMeta, setNewsMeta] = useState(DEFAULT_NEWS_META);
@@ -139,13 +127,15 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
         }
 
         const normalizedRows = rows
-          .map((item, index) => normalizePanelNewsItem(item, index, selectedStock))
+          .map((item, index) => normalizeNewsRow(item, index, selectedStock))
           .filter(Boolean)
           .sort((a, b) => Number(a.fallback) - Number(b.fallback))
           .slice(0, limit);
 
         if (!cancelled()) {
-          const nextNews = normalizedRows.length ? normalizedRows : createMarketNewsFallback(selectedStock);
+          const nextNews = normalizedRows.length
+            ? normalizedRows
+            : createNormalizedNewsFallback(selectedStock, scannerRows);
 
           setNews(nextNews);
           setNewsMeta(buildNewsMeta({
@@ -159,7 +149,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
         }
       } catch {
         if (!cancelled()) {
-          const fallbackRows = createMarketNewsFallback(selectedStock);
+          const fallbackRows = createNormalizedNewsFallback(selectedStock, scannerRows);
 
           setNews(fallbackRows);
           setNewsMeta({
@@ -177,7 +167,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, limit = 14 }) {
         setNewsLoading(false);
       }
     },
-    [brokerApiUrl, limit, selectedStock]
+    [brokerApiUrl, limit, scannerRows, selectedStock]
   );
 
   useEffect(() => {

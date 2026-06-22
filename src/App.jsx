@@ -523,6 +523,7 @@ export default function App() {
   } = useMarketNews({
     selectedStock,
     brokerApiUrl: BROKER_API_URL,
+    scannerRows: scannerStocks,
   });
 
   const {

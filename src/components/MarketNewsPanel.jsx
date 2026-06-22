@@ -3,6 +3,7 @@ import { getNewsStatusLabel } from "../hooks/useMarketNews";
 import { terminalSansFont } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { formatTerminalStatusLabel } from "../utils/marketUtils";
+import { cleanConfidenceLabel } from "../utils/scannerNewsAdapters";
 
 function getStatusColor(label, theme) {
   const value = String(label || "").toUpperCase();
@@ -68,17 +69,13 @@ export default function MarketNewsPanel({
   terminalMonoFont,
 }) {
   const isDark = theme.isDark !== false;
-  const statusLabel = getNewsStatusLabel(newsMeta);
+  const statusLabel = newsMeta.confidenceLabel || cleanConfidenceLabel(newsMeta) || getNewsStatusLabel(newsMeta);
   const statusColor = getStatusColor(statusLabel, theme);
   const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
   const visibleMessage = rawVisibleMessage
     ? getCleanProviderMessage(rawVisibleMessage, "Provider limited. Showing available headlines or fallback context.")
     : null;
-  const diagnosticsTitle = [
-    visibleMessage,
-    newsMeta.warning,
-    ...(newsMeta.providerWarnings || []),
-  ].filter(Boolean).join("; ") || newsMeta.source;
+  const diagnosticsTitle = visibleMessage || formatTerminalStatusLabel(statusLabel);
   const rowCountLabel = `${news.length} ${news.length === 1 ? "row" : "rows"}`;
 
   return (
@@ -138,21 +135,17 @@ export default function MarketNewsPanel({
           title={diagnosticsTitle}
         >
           <span
-            aria-hidden="true"
             style={{
               fontFamily: terminalMonoFont,
               fontVariantNumeric: "tabular-nums",
               color: statusColor,
-              border: "none",
-              padding: 0,
-              background: "transparent",
+              border: `1px solid ${statusColor}55`,
+              padding: "3px 8px",
+              background: `${statusColor}12`,
+              borderRadius: "999px",
               fontSize: "9px",
               fontWeight: 850,
               whiteSpace: "nowrap",
-              width: 0,
-              height: 0,
-              opacity: 0,
-              overflow: "hidden",
             }}
           >
             {formatTerminalStatusLabel(statusLabel)}

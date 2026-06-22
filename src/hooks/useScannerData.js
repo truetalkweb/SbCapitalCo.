@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithTimeout } from "../utils/marketUtils";
+import { cleanConfidenceLabel, normalizeScannerGroups } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
 
 const emptyScannerGroups = {
@@ -39,6 +40,8 @@ const scannerUnavailableMeta = {
 };
 
 function buildScannerMeta(data) {
+  const confidenceLabel = cleanConfidenceLabel(data);
+
   return {
     source: data.source || "FMP SCANNER",
     provider: data.provider || data.source || "Scanner Engine",
@@ -56,6 +59,7 @@ function buildScannerMeta(data) {
     statusLabel: data.statusLabel || null,
     providerStatus: data.providerStatus || null,
     backendTime: data.backendTime || null,
+    confidenceLabel,
     lastWarning: data.lastWarning || data.warning || data.primaryScannerError || null,
   };
 }
@@ -89,8 +93,8 @@ export function useScannerData({ brokerApiUrl, onActivity }) {
       }
 
       const data = await response.json();
-
-      setScannerGroups({
+      const nextMeta = buildScannerMeta(data);
+      const normalizedGroups = normalizeScannerGroups({
         gainers: data.gainers || [],
         losers: data.losers || [],
         active: data.active || [],
@@ -98,8 +102,10 @@ export function useScannerData({ brokerApiUrl, onActivity }) {
         relativeVolume: data.relativeVolume || [],
         aiMovers: data.aiMovers || [],
         smallCaps: data.smallCaps || [],
-      });
-      setScannerMeta(buildScannerMeta(data));
+      }, nextMeta);
+
+      setScannerGroups(normalizedGroups);
+      setScannerMeta(nextMeta);
       onActivity?.({
         type: "scanner",
         status: data.degraded ? "degraded" : "success",
@@ -107,8 +113,11 @@ export function useScannerData({ brokerApiUrl, onActivity }) {
         detail: `${data.source || "FMP SCANNER"} returned ${getScannerRowCount(data)} ranked rows.`,
       });
     } catch {
-      setScannerGroups(emptyScannerGroups);
-      setScannerMeta(scannerUnavailableMeta);
+      setScannerGroups(normalizeScannerGroups(emptyScannerGroups, scannerUnavailableMeta));
+      setScannerMeta({
+        ...scannerUnavailableMeta,
+        confidenceLabel: "Fallback Context",
+      });
       onActivity?.({
         type: "scanner",
         status: "failed",

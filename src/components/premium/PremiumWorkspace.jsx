@@ -22,6 +22,12 @@ import {
   formatPrice,
   formatSignedCurrency,
 } from "../../utils/dashboardFormatters";
+import {
+  createNormalizedNewsFallback,
+  normalizeNewsRow,
+  normalizeScannerRow,
+  rankScannerRows,
+} from "../../utils/scannerNewsAdapters";
 
 function num(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
@@ -294,7 +300,7 @@ function PremiumTable({ theme, columns, rows, selectedKey, onSelect, keyField = 
               borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
               background: selected ? "linear-gradient(90deg, rgba(45,140,255,0.30), rgba(45,140,255,0.04))" : "transparent",
               color: theme.text,
-              cursor: "pointer",
+              cursor: onSelect ? "pointer" : "default",
               textAlign: "left",
               outlineOffset: -2,
             }}
@@ -439,10 +445,16 @@ function buildStocks(liveStocks, scannerStocks, selectedStockData) {
     { symbol: "PLTR", name: "Palantir Technologies Inc.", price: 24.85, change: "+1.79%", volume: "38.16M", rvol: "2.9x", float: "2.09B", sector: "Technology", setup: "Uptrend", score: 69, risk: "Med" },
     { symbol: "META", name: "Meta Platforms, Inc.", price: 502.31, change: "+0.92%", volume: "13.58M", rvol: "1.2x", float: "2.61B", sector: "Communication Services", setup: "Trend", score: 58, risk: "Med" },
     { symbol: "AMZN", name: "Amazon.com, Inc.", price: 181.9, change: "+1.23%", volume: "22.11M", rvol: "1.4x", float: "10.45B", sector: "Consumer Cyclical", setup: "Bullish", score: 57, risk: "Low" },
-    { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", price: 532.48, change: "+0.24%", volume: "62.74M", rvol: "0.9x", float: "-", sector: "ETF", setup: "Neutral", score: 52, risk: "Low" },
+    { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", price: 532.48, change: "+0.24%", volume: "62.74M", rvol: "0.9x", float: "ETF", sector: "ETF", setup: "Neutral", score: 52, risk: "Low" },
   ];
   const bySymbol = new Map(base.map((row) => [row.symbol, row]));
-  [...(liveStocks || []), ...(scannerStocks || []), selectedStockData].filter(Boolean).forEach((stock) => {
+  const cleanScannerRows = rankScannerRows(
+    [...(scannerStocks || []), ...(liveStocks || []), selectedStockData]
+      .filter(Boolean)
+      .map((stock, index) => normalizeScannerRow(stock, { source: stock.source || "Terminal Data", updatedAt: stock.lastUpdated }, index))
+  );
+
+  cleanScannerRows.forEach((stock) => {
     const symbol = String(stock.symbol || "").toUpperCase();
     if (!symbol) return;
     bySymbol.set(symbol, {
@@ -459,31 +471,20 @@ function buildStocks(liveStocks, scannerStocks, selectedStockData) {
       setup: stock.catalyst || stock.setup || bySymbol.get(symbol)?.setup || "News",
       score: stock.score10 || stock.score || bySymbol.get(symbol)?.score || 61,
       risk: stock.risk || stock.riskLabel || bySymbol.get(symbol)?.risk || "Context",
+      gapPercent: stock.gapPercent,
+      catalyst: stock.catalyst,
+      whyMoving: stock.whyMoving,
     });
   });
   return Array.from(bySymbol.values()).slice(0, 16);
 }
 
 function makeNews(news, selectedSymbol) {
-  const fallback = [
-    ["09:32 AM", "Apple unveils AI-powered upgrades across iPhone, Mac, and iOS", "AAPL", "Bloomberg", "High", "Bullish"],
-    ["09:21 AM", "Nvidia reports record data center demand; raises Q2 guidance", "NVDA", "CNBC", "High", "Bullish"],
-    ["09:10 AM", "Tesla delivers upbeat Q1 update; reiterates 2025 growth targets", "TSLA", "Reuters", "High", "Bullish"],
-    ["08:58 AM", "Coinbase to join S&P 500 effective May 19", "COIN", "WSJ", "High", "Bullish"],
-    ["08:45 AM", "SoFi Technologies posts strong member growth in Q1", "SOFI", "Benzinga", "Medium", "Bullish"],
-    ["08:34 AM", "AMD announces MI300X shipments ramp; AI demand surging", "AMD", "CNBC", "High", "Bullish"],
-    ["08:22 AM", "Fed's Williams: inflation progress slower, rates must stay higher", "-", "Reuters", "High", "Bearish"],
-  ].map(([time, headline, symbol, source, impact, sentiment], index) => ({ id: `fallback-news-${index}`, time, headline, symbol, source, impact, sentiment }));
   const real = (news || []).map((item, index) => ({
-    id: item.id || `news-${index}`,
-    time: item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.time || "Market",
-    headline: item.headline || item.summary || "Market headline",
-    symbol: item.relatedTicker || item.symbol || selectedSymbol,
-    source: item.source || "Market News",
-    impact: item.impact || (index % 3 === 0 ? "High" : "Medium"),
-    sentiment: item.sentiment || (index % 5 === 0 ? "Bearish" : "Bullish"),
-    url: item.url,
-  }));
+    ...normalizeNewsRow(item, index, selectedSymbol),
+  })).filter((item) => item?.headline);
+  const fallback = createNormalizedNewsFallback(selectedSymbol);
+
   return (real.length ? real : fallback).slice(0, 12);
 }
 
@@ -884,7 +885,23 @@ export default function PremiumWorkspace({
                 <PremiumTabs theme={theme} tabs={["Top News", "Market", "Stocks", "Earnings", "Macro", "Analyst", "Crypto", "Watchlist", "+"]} active="Top News" />
                 <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." items={["Impact: All", "Source: All", "Sector: All", "Time: Today"]} /></div>
               </div>
-              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px", mono: true }, { key: "headline", label: "Headline", width: "2fr", strong: true }, { key: "symbol", label: "Symbol", width: "80px", mono: true }, { key: "source", label: "Source", width: "120px" }, { key: "impact", label: "Impact", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.impact === "High" ? "bad" : "warn"}>{row.impact}</StatusPill> }, { key: "sentiment", label: "Sentiment", width: "100px", color: (row) => row.sentiment === "Bearish" ? theme.red : theme.green }]} rows={headlines} selectedKey={selectedStory.id} keyField="id" />
+              <PremiumTable
+                theme={theme}
+                columns={[
+                  { key: "time", label: "Time", width: "90px", mono: true },
+                  { key: "headline", label: "Headline", width: "2fr", strong: true, render: (row) => <>{row.headline}{row.url && <span style={{ color: theme.blue, fontSize: 10, marginLeft: 5 }}>OPEN</span>}</> },
+                  { key: "symbol", label: "Symbol", width: "80px", mono: true },
+                  { key: "source", label: "Source", width: "120px" },
+                  { key: "impact", label: "Impact", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.impact === "High" ? "bad" : "warn"}>{row.impact}</StatusPill> },
+                  { key: "sentiment", label: "Sentiment", width: "100px", color: (row) => row.sentiment === "Bearish" ? theme.red : theme.green },
+                ]}
+                rows={headlines}
+                selectedKey={selectedStory.id}
+                keyField="id"
+                onSelect={(row) => {
+                  if (row.url) window.open(row.url, "_blank", "noopener,noreferrer");
+                }}
+              />
             </PremiumCard>
             <PremiumCard theme={theme} title="Watchlist News">{scannerTable(stocks.slice(0, 4))}</PremiumCard>
           </div>

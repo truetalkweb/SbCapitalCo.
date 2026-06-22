@@ -1,3 +1,5 @@
+import { createNormalizedNewsFallback } from "./scannerNewsAdapters";
+
 export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -158,41 +160,7 @@ export function buildDataConfidence({
 }
 
 export function createMarketNewsFallback(selectedSymbol) {
-  const symbol = selectedSymbol || "MARKET";
-  const now = Date.now();
-
-  return [
-    {
-      id: `${symbol}-fallback-catalyst`,
-      time: formatNewsTime(now),
-      source: "Scanner Catalyst",
-      text: `${symbol} catalyst feed is degraded; scanner context is standing in until live headlines return.`,
-      url: null,
-      relatedTicker: symbol,
-      summary: "Backend news providers did not return a confirmed article for this request.",
-      fallback: true,
-    },
-    {
-      id: `${symbol}-fallback-volume`,
-      time: formatNewsTime(now - 60_000),
-      source: "Scanner Catalyst",
-      text: `${symbol} remains on watch for relative volume, spread, and tape confirmation.`,
-      url: null,
-      relatedTicker: symbol,
-      summary: "Fallback scanner row; use chart and quote confirmation before trading.",
-      fallback: true,
-    },
-    {
-      id: `${symbol}-fallback-market`,
-      time: formatNewsTime(now - 120_000),
-      source: "Fallback",
-      text: "Broad market news is temporarily unavailable from the backend feed.",
-      url: null,
-      relatedTicker: "MARKET",
-      summary: "Provider failure fallback.",
-      fallback: true,
-    },
-  ];
+  return createNormalizedNewsFallback(selectedSymbol);
 }
 
 export function parsePercent(value) {

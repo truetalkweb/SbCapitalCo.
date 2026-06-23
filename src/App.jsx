@@ -3600,6 +3600,10 @@ export default function App() {
         removeWatchlistSymbol={removeWatchlistSymbol}
         scannerTab={scannerTab}
         setScannerTab={setScannerTab}
+        timeframe={timeframe}
+        setTimeframe={setTimeframe}
+        chartIndicators={chartIndicators}
+        setChartIndicators={setChartIndicators}
         themeMode={themeMode}
         setThemeMode={setThemeMode}
         activePreset={activePreset}

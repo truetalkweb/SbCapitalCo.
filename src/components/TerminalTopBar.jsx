@@ -270,10 +270,11 @@ export default function TerminalTopBar({
     const cleanSymbol = String(value || "").trim().toUpperCase();
 
     if (!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(cleanSymbol)) {
-      return;
+      return false;
     }
 
     onSymbolCommit?.(cleanSymbol);
+    return true;
   }
 
   return (
@@ -337,10 +338,16 @@ export default function TerminalTopBar({
           onChange={(event) => {
             event.currentTarget.value = event.currentTarget.value.toUpperCase();
           }}
-          onBlur={(event) => commitSymbol(event.currentTarget.value)}
+          onBlur={(event) => {
+            if (!commitSymbol(event.currentTarget.value)) {
+              event.currentTarget.value = selectedSymbol || "";
+            }
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              commitSymbol(event.currentTarget.value);
+              if (!commitSymbol(event.currentTarget.value)) {
+                event.currentTarget.value = selectedSymbol || "";
+              }
               event.currentTarget.blur();
             }
           }}

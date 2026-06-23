@@ -23,7 +23,10 @@ export function useTerminalWorkspace({
     !loadSetting(focusedTerminalMigrationKey, false);
 
   const [activeWorkspace, setActiveWorkspace] = useState(() =>
-    requestedPreset?.activeWorkspace || (useFocusedDefault ? "charts" : loadSetting("sb_active_workspace", "charts"))
+    requestedPreset?.activeWorkspace ||
+    (useFocusedDefault
+      ? "charts"
+      : loadSetting("sb_default_landing_tab", loadSetting("sb_active_workspace", "charts")))
   );
   const [layoutMode, setLayoutMode] = useState(() =>
     requestedPreset?.layoutMode || (useFocusedDefault ? "1" : loadSetting("sb_layout_mode", "1"))

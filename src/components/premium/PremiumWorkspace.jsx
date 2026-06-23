@@ -29,6 +29,7 @@ import {
   normalizeScannerRow,
   rankScannerRows,
 } from "../../utils/scannerNewsAdapters";
+import { loadSetting, saveSetting } from "../../utils/storage";
 
 function num(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
@@ -294,6 +295,12 @@ function PremiumTable({ theme, columns, rows, selectedKey, onSelect, keyField = 
           <button
             key={rowKey}
             type="button"
+            data-premium-row="true"
+            data-row-key={String(rowValue)}
+            data-symbol={row.symbol || undefined}
+            data-url={row.url || undefined}
+            aria-selected={selected}
+            aria-label={`Select ${row.symbol || row.headline || rowValue}`}
             onClick={() => onSelect?.(row)}
             style={{
               width: "100%",
@@ -623,7 +630,12 @@ export default function PremiumWorkspace({
   addSymbolToWatchlist,
   scannerTab,
   setScannerTab,
+  timeframe,
+  setTimeframe,
+  chartIndicators,
+  setChartIndicators,
   themeMode,
+  setThemeMode,
   user,
   saveWorkspaceToCloud,
   loadWorkspaceFromCloud,
@@ -723,6 +735,10 @@ export default function PremiumWorkspace({
   const [selectedAlertSymbol, setSelectedAlertSymbol] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedPositionSymbol, setSelectedPositionSymbol] = useState(null);
+  const [defaultLandingTab, setDefaultLandingTab] = useState(() => loadSetting("sb_default_landing_tab", activeWorkspace || "dashboard"));
+  const [compactMode, setCompactMode] = useState(() => loadSetting("sb_compact_mode", false));
+  const [scannerAutoRefresh, setScannerAutoRefresh] = useState(() => loadSetting("sb_scanner_auto_refresh", true));
+  const [relativeVolumeThreshold, setRelativeVolumeThreshold] = useState(() => loadSetting("sb_relative_volume_threshold", "1.50"));
   const selectedStory = headlines.find((item) => item.id === selectedNewsId) || headlines.find((item) => item.symbol === selected.symbol) || headlines[0];
   const selectedAlert = alertRows.find((row) => row.symbol === selectedAlertSymbol) || alertRows.find((row) => row.symbol === selected.symbol) || alertRows[0];
   const selectedOrder = orderRows.find((row) => row.id === selectedOrderId) || orderRows.find((row) => row.symbol === selected.symbol) || orderRows[0];
@@ -1390,26 +1406,133 @@ export default function PremiumWorkspace({
   }
 
   if (activeWorkspace === "settings") {
-    const settingSelect = (value) => <select value={value} readOnly style={{ width: 160, height: 28, background: theme.panel2, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, color: theme.text, padding: "0 8px" }}><option>{value}</option></select>;
-    const settingToggle = (on = true) => <span style={{ width: 32, height: 18, borderRadius: 99, background: on ? theme.blue : theme.border, display: "inline-flex", justifyContent: on ? "flex-end" : "flex-start", padding: 2 }}><span style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff" }} /></span>;
-    const group = (title, rows) => <PremiumCard theme={theme} title={title}><div style={{ padding: 16, display: "grid", gap: 12 }}>{rows.map(([label, control]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "220px 1fr", alignItems: "center", color: theme.muted, fontSize: 12 }}><span>{label}</span><span>{control}</span></div>)}</div></PremiumCard>;
+    const selectStyle = {
+      width: 170,
+      height: 30,
+      background: theme.panel2,
+      border: `1px solid ${theme.borderSoft || theme.border}`,
+      borderRadius: 5,
+      color: theme.text,
+      padding: "0 8px",
+      fontFamily: terminalSansFont,
+    };
+    const landingOptions = [
+      ["dashboard", "Dashboard"],
+      ["scanner", "Scanner"],
+      ["chart-analysis", "Charts"],
+      ["watchlist", "Watchlist"],
+      ["news", "News"],
+      ["alerts", "Alerts"],
+      ["orders", "Orders"],
+      ["positions", "Positions"],
+      ["risk", "Risk"],
+      ["performance", "Performance"],
+      ["journal", "Journal"],
+      ["replay", "Replay"],
+      ["settings", "Settings"],
+    ];
+    const settingSelect = (value, options, onChange, disabled = false) => (
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange?.(event.target.value)}
+        style={{ ...selectStyle, opacity: disabled ? 0.55 : 1, cursor: disabled ? "not-allowed" : "pointer" }}
+      >
+        {options.map((option) => {
+          const [optionValue, optionLabel] = Array.isArray(option) ? option : [option, option];
+          return <option key={optionValue} value={optionValue}>{optionLabel}</option>;
+        })}
+      </select>
+    );
+    const settingToggle = (on = true, onChange, disabled = false) => (
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={Boolean(on)}
+        onClick={() => !disabled && onChange?.(!on)}
+        style={{
+          width: 36,
+          height: 20,
+          borderRadius: 99,
+          border: `1px solid ${on ? theme.blue : theme.borderSoft || theme.border}`,
+          background: on ? theme.blue : theme.border,
+          display: "inline-flex",
+          justifyContent: on ? "flex-end" : "flex-start",
+          alignItems: "center",
+          padding: 2,
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.55 : 1,
+        }}
+      >
+        <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#fff" }} />
+      </button>
+    );
+    const disabledSetting = (text = "Coming later") => <span style={{ color: theme.muted, fontSize: 11 }}>{text}</span>;
+    const comingLaterButton = (label, title) => (
+      <ActionButton key={label} theme={theme} disabled title={title || `${label} requires backend/account support`}>
+        {label}
+      </ActionButton>
+    );
+    const group = (title, rows) => (
+      <PremiumCard theme={theme} title={title}>
+        <div style={{ padding: 16, display: "grid", gap: 12 }}>
+          {rows.map(([label, control]) => (
+            <div key={label} style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", alignItems: "center", color: theme.muted, fontSize: 12, gap: 12 }}>
+              <span>{label}</span>
+              <span>{control}</span>
+            </div>
+          ))}
+        </div>
+      </PremiumCard>
+    );
     return (
       <div style={page}>
         <SectionTitle theme={theme} title="Settings" />
         <PremiumTabs theme={theme} tabs={["General", "Trading", "Layout", "Notifications", "Data & Connections", "Security"]} active="General" />
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.05fr) minmax(360px, 0.9fr)", gap: 10, marginTop: 12 }}>
           <div style={{ display: "grid", gap: 10 }}>
-            {group("Workspace Preferences", [["Theme", settingSelect(themeMode === "dark" ? "Dark" : "Light")], ["Compact mode", settingToggle(false)], ["Default landing tab", settingSelect("Dashboard")], ["Time zone", settingSelect("Pacific (PT)")], ["Currency display", settingSelect("USD")]])}
-            {group("Trading Preferences", [["Default order type", settingSelect("Limit")], ["Confirm before order", settingToggle(true)], ["Default TIF", settingSelect("Day")], ["Hotkeys enabled", settingToggle(true)], ["Risk warnings enabled", settingToggle(true)]])}
-            {group("Chart & Scanner Defaults", [["Default chart timeframe", settingSelect("1D")], ["Show volume", settingToggle(true)], ["Scanner auto refresh", settingToggle(true)], ["Default universe", settingSelect("US Stocks")], ["Relative volume threshold", settingSelect("1.50")]])}
+            {group("Workspace Preferences", [
+              ["Theme", settingSelect(themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
+              ["Compact mode", settingToggle(compactMode, (value) => { setCompactMode(value); saveSetting("sb_compact_mode", value); setOrderMessage?.(`Compact mode ${value ? "enabled" : "disabled"} for future workspace polish.`); })],
+              ["Default landing tab", settingSelect(defaultLandingTab, landingOptions, (value) => { setDefaultLandingTab(value); saveSetting("sb_default_landing_tab", value); setOrderMessage?.(`Default landing tab saved: ${landingOptions.find(([id]) => id === value)?.[1] || value}.`); })],
+              ["Time zone", settingSelect("America/Vancouver", [["America/Vancouver", "Pacific (PT)"]], null, true)],
+              ["Currency display", settingSelect("USD", ["USD"], null, true)],
+            ])}
+            {group("Trading Preferences", [
+              ["Default order type", disabledSetting("Review-only until broker execution is enabled")],
+              ["Confirm before order", settingToggle(true, null, true)],
+              ["Default TIF", disabledSetting("Review-only")],
+              ["Hotkeys enabled", disabledSetting()],
+              ["Risk warnings enabled", settingToggle(true, null, true)],
+            ])}
+            {group("Chart & Scanner Defaults", [
+              ["Default chart timeframe", settingSelect(timeframe || "15m", ["1m", "5m", "15m", "1H", "1D"], (value) => setTimeframe?.(value))],
+              ["Show volume", settingToggle(Boolean(chartIndicators?.volume), (value) => setChartIndicators?.((current) => ({ ...current, volume: value })))],
+              ["Scanner auto refresh", settingToggle(scannerAutoRefresh, (value) => { setScannerAutoRefresh(value); saveSetting("sb_scanner_auto_refresh", value); setOrderMessage?.(`Scanner auto refresh ${value ? "enabled" : "paused"} locally.`); })],
+              ["Default universe", disabledSetting("US stocks only in this MVP")],
+              ["Relative volume threshold", settingSelect(relativeVolumeThreshold, ["1.25", "1.50", "2.00", "3.00"], (value) => { setRelativeVolumeThreshold(value); saveSetting("sb_relative_volume_threshold", value); })],
+            ])}
             <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>{["Trader", "Research", "Minimal", "Risk"].map((x, i) => <button key={x} type="button" onClick={() => setOrderMessage?.(`${x} layout preset selected for local review.`)} style={{ minHeight: 72, border: `1px solid ${i === 0 ? theme.blue : theme.borderSoft}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12, cursor: "pointer" }}>{x}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>Chart, Watchlist, Orders</div></button>)}</div></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="good">Live</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} disabled title="Connection management stays in backend/Railway settings">Manage Connection</ActionButton> <ActionButton theme={theme} onClick={() => setOrderMessage?.("Refresh backend status from the main health controls.")}><RefreshCw size={14} /></ActionButton></span>]])}
-            {group("Notification Settings", [["Price alerts", settingToggle(true)], ["Order fills", settingToggle(true)], ["News catalyst alerts", settingToggle(true)], ["Daily summary email", settingToggle(true)], ["Sound alerts", settingToggle(true)]])}
-            {group("Security", [["Two-factor authentication", <StatusPill key="s" theme={theme} tone="good">Enabled</StatusPill>], ["Login session timeout", settingSelect("30 minutes")], ["Device management", <ActionButton key="m" theme={theme} disabled title="Device management requires auth backend work">Manage Devices</ActionButton>], ["Password", <ActionButton key="p" theme={theme} disabled title="Password changes require auth backend work">Change Password</ActionButton>]])}
-            {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", "June 8, 2024 05:12 AM ET"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]])}
-            <PremiumCard theme={theme} title="Recent Changes"><div style={{ padding: 14, display: "grid", gap: 10 }}>{["Daily summary email Enabled", "Default order type Limit", "Scanner auto refresh Enabled", "Layout preset Trader"].map((x) => <div key={x} style={{ color: theme.text }}><span style={{ color: theme.green }}>*</span> {x}</div>)}</div></PremiumCard>
+            {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} disabled title="Connection management stays in backend/Railway settings">Manage Connection</ActionButton> <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use the top Retry control to refresh provider health.")}><RefreshCw size={14} /></ActionButton></span>]])}
+            {group("Notification Settings", [["Price alerts", disabledSetting("Coming later")], ["Order fills", disabledSetting("Requires broker execution")], ["News catalyst alerts", disabledSetting("Coming later")], ["Daily summary email", disabledSetting("Coming later")], ["Sound alerts", disabledSetting("Coming later")]])}
+            {group("Security", [["Two-factor authentication", disabledSetting("Requires auth backend")], ["Login session timeout", disabledSetting("Requires auth backend")], ["Device management", comingLaterButton("Coming Later", "Device management requires auth backend work")], ["Password", comingLaterButton("Coming Later", "Password changes require auth backend work")]])}
+            {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", user ? "Use Save to update cloud workspace" : "Local browser storage only"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]])}
+            <PremiumCard theme={theme} title="Current Local Preferences">
+              <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                {[
+                  `Theme: ${themeMode || "dark"}`,
+                  `Default landing: ${landingOptions.find(([id]) => id === defaultLandingTab)?.[1] || defaultLandingTab}`,
+                  `Chart timeframe: ${timeframe || "15m"}`,
+                  `Scanner auto refresh: ${scannerAutoRefresh ? "On" : "Paused"}`,
+                ].map((x) => (
+                  <div key={x} style={{ color: theme.text }}>
+                    <span style={{ color: theme.green }}>*</span> {x}
+                  </div>
+                ))}
+              </div>
+            </PremiumCard>
           </div>
         </div>
       </div>

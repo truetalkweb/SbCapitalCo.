@@ -847,6 +847,43 @@ export default function PremiumWorkspace({
     );
   }
 
+  function dashboardScannerTable(rows = dashboard.scannerRows.slice(0, 3), selectedKey = dashboard.selected.symbol) {
+    return (
+      <PremiumTable
+        theme={theme}
+        columns={[
+          {
+            key: "symbol",
+            label: "Symbol",
+            width: "1.15fr",
+            mono: true,
+            strong: true,
+            render: (row) => (
+              <>
+                {row.symbol}
+                <span style={{ display: "block", color: theme.muted, fontFamily: terminalSansFont, fontSize: 10, fontWeight: 500 }}>
+                  {row.catalyst || row.setup || "Market context"}
+                </span>
+              </>
+            ),
+          },
+          { key: "price", label: "Price", width: "78px", align: "right", mono: true, render: (row) => num(row.price).toFixed(2) },
+          { key: "change", label: "Chg%", width: "76px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) },
+          { key: "rvol", label: "RVOL", width: "58px", align: "right", mono: true, render: (row) => row.rvolLabel || row.rvol || formatMultiple(row.relativeVolume) },
+          { key: "score", label: "Score", width: "58px", align: "center", render: (row) => <StatusPill theme={theme} tone={row.score >= 70 ? "good" : "warn"}>{row.score}</StatusPill> },
+        ]}
+        rows={rows}
+        selectedKey={selectedKey}
+        onSelect={(row) => selectMainSymbol?.(row.symbol)}
+        style={{ height: "calc(100% - 51px)", overflowX: "hidden" }}
+        rowMinHeight={34}
+        headerMinHeight={28}
+        cellPadding="0 10px"
+        columnGap={8}
+      />
+    );
+  }
+
   function selectedRail(extra = null) {
     return (
       <DetailRail theme={theme} selected={selected} actions={selectedActions}>
@@ -1502,13 +1539,7 @@ export default function PremiumWorkspace({
             <PremiumTabs theme={theme} tabs={["Scanner", "Gainers", "Losers", "Active", "Momentum", "High RVOL", "News", "Earnings"]} active="Gainers" />
             <ActionButton theme={theme} onClick={() => setOrderMessage?.(`Scanner view saved locally for ${selected.symbol}.`)}>Save Scan</ActionButton>
           </div>
-          {scannerTable(dashboard.scannerRows.slice(0, 4), dashboard.selected.symbol, {
-            style: { height: "calc(100% - 51px)" },
-            rowMinHeight: 38,
-            headerMinHeight: 32,
-            cellPadding: "0 12px",
-            columnGap: 10,
-          })}
+          {dashboardScannerTable()}
         </PremiumCard>
         <div style={{ gridColumn: "1 / 2", gridRow: "3 / 4", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, 340px)", gap: 9, minHeight: 0 }}>
           <PremiumCard theme={theme} style={{ minHeight: 0 }}>

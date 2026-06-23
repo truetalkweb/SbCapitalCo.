@@ -823,7 +823,7 @@ export default function PremiumWorkspace({
       </ActionButton>
     </div>
   );
-  function scannerTable(rows = stocks.slice(0, 8), selectedKey = selected.symbol) {
+  function scannerTable(rows = stocks.slice(0, 8), selectedKey = selected.symbol, tableProps = {}) {
     return (
       <PremiumTable
         theme={theme}
@@ -842,6 +842,7 @@ export default function PremiumWorkspace({
         rows={rows}
         selectedKey={selectedKey}
         onSelect={(row) => selectMainSymbol?.(row.symbol)}
+        {...tableProps}
       />
     );
   }
@@ -1397,7 +1398,7 @@ export default function PremiumWorkspace({
           gridTemplateRows: "minmax(500px, 1fr) minmax(168px, 188px) 148px",
           gap: 9,
           height: "100%",
-          minHeight: 0,
+          minHeight: 900,
         }}
       >
         <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "1 / 2" }}>
@@ -1418,17 +1419,17 @@ export default function PremiumWorkspace({
               theme={theme}
               columns={[
                 { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
-                { key: "price", label: "Last", width: "90px", align: "right", mono: true, render: (row) => formatPrice(row.price) },
-                { key: "change", label: "Chg%", width: "80px", align: "right", mono: true, color: (row) => toneColor(theme, row.changePercent), render: (row) => formatPercent(row.changePercent) },
-                { key: "volume", label: "Vol", width: "80px", align: "right", mono: true, render: (row) => row.volumeLabel || formatCompactNumber(row.volume, 2) },
+                { key: "price", label: "Last", width: "76px", align: "right", mono: true, render: (row) => formatPrice(row.price) },
+                { key: "change", label: "Chg%", width: "70px", align: "right", mono: true, color: (row) => toneColor(theme, row.changePercent), render: (row) => formatPercent(row.changePercent) },
+                { key: "volume", label: "Vol", width: "64px", align: "right", mono: true, render: (row) => row.volumeLabel || formatCompactNumber(row.volume, 2) },
               ]}
               rows={dashboard.watchlistRows.slice(0, 5)}
               selectedKey={dashboard.selected.symbol}
               onSelect={(row) => selectMainSymbol?.(row.symbol)}
               rowMinHeight={36}
               headerMinHeight={32}
-              cellPadding="0 12px"
-              columnGap={10}
+              cellPadding="0 10px"
+              columnGap={8}
             />
           </PremiumCard>
           <DetailRail theme={theme} selected={dashboard.selected} compact detailStats={selectedDetailStats}>
@@ -1460,17 +1461,17 @@ export default function PremiumWorkspace({
               </div>
             </PremiumCard>
           </DetailRail>
-          <PremiumCard theme={theme} title="Quick Order">
+          <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0 }}>
             <div style={{ padding: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 76px 96px", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 64px 78px", gap: 8, minWidth: 0 }}>
                 {["Symbol", "Shares", "Order Type"].map((label, index) => (
-                  <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase" }}>
+                  <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase", minWidth: 0 }}>
                     {label}
                     <input
                       value={index === 0 ? dashboard.selected.symbol : index === 1 ? quantity : "LIMIT"}
                       onChange={(event) => index === 1 && setQuantity?.(Number(event.target.value) || 1)}
                       readOnly={index !== 1}
-                      style={{ height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 8px", fontFamily: terminalMonoFont }}
+                      style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 8px", fontFamily: terminalMonoFont }}
                     />
                   </label>
                 ))}
@@ -1496,12 +1497,18 @@ export default function PremiumWorkspace({
             </div>
           </PremiumCard>
         </div>
-        <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "2 / 3" }}>
+        <PremiumCard theme={theme} style={{ gridColumn: "1 / 2", gridRow: "2 / 3", minHeight: 0, overflow: "hidden" }}>
           <div style={{ padding: "10px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
             <PremiumTabs theme={theme} tabs={["Scanner", "Gainers", "Losers", "Active", "Momentum", "High RVOL", "News", "Earnings"]} active="Gainers" />
             <ActionButton theme={theme} onClick={() => setOrderMessage?.(`Scanner view saved locally for ${selected.symbol}.`)}>Save Scan</ActionButton>
           </div>
-          {scannerTable(dashboard.scannerRows.slice(0, 4), dashboard.selected.symbol)}
+          {scannerTable(dashboard.scannerRows.slice(0, 4), dashboard.selected.symbol, {
+            style: { height: "calc(100% - 51px)" },
+            rowMinHeight: 38,
+            headerMinHeight: 32,
+            cellPadding: "0 12px",
+            columnGap: 10,
+          })}
         </PremiumCard>
         <div style={{ gridColumn: "1 / 2", gridRow: "3 / 4", display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, 340px)", gap: 9, minHeight: 0 }}>
           <PremiumCard theme={theme} style={{ minHeight: 0 }}>
@@ -1530,8 +1537,8 @@ export default function PremiumWorkspace({
               style={{ maxHeight: 86 }}
             />
           </PremiumCard>
-          <PremiumCard theme={theme} title="Risk Overview">
-            <div style={{ padding: 12, display: "grid", gap: 8 }}>
+          <PremiumCard theme={theme} title="Risk Overview" style={{ minHeight: 0, overflow: "hidden" }}>
+            <div style={{ height: "calc(100% - 40px)", boxSizing: "border-box", padding: 10, display: "grid", gap: 7, overflow: "auto" }}>
               {dashboard.riskOverview.map((row) => (
                 <div key={row.label} style={{ display: "grid", gap: 5 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: theme.text, fontSize: 12 }}>

@@ -756,7 +756,7 @@ export default function PremiumWorkspace({
     minHeight: 0,
   };
   const bottomDock = (
-    <PremiumCard theme={theme} style={{ height: 116 }}>
+    <PremiumCard theme={theme} style={{ height: 142, overflow: "hidden" }}>
       <PremiumTabs theme={theme} tabs={["Positions (3)", "Orders (1)", "Alerts (2)", "Executions", "Messages"]} active="Positions (3)" />
       <PremiumTable
         theme={theme}
@@ -769,22 +769,26 @@ export default function PremiumWorkspace({
           { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: () => theme.green, render: () => "+261.50" },
         ]}
         rows={positionRows.slice(0, 1)}
-        style={{ maxHeight: 78 }}
+        style={{ height: "calc(100% - 40px)" }}
+        rowMinHeight={32}
+        headerMinHeight={30}
+        cellPadding="0 12px"
+        columnGap={10}
       />
     </PremiumCard>
   );
   const quickOrder = (
-    <PremiumCard theme={theme} title="Quick Order">
+    <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0, overflow: "hidden" }}>
       <div style={{ padding: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 92px 88px", gap: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 62px 76px 82px", gap: 7, minWidth: 0 }}>
           {["Symbol", "Shares", "Order Type", "Limit Price"].map((label, index) => (
-            <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase" }}>
+            <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase", minWidth: 0 }}>
               {label}
               <input
                 value={index === 0 ? selectedStock : index === 1 ? quantity : index === 2 ? "LIMIT" : num(selected.price).toFixed(2)}
                 onChange={(event) => index === 1 && setQuantity?.(Number(event.target.value) || 1)}
                 readOnly={index !== 1}
-                style={{ height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 8px", fontFamily: terminalMonoFont }}
+                style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 7px", fontFamily: terminalMonoFont }}
               />
             </label>
           ))}
@@ -1081,7 +1085,24 @@ export default function PremiumWorkspace({
             <PremiumCard theme={theme} title="Risk Events & Limits"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "type", label: "Type", width: "180px" }, { key: "severity", label: "Severity", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.severity === "High" ? "bad" : "warn"}>{row.severity}</StatusPill> }, { key: "message", label: "Message", width: "1fr" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "status", label: "Status", width: "100px" }]} rows={[{ time: "09:32:14", type: "Concentration Warning", severity: "High", message: "NVDA concentration exceeds 20% of portfolio", symbol: "NVDA", status: "Active" }, { time: "09:28:41", type: "Margin Warning", severity: "Medium", message: "Margin usage above 30% threshold", symbol: "Portfolio", status: "Active" }, { time: "09:25:07", type: "Daily Loss Threshold", severity: "Medium", message: "Approaching daily loss limit", symbol: "Portfolio", status: "Active" }]} /></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            <PremiumCard theme={theme} title="Portfolio Risk Overview"><div style={{ padding: 16 }}>{renderChartGrid?.({ layoutMode: "1", compact: true })}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Portfolio Risk Overview">
+              <div style={{ padding: 14, display: "grid", gap: 12, minWidth: 0 }}>
+                <div style={{ height: 116, minWidth: 0 }}>
+                  <MiniSparkline theme={theme} seed={11} height={108} />
+                </div>
+                {[
+                  ["Net Exposure", "$109,670.30"],
+                  ["Portfolio Beta", "1.28"],
+                  ["VaR (1D)", "-$2,689.21"],
+                  ["Largest Position", "21.5%"],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, color: theme.muted, fontSize: 12 }}>
+                    <span>{label}</span>
+                    <b style={{ color: String(value).startsWith("-") ? theme.red : theme.text, fontFamily: terminalMonoFont }}>{value}</b>
+                  </div>
+                ))}
+              </div>
+            </PremiumCard>
             <PremiumCard theme={theme} title="AI Risk Insight"><div style={{ padding: 14, display: "grid", gap: 10 }}>{["Trend Risk: Moderate", "Concentration Risk: High", "Liquidity Risk: Low", "Float / Liquidity: Healthy"].map((x, i) => <div key={x} style={{ color: i === 1 ? theme.red : theme.text }}>{x}</div>)}</div></PremiumCard>
             <PremiumCard theme={theme} title="Sector / Position Exposure"><div style={{ padding: 14, display: "grid", gap: 12 }}>{["Technology 37.3%", "Financial Services 18.6%", "Consumer Discretionary 15.4%", "ETFs 10.8%", "Cash 17.9%"].map((x) => <div key={x}>{x}<div style={{ height: 5, background: theme.panel2, borderRadius: 99, marginTop: 5 }}><div style={{ width: x.includes("Technology") ? "72%" : "38%", height: "100%", background: theme.blue, borderRadius: 99 }} /></div></div>)}</div></PremiumCard>
           </div>
@@ -1401,7 +1422,19 @@ export default function PremiumWorkspace({
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 220px", gap: 10, minHeight: 0 }}>
             <PremiumCard theme={theme} style={{ minHeight: 520 }}>{renderChartGrid?.({ layoutMode: "1" })}</PremiumCard>
-            <PremiumCard theme={theme}><PremiumTabs theme={theme} tabs={["Watchlist", "Indicators", "Alerts", "Notes"]} active="Indicators" /><PremiumTable theme={theme} columns={[{ key: "indicator", label: "Indicator", width: "1.4fr" }, { key: "status", label: "Status", width: "120px", color: () => theme.green }, { key: "params", label: "Parameters", width: "1fr" }, { key: "value", label: "Value", width: "100px", align: "right" }, { key: "signal", label: "Signal", width: "100px", color: () => theme.green }]} rows={[{ indicator: "Moving Average (50)", status: "Active", params: "MA Type: SMA", value: "289.71", signal: "Bullish" }, { indicator: "Moving Average (200)", status: "Active", params: "MA Type: SMA", value: "268.42", signal: "Bullish" }, { indicator: "RSI (14)", status: "Active", params: "Overbought: 70 / Oversold: 30", value: "63.21", signal: "Neutral" }, { indicator: "MACD (12,26,9)", status: "Active", params: "Signal: 9", value: "2.41", signal: "Bullish" }, { indicator: "Volume (20)", status: "Active", params: "MA Type: SMA", value: "55.21M", signal: "Above Avg" }]} /></PremiumCard>
+            <PremiumCard theme={theme} style={{ minHeight: 0, overflow: "hidden" }}>
+              <PremiumTabs theme={theme} tabs={["Watchlist", "Indicators", "Alerts", "Notes"]} active="Indicators" />
+              <PremiumTable
+                theme={theme}
+                columns={[{ key: "indicator", label: "Indicator", width: "1.4fr" }, { key: "status", label: "Status", width: "110px", color: () => theme.green }, { key: "params", label: "Parameters", width: "1fr" }, { key: "value", label: "Value", width: "90px", align: "right" }, { key: "signal", label: "Signal", width: "90px", color: () => theme.green }]}
+                rows={[{ indicator: "Moving Average (50)", status: "Active", params: "MA Type: SMA", value: "289.71", signal: "Bullish" }, { indicator: "Moving Average (200)", status: "Active", params: "MA Type: SMA", value: "268.42", signal: "Bullish" }, { indicator: "RSI (14)", status: "Active", params: "Overbought: 70 / Oversold: 30", value: "63.21", signal: "Neutral" }, { indicator: "MACD (12,26,9)", status: "Active", params: "Signal: 9", value: "2.41", signal: "Bullish" }, { indicator: "Volume (20)", status: "Active", params: "MA Type: SMA", value: "55.21M", signal: "Above Avg" }]}
+                style={{ height: "calc(100% - 40px)" }}
+                rowMinHeight={34}
+                headerMinHeight={30}
+                cellPadding="0 12px"
+                columnGap={10}
+              />
+            </PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>{selectedRail(<PremiumCard theme={theme} title="AI Chart Insight"><div style={{ padding: 14, display: "grid", gap: 10 }}>{["Trend Bullish", "Support 293.41 - 287.20", "Resistance 305.40 - 315.00", "Volume Above Avg (20)", "Setup Quality High"].map((x) => <div key={x}>{x}</div>)}</div></PremiumCard>)}</div>
         </div>

@@ -36,6 +36,20 @@ function saveLocalFallback(userId, payload) {
   }
 }
 
+async function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace, workspacePayload }) {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
@@ -55,11 +69,15 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     resetWorkspace?.();
     const localFallback = loadLocalFallback(currentUser.id);
     if (localFallback) applyWorkspace(localFallback);
-    const { data, error } = await supabase
-      .from(terminalWorkspaceTable)
-      .select("data, updated_at")
-      .eq("user_id", currentUser.id)
-      .maybeSingle();
+    const { data, error } = await withTimeout(
+      supabase
+        .from(terminalWorkspaceTable)
+        .select("data, updated_at")
+        .eq("user_id", currentUser.id)
+        .maybeSingle(),
+      5000,
+      "Workspace restore timed out",
+    );
 
     if (error) throw error;
     if (data?.data) {

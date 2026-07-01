@@ -133,6 +133,7 @@ export default function TerminalTopBar({
   activeMarket,
   buttonStyle,
   user,
+  handleLogout,
   compact = false,
   advancedMode = false,
   setAdvancedMode,
@@ -410,7 +411,7 @@ export default function TerminalTopBar({
       </div>
       )}
 
-      {!premiumShell && (
+      {!premiumShell && !compact && (
       <div
         style={{
           display: "flex",
@@ -711,6 +712,18 @@ export default function TerminalTopBar({
         <button onClick={saveWorkspaceToCloud} style={{ ...compactButton(Boolean(user)), ...(!user ? quietButton : {}) }}>
           Save
         </button>
+        )}
+
+        {user && (
+          <span style={{ ...topStatusLaneStyle, maxWidth: 150 }} title={user.email || "Authenticated user"}>
+            <span style={{ ...topStatusValueStyle, textTransform: "none", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email || "Signed in"}</span>
+          </span>
+        )}
+
+        {user && (
+          <button onClick={handleLogout} style={{ ...compactButton(false), ...quietButton }} title="Sign out of this workspace">
+            Sign out
+          </button>
         )}
 
         {showAdvancedControls && (

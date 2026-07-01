@@ -1,14 +1,5 @@
 import { useMemo } from "react";
-import {
-  dashboardMockAccountSummary,
-  dashboardMockMarketIndexes,
-  dashboardMockNews,
-  dashboardMockPositions,
-  dashboardMockScannerRows,
-  dashboardMockSymbolDetails,
-  dashboardMockWatchlist,
-  dashboardMockRiskOverview,
-} from "../mocks/dashboardMockData";
+import { dashboardMockMarketIndexes } from "../mocks/dashboardMockData";
 import {
   asNumber,
   formatCompactNumber,
@@ -25,45 +16,54 @@ function cleanSymbol(value, fallback = "AAPL") {
   return symbol || fallback;
 }
 
-function normalizePercent(value, fallback = 0.24) {
-  return asNumber(value, fallback);
+function nullableNumber(value) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
+  const parsed = asNumber(value, NaN);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function derivedScore(changePercent, relativeVolume, fallback = 61) {
-  const raw = asNumber(fallback, 61);
+function normalizePercent(value, fallback = null) {
+  return nullableNumber(value) ?? nullableNumber(fallback);
+}
+
+function derivedScore(changePercent, relativeVolume, fallback = null) {
+  const raw = nullableNumber(fallback);
+  if (raw === null && (changePercent === null || relativeVolume === null)) return null;
   if (raw > 5) return Math.max(1, Math.min(99, Math.round(raw)));
-  const score = 42 + Math.abs(asNumber(changePercent, 0)) * 2.2 + asNumber(relativeVolume, 1) * 7;
+  const score = 42 + Math.abs(changePercent) * 2.2 + relativeVolume * 7;
   return Math.max(35, Math.min(92, Math.round(score)));
 }
 
-function positiveNumber(value, fallback) {
-  const parsed = asNumber(value, fallback);
-  return parsed > 0 ? parsed : fallback;
+function positiveNumberOrNull(value) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
+  const parsed = asNumber(value, NaN);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function normalizeQuote(source = {}, fallback = {}) {
   const symbol = cleanSymbol(source.symbol || fallback.symbol);
   const fallbackMatchesSymbol = cleanSymbol(fallback.symbol, "") === symbol;
   const safeFallback = fallbackMatchesSymbol ? fallback : {};
-  const price = asNumber(source.price ?? source.last ?? source.currentPrice ?? safeFallback.price, safeFallback.price || 0);
+  const price = nullableNumber(source.price ?? source.last ?? source.currentPrice ?? safeFallback.price);
   const changePercent = normalizePercent(
     source.changePercent ?? source.change ?? source.changesPercentage ?? source.percentChange ?? safeFallback.changePercent,
-    safeFallback.changePercent || 0.24
+    safeFallback.changePercent
   );
-  const relativeVolume = asNumber(source.relativeVolume ?? source.rvol ?? safeFallback.relativeVolume, safeFallback.relativeVolume || 1.4);
+  const relativeVolume = nullableNumber(source.relativeVolume ?? source.rvol ?? safeFallback.relativeVolume);
+  const explicitChange = nullableNumber(source.changeAmount ?? source.absoluteChange ?? source.changeValue ?? safeFallback.change);
   return {
     ...safeFallback,
     ...source,
     symbol,
-    name: source.name || source.company || safeFallback.name || `${symbol} Equity`,
+    name: source.name || source.company || safeFallback.name || symbol,
     price,
     changePercent,
-    change: asNumber(source.changeAmount ?? source.absoluteChange ?? source.changeValue ?? safeFallback.change, (price * changePercent) / 100),
-    volume: source.volume ?? safeFallback.volume ?? safeFallback.avgVolume ?? 0,
+    change: explicitChange ?? (price !== null && changePercent !== null ? (price * changePercent) / 100 : null),
+    volume: nullableNumber(source.volume ?? safeFallback.volume ?? safeFallback.avgVolume),
     relativeVolume,
     floatShares: source.floatShares ?? source.float ?? safeFallback.floatShares,
-    sector: source.sector || safeFallback.sector || "Market Context",
-    catalyst: source.catalyst || source.setup || safeFallback.catalyst || "Market Context",
+    sector: source.sector || safeFallback.sector || "Not reported",
+    catalyst: source.catalyst || source.setup || safeFallback.catalyst || "No confirmed catalyst",
     score: derivedScore(changePercent, relativeVolume, source.score ?? source.score10 ?? safeFallback.score),
     risk: source.risk || source.riskLabel || safeFallback.risk || "Context",
   };
@@ -71,60 +71,66 @@ function normalizeQuote(source = {}, fallback = {}) {
 
 function normalizeScannerRow(row = {}, fallback = {}) {
   const quote = normalizeQuote(row, fallback);
-  const gapPercent = normalizePercent(row.gapPercent ?? row.gap ?? fallback.gapPercent, quote.changePercent);
-  const changePercent = Math.abs(quote.changePercent) < 0.01 && Math.abs(gapPercent) >= 0.01 ? gapPercent : quote.changePercent;
+  const gapPercent = normalizePercent(row.gapPercent ?? row.gap ?? fallback.gapPercent);
+  const changePercent = quote.changePercent;
   return {
     ...quote,
     changePercent,
     gapPercent,
-    volumeLabel: typeof quote.volume === "string" ? quote.volume : formatCompactNumber(quote.volume, 1),
-    rvolLabel: formatMultiple(quote.relativeVolume, 1),
-    floatLabel: typeof quote.floatShares === "string" ? quote.floatShares : formatCompactNumber(quote.floatShares, 2),
+    volumeLabel: quote.volume === null ? "Unavailable" : formatCompactNumber(quote.volume, 1),
+    rvolLabel: quote.relativeVolume === null ? "Unavailable" : formatMultiple(quote.relativeVolume, 1),
+    floatLabel: quote.floatShares == null ? "Unavailable" : typeof quote.floatShares === "string" ? quote.floatShares : formatCompactNumber(quote.floatShares, 2),
   };
 }
 
 function normalizeSymbolDetails(selectedSymbol, selectedStockData, allRows) {
   const selectedFromRows = allRows.find((row) => row.symbol === selectedSymbol);
-  const mockMatchesSelected = dashboardMockSymbolDetails.symbol === selectedSymbol;
-  const detailFallback = mockMatchesSelected
-    ? dashboardMockSymbolDetails
-    : {
-        symbol: selectedSymbol,
-        name: selectedFromRows?.name || `${selectedSymbol} Equity`,
-        exchange: selectedFromRows?.exchange || "NASDAQ",
-        price: selectedFromRows?.price || dashboardMockSymbolDetails.price,
-        changePercent: selectedFromRows?.changePercent || 0.24,
-        volume: selectedFromRows?.volume || dashboardMockSymbolDetails.volume,
-        averageVolume: selectedFromRows?.averageVolume || dashboardMockSymbolDetails.averageVolume,
-        marketCap: selectedFromRows?.marketCap,
-        floatShares: selectedFromRows?.floatShares,
-        peRatio: selectedFromRows?.peRatio,
-        eps: selectedFromRows?.eps,
-        beta: selectedFromRows?.beta,
-        dividend: selectedFromRows?.dividend,
-      };
+  const selectedSource = selectedStockData || selectedFromRows;
+  const detailFallback = {
+    symbol: selectedSymbol,
+    name: selectedFromRows?.name || selectedSymbol,
+    exchange: selectedFromRows?.exchange || "Not reported",
+    price: selectedFromRows?.price ?? null,
+    changePercent: selectedFromRows?.changePercent ?? null,
+    volume: selectedFromRows?.volume ?? null,
+    averageVolume: selectedFromRows?.averageVolume || null,
+    marketCap: selectedFromRows?.marketCap || null,
+    floatShares: selectedFromRows?.floatShares || null,
+    peRatio: selectedFromRows?.peRatio || null,
+    eps: selectedFromRows?.eps || null,
+    beta: selectedFromRows?.beta || null,
+    dividend: selectedFromRows?.dividend || null,
+  };
   const quote = normalizeQuote(selectedStockData || selectedFromRows, {
     ...detailFallback,
     ...(selectedFromRows || {}),
-    symbol: selectedSymbol || dashboardMockSymbolDetails.symbol,
+    symbol: selectedSymbol,
   });
-  const fallbackPrice = quote.price || dashboardMockSymbolDetails.price;
   return {
     ...detailFallback,
     ...quote,
-    exchange: selectedStockData?.exchange || selectedStockData?.market || detailFallback.exchange || "NASDAQ",
-    dayHigh: positiveNumber(selectedStockData?.dayHigh ?? selectedStockData?.high ?? quote.dayHigh, fallbackPrice * 1.012),
-    dayLow: positiveNumber(selectedStockData?.dayLow ?? selectedStockData?.low ?? quote.dayLow, fallbackPrice * 0.986),
-    open: positiveNumber(selectedStockData?.open ?? quote.open, fallbackPrice * 0.989),
-    previousClose: positiveNumber(selectedStockData?.previousClose ?? selectedStockData?.prevClose ?? quote.previousClose, fallbackPrice * 0.982),
-    averageVolume: positiveNumber(selectedStockData?.averageVolume ?? selectedStockData?.avgVolume ?? detailFallback.averageVolume ?? quote.volume, quote.volume),
-    marketCap: positiveNumber(selectedStockData?.marketCap ?? quote.marketCap ?? detailFallback.marketCap, fallbackPrice * 1_000_000_000),
-    peRatio: positiveNumber(selectedStockData?.peRatio ?? selectedStockData?.pe ?? detailFallback.peRatio, 28.41),
-    eps: positiveNumber(selectedStockData?.eps ?? detailFallback.eps, 10.49),
-    beta: positiveNumber(selectedStockData?.beta ?? detailFallback.beta, 1.23),
+    exchange: selectedStockData?.exchange || selectedStockData?.market || detailFallback.exchange,
+    dayHigh: positiveNumberOrNull(selectedStockData?.dayHigh ?? selectedStockData?.high ?? quote.dayHigh),
+    dayLow: positiveNumberOrNull(selectedStockData?.dayLow ?? selectedStockData?.low ?? quote.dayLow),
+    open: positiveNumberOrNull(selectedStockData?.open ?? quote.open),
+    previousClose: positiveNumberOrNull(selectedStockData?.previousClose ?? selectedStockData?.prevClose ?? quote.previousClose),
+    averageVolume: positiveNumberOrNull(selectedStockData?.averageVolume ?? selectedStockData?.avgVolume ?? detailFallback.averageVolume),
+    marketCap: positiveNumberOrNull(selectedStockData?.marketCap ?? quote.marketCap ?? detailFallback.marketCap),
+    peRatio: positiveNumberOrNull(selectedStockData?.peRatio ?? selectedStockData?.pe ?? detailFallback.peRatio),
+    eps: positiveNumberOrNull(selectedStockData?.eps ?? detailFallback.eps),
+    beta: positiveNumberOrNull(selectedStockData?.beta ?? detailFallback.beta),
     dividend: selectedStockData?.dividend ?? detailFallback.dividend,
-    yearRangeLow: selectedStockData?.yearRangeLow ?? fallbackPrice * 0.72,
-    yearRangeHigh: selectedStockData?.yearRangeHigh ?? fallbackPrice * 1.08,
+    yearRangeLow: positiveNumberOrNull(selectedStockData?.yearRangeLow),
+    yearRangeHigh: positiveNumberOrNull(selectedStockData?.yearRangeHigh),
+    dataMode: selectedSource?.dataMode || (!selectedSource
+      ? "unavailable"
+      : selectedSource.fallback
+        ? "fallback"
+        : selectedSource.cached
+          ? "cached"
+          : selectedSource.degraded
+            ? "degraded"
+            : "provider"),
   };
 }
 
@@ -136,20 +142,15 @@ function normalizeNews(news = [], selectedSymbol) {
     source: item.source || item.publisher || "Market News",
     headline: item.headline || item.title || item.summary || "Market headline update",
     relatedTicker: cleanSymbol(item.relatedTicker || item.symbol || selectedSymbol),
-    sentiment: item.sentiment || (index % 4 === 0 ? "Neutral" : "Bullish"),
-    impact: item.impact || (index % 3 === 0 ? "High" : "Medium"),
+    sentiment: item.sentiment || "Not classified",
+    impact: item.impact || "Not classified",
     summary: item.summary || item.description || "",
     url: item.url || item.link,
   }));
-  const fallbackRows = dashboardMockNews.map((item) => ({
-    ...item,
-    time: formatNewsClock(item.timestamp),
-    relatedTicker: item.relatedTicker || selectedSymbol,
-  }));
-  return (realRows.length ? realRows : fallbackRows).slice(0, 12);
+  return realRows.slice(0, 12);
 }
 
-function normalizePositions(positions, allRows, selectedSymbol) {
+function normalizePositions(positions, allRows) {
   const quoteBySymbol = new Map(allRows.map((row) => [row.symbol, row]));
   const objectRows = Object.keys(positions || {}).length
     ? Object.entries(positions).map(([symbol, pos]) => {
@@ -172,29 +173,21 @@ function normalizePositions(positions, allRows, selectedSymbol) {
       })
     : [];
 
-  if (objectRows.length) return objectRows;
-  const selected = quoteBySymbol.get(selectedSymbol);
-  return dashboardMockPositions.map((row) => ({
-    ...row,
-    symbol: selected?.symbol || row.symbol,
-    averagePrice: selected?.price ? selected.price * 0.982 : row.averagePrice,
-    lastPrice: selected?.price || row.lastPrice,
-    pnl: selected?.price ? (selected.price - selected.price * 0.982) * row.quantity : row.pnl,
-    pnlPercent: selected?.price ? 1.83 : row.pnlPercent,
-    dayPnl: selected?.price ? (selected.price - selected.price * 0.982) * row.quantity : row.dayPnl,
-  }));
+  return objectRows;
 }
 
 function parseAccountSummary(accountSummary, realizedPnL, totalUnrealizedPnL) {
-  const fallback = dashboardMockAccountSummary;
   const rowMap = new Map((accountSummary?.rows || []).map((row) => [row.label, row.value]));
   const dailyPnl = asNumber(realizedPnL, 0) + asNumber(totalUnrealizedPnL, 0);
+  const buyingPower = positiveNumberOrNull(rowMap.get("Buying Power"));
+  const netLiquidation = positiveNumberOrNull(rowMap.get("Net Liquidation"));
   return {
-    buyingPower: asNumber(rowMap.get("Buying Power"), fallback.buyingPower),
-    dailyPnl: dailyPnl || asNumber(rowMap.get("Daily P&L"), fallback.dailyPnl),
-    dailyPnlPercent: fallback.dailyPnlPercent,
-    netLiquidation: asNumber(rowMap.get("Net Liquidation"), fallback.netLiquidation),
-    marginUsed: fallback.marginUsed,
+    buyingPower,
+    dailyPnl: dailyPnl || null,
+    dailyPnlPercent: null,
+    netLiquidation,
+    marginUsed: positiveNumberOrNull(rowMap.get("Margin Used")),
+    connected: Boolean(accountSummary && (buyingPower || netLiquidation)),
   };
 }
 
@@ -213,26 +206,26 @@ export function useDashboardData({
   accountSummary = null,
 }) {
   return useMemo(() => {
-    const selectedSymbol = cleanSymbol(selectedStock, dashboardMockSymbolDetails.symbol);
-    const watchlistBySymbol = new Map(dashboardMockWatchlist.map((row) => [row.symbol, row]));
+    const selectedSymbol = cleanSymbol(selectedStock, "AAPL");
+    const watchlistBySymbol = new Map();
 
-    [...allSymbols, ...liveStocks, selectedStockData].filter(Boolean).forEach((row) => {
+    liveStocks.filter(Boolean).forEach((row) => {
       const symbol = cleanSymbol(row.symbol, "");
       if (!symbol) return;
       watchlistBySymbol.set(symbol, normalizeQuote(row, watchlistBySymbol.get(symbol)));
     });
 
     const watchlistRows = Array.from(watchlistBySymbol.values()).map((row) => normalizeScannerRow(row));
-    const scannerRows = (scannerStocks?.length ? scannerStocks : dashboardMockScannerRows).map((row, index) =>
-      normalizeScannerRow(row, dashboardMockScannerRows[index] || dashboardMockScannerRows[0])
-    );
+    const scannerRows = (scannerStocks || []).map((row) => normalizeScannerRow(row));
     const selected = normalizeSymbolDetails(selectedSymbol, selectedStockData, [...watchlistRows, ...scannerRows]);
     const marketIndexes = dashboardMockMarketIndexes.map((fallback) => {
       const real = allSymbols.find((stock) => cleanSymbol(stock.symbol, "") === fallback.symbol);
-      return normalizeQuote(real, fallback);
+      return real
+        ? { ...normalizeQuote(real, { symbol: fallback.symbol, name: fallback.name }), dataMode: real.fallback ? "fallback" : real.cached ? "cached" : real.degraded ? "degraded" : "provider" }
+        : { symbol: fallback.symbol, name: fallback.name, price: null, changePercent: null, sparkline: [], dataMode: "unavailable" };
     });
     const newsRows = normalizeNews(news, selectedSymbol);
-    const positionRows = normalizePositions(positions, [...watchlistRows, ...scannerRows], selectedSymbol);
+    const positionRows = normalizePositions(positions, [...watchlistRows, ...scannerRows]);
     const summary = parseAccountSummary(accountSummary, realizedPnL, totalUnrealizedPnL);
 
     return {
@@ -246,23 +239,26 @@ export function useDashboardData({
       alerts,
       accountSummary: {
         ...summary,
-        buyingPowerLabel: formatCurrency(summary.buyingPower),
-        dailyPnlLabel: `${formatSignedCurrency(summary.dailyPnl)} (${formatPercent(summary.dailyPnlPercent)})`,
-        netLiquidationLabel: formatCurrency(summary.netLiquidation),
-        marginUsedLabel: formatCurrency(summary.marginUsed),
+        buyingPowerLabel: summary.buyingPower ? formatCurrency(summary.buyingPower) : "Not connected",
+        dailyPnlLabel: summary.dailyPnl !== null ? formatSignedCurrency(summary.dailyPnl) : "Not connected",
+        netLiquidationLabel: summary.netLiquidation ? formatCurrency(summary.netLiquidation) : "Not connected",
+        marginUsedLabel: summary.marginUsed ? formatCurrency(summary.marginUsed) : "Not connected",
       },
-      riskOverview: dashboardMockRiskOverview.map((row) => ({
-        ...row,
-        value: row.label === "Buying Power" ? formatCurrency(summary.buyingPower) : row.value,
-      })),
+      riskOverview: [],
       status: {
         hasLiveQuotes: allSymbols.length > 0 || liveStocks.length > 0,
         hasScannerRows: scannerRows.length > 0,
         hasNews: newsRows.length > 0,
+        hasAccountData: summary.connected,
+        quoteMode: selected.dataMode,
+        scannerMode: scannerRows.length ? "provider" : "unavailable",
+        newsMode: newsRows.length ? "provider" : "unavailable",
       },
       display: {
-        selectedPrice: formatPrice(selected.price),
-        selectedMove: `${formatSignedCurrency(selected.change)} (${formatPercent(selected.changePercent)})`,
+        selectedPrice: selected.price === null ? "Unavailable" : formatPrice(selected.price),
+        selectedMove: selected.change === null || selected.changePercent === null
+          ? "Unavailable"
+          : `${formatSignedCurrency(selected.change)} (${formatPercent(selected.changePercent)})`,
       },
     };
   }, [

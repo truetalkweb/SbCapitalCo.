@@ -120,6 +120,15 @@ export function buildDataConfidence({
     : /DELAYED|REST|BACKEND|SIM/i.test(quoteLabel)
       ? "Medium"
       : "Limited";
+  const quoteMode = !selectedStockData
+    ? "unavailable"
+    : /SIM/i.test(quoteLabel)
+      ? "simulated"
+      : selectedStockData?.delayed || /DELAYED/i.test(quoteLabel)
+        ? "delayed"
+        : /LIVE|QTRD|QUESTRADE/i.test(quoteLabel)
+          ? "live"
+          : "cached";
   const newsLabel = newsMeta?.source || newsMeta?.providerStatus?.source || "News Pending";
   const newsConfidence = newsMeta?.degraded || (newsMeta?.fallbackRows > 0 && newsMeta?.fallbackRows === newsMeta?.rowCount)
     ? "Limited"
@@ -128,6 +137,15 @@ export function buildDataConfidence({
       : newsMeta?.source
         ? "High"
         : "Limited";
+  const newsMode = !newsMeta?.rowCount && !newsMeta?.source
+    ? "unavailable"
+    : newsMeta?.fallbackRows > 0 && newsMeta?.fallbackRows === newsMeta?.rowCount
+      ? "fallback"
+      : newsMeta?.cached
+        ? "cached"
+        : newsMeta?.providerStatus?.providerLimited || newsMeta?.degraded
+          ? "delayed"
+          : "live";
   const scannerLabel = scannerMeta?.source || scannerMeta?.provider || "Scanner Pending";
   const scannerConfidence = scannerMeta?.fallback || scannerMeta?.degraded
     ? "Limited"
@@ -136,6 +154,15 @@ export function buildDataConfidence({
       : scannerMeta?.source
         ? "High"
         : "Limited";
+  const scannerMode = !scannerMeta?.source
+    ? "unavailable"
+    : scannerMeta?.fallback
+      ? "fallback"
+      : scannerMeta?.cached
+        ? "cached"
+        : scannerMeta?.degraded
+          ? "delayed"
+          : "live";
   const updatedCandidates = [
     selectedStockData?.lastUpdated,
     newsMeta?.updatedAt,
@@ -147,15 +174,31 @@ export function buildDataConfidence({
     .filter((value) => value && !Number.isNaN(value));
   const lastUpdated = updatedCandidates.length ? new Date(Math.max(...updatedCandidates)).toISOString() : null;
   const confidence = lowestConfidence(quoteConfidence, newsConfidence, scannerConfidence);
+  const modes = [quoteMode, newsMode, scannerMode];
+  const mode = modes.includes("unavailable")
+    ? "degraded"
+    : modes.includes("simulated") || modes.includes("fallback")
+      ? "fallback"
+      : modes.includes("delayed") || modes.includes("cached")
+        ? "delayed"
+        : "live";
 
   return {
     symbol: String(selectedStock || selectedStockData?.symbol || "").toUpperCase() || "MARKET",
     confidence,
+    mode,
+    disclosure: mode === "live"
+      ? "Provider data"
+      : mode === "delayed"
+        ? "Delayed or cached data"
+        : mode === "fallback"
+          ? "Fallback or simulated context"
+          : "Some data is unavailable",
     lastUpdated,
     lastUpdatedLabel: formatSourceFreshness(lastUpdated),
-    quote: { label: quoteLabel, confidence: quoteConfidence },
-    news: { label: newsLabel, confidence: newsConfidence },
-    scanner: { label: scannerLabel, confidence: scannerConfidence },
+    quote: { label: quoteLabel, confidence: quoteConfidence, mode: quoteMode },
+    news: { label: newsLabel, confidence: newsConfidence, mode: newsMode },
+    scanner: { label: scannerLabel, confidence: scannerConfidence, mode: scannerMode },
   };
 }
 

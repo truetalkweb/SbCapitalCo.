@@ -25,6 +25,40 @@ export function useTerminalAlerts({ selectedStock, selectedStockData }) {
     setAlertInput("");
   }, [alertDirection, alertInput, selectedStock]);
 
+  const createPriceAlert = useCallback(({ symbol = selectedStock, trigger, direction = "above" }) => {
+    const cleanTrigger = Number(trigger);
+    const cleanSymbol = String(symbol || "").trim().toUpperCase();
+    if (!cleanSymbol || !Number.isFinite(cleanTrigger) || cleanTrigger <= 0) return false;
+    setAlerts((prev) => [{
+      id: crypto.randomUUID(),
+      symbol: cleanSymbol,
+      trigger: cleanTrigger,
+      direction: direction === "below" ? "below" : "above",
+      active: true,
+      createdAt: new Date().toISOString(),
+    }, ...prev].slice(0, 100));
+    return true;
+  }, [selectedStock]);
+
+  const updateAlert = useCallback((id, updates) => {
+    setAlerts((prev) => prev.map((alert) => {
+      if (alert.id !== id) return alert;
+      const trigger = Number(updates?.trigger ?? alert.trigger);
+      return {
+        ...alert,
+        ...updates,
+        trigger: Number.isFinite(trigger) && trigger > 0 ? trigger : alert.trigger,
+        symbol: String(updates?.symbol || alert.symbol).trim().toUpperCase(),
+      };
+    }));
+  }, []);
+
+  const toggleAlert = useCallback((id) => {
+    setAlerts((prev) => prev.map((alert) => alert.id === id
+      ? { ...alert, active: !alert.active, triggeredAt: alert.active ? alert.triggeredAt : null }
+      : alert));
+  }, []);
+
   const enableAlertNotifications = useCallback(async () => {
     if (!("Notification" in window)) {
       setAlertNotifications(false);
@@ -87,10 +121,13 @@ export function useTerminalAlerts({ selectedStock, selectedStockData }) {
     alertNotifications,
     alerts,
     addPriceAlert,
+    createPriceAlert,
     enableAlertNotifications,
     removeAlert,
     setAlertDirection,
     setAlertInput,
     setAlerts,
+    toggleAlert,
+    updateAlert,
   };
 }

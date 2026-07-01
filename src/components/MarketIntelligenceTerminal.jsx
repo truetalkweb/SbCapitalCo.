@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, Search, Star } from "lucide-react";
 import { getNewsSourceType } from "../utils/marketUtils";
+import { authenticatedFetch } from "../services/authenticatedRequest";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -222,7 +223,7 @@ export default function MarketIntelligenceTerminal({
       const [moversResponse, newsResponse, watchlistResponse] = await Promise.all([
         fetch(`${brokerApiUrl}/api/movers`),
         fetch(`${brokerApiUrl}/api/news?limit=18`),
-        fetch(`${brokerApiUrl}/api/watchlist/intelligence?limit=12&newsLimit=4`, {
+        authenticatedFetch(`${brokerApiUrl}/api/watchlist/intelligence?limit=12&newsLimit=4`, {
           headers: makeHeaders(user),
         }),
       ]);
@@ -244,7 +245,7 @@ export default function MarketIntelligenceTerminal({
       const summaryPairs = await Promise.all(
         nextNews.slice(0, 8).map(async (item) => {
           try {
-            const response = await fetch(`${brokerApiUrl}/api/ai/summarize-news`, {
+            const response = await authenticatedFetch(`${brokerApiUrl}/api/ai/summarize-news`, {
               method: "POST",
               headers: makeHeaders(user),
               body: JSON.stringify({ newsItem: item }),
@@ -366,7 +367,7 @@ export default function MarketIntelligenceTerminal({
     const cleanSymbol = String(symbol || selectedTicker || "").trim().toUpperCase();
     if (!cleanSymbol) return;
 
-    await fetch(`${brokerApiUrl}/api/watchlist`, {
+    await authenticatedFetch(`${brokerApiUrl}/api/watchlist`, {
       method: "POST",
       headers: makeHeaders(user),
       body: JSON.stringify({ symbol: cleanSymbol }),
@@ -380,7 +381,7 @@ export default function MarketIntelligenceTerminal({
     const cleanSymbol = String(symbol || "").trim().toUpperCase();
     if (!cleanSymbol) return;
 
-    await fetch(`${brokerApiUrl}/api/watchlist/${encodeURIComponent(cleanSymbol)}`, {
+    await authenticatedFetch(`${brokerApiUrl}/api/watchlist/${encodeURIComponent(cleanSymbol)}`, {
       method: "DELETE",
       headers: makeHeaders(user),
     }).catch(() => null);

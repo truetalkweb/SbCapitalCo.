@@ -34,6 +34,12 @@ export function numeric(value, fallback = 0) {
   return parsed;
 }
 
+function numericOrNull(value) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
+  const parsed = numeric(value, NaN);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function compact(value, digits = 1) {
   const parsed = Math.abs(Number(value || 0));
   const sign = Number(value || 0) < 0 ? "-" : "";
@@ -51,11 +57,12 @@ function signedPercent(value, digits = 2) {
   return `${parsed >= 0 ? "+" : ""}${parsed.toFixed(digits)}%`;
 }
 
-function normalizeTimestamp(value, fallbackMs = Date.now()) {
+function normalizeTimestamp(value) {
+  if (value === null || typeof value === "undefined" || value === "") return null;
   const candidate = typeof value === "number" && value < 10_000_000_000 ? value * 1000 : value;
-  const parsed = new Date(candidate || fallbackMs);
+  const parsed = new Date(candidate);
 
-  return Number.isNaN(parsed.getTime()) ? new Date(fallbackMs).toISOString() : parsed.toISOString();
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function freshnessOf(timestamp, meta = {}) {
@@ -132,33 +139,34 @@ function scoreRow({ changePercent, gapPercent, relativeVolume, volume, catalyst,
   return Math.round(Math.max(1, Math.min(99, score)));
 }
 
-export function normalizeScannerRow(row, meta = {}, index = 0) {
+export function normalizeScannerRow(row, meta = {}) {
   const symbol = symbolOf(row?.symbol || row?.ticker);
   if (!symbol) return null;
+  const fallbackMode = Boolean(row.fallback || meta.fallback);
 
-  const price = numeric(row.price ?? row.currentPrice ?? row.last ?? row.close);
-  if (price <= 0) return null;
+  const price = numericOrNull(row.price ?? row.currentPrice ?? row.last ?? row.close);
+  if (price === null || price <= 0) return null;
 
-  const fallback = fallbackMove(symbol);
-  let changePercent = numeric(row.changePercent ?? row.changesPercentage ?? row.percentChange ?? row.change, fallback);
-  if (Math.abs(changePercent) < 0.05) changePercent = fallback;
+  let changePercent = numericOrNull(row.changePercent ?? row.changesPercentage ?? row.percentChange ?? row.change);
+  if (changePercent === null && fallbackMode) changePercent = fallbackMove(symbol);
 
-  let gapPercent = numeric(row.gapPercent ?? row.gap ?? row.openGap, changePercent * 0.42);
-  if (Math.abs(gapPercent) < 0.05) gapPercent = changePercent * 0.42 || fallback * 0.42;
+  let gapPercent = numericOrNull(row.gapPercent ?? row.gap ?? row.openGap);
+  if (gapPercent === null && fallbackMode && changePercent !== null) gapPercent = changePercent * 0.42;
 
-  const volume = numeric(row.volume ?? row.vol ?? row.dayVolume, 1_000_000 + index * 275_000);
-  if (volume <= 0) return null;
+  const volume = numericOrNull(row.volume ?? row.vol ?? row.dayVolume);
+  if (volume === null || volume <= 0) return null;
 
-  let relativeVolume = numeric(row.relativeVolume ?? row.rvol ?? row.volumeRatio ?? row.volumePercentOfAvg);
+  let relativeVolume = numericOrNull(row.relativeVolume ?? row.rvol ?? row.volumeRatio ?? row.volumePercentOfAvg);
   if (relativeVolume > 25) relativeVolume /= 100;
-  if (relativeVolume <= 0.1) relativeVolume = Math.max(1.1, Math.min(7.5, volume / 12_000_000));
+  if ((relativeVolume === null || relativeVolume <= 0.1) && fallbackMode) relativeVolume = Math.max(1.1, Math.min(7.5, volume / 12_000_000));
 
-  const floatValue = numeric(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat, volume * 6.5);
-  const timestamp = normalizeTimestamp(row.timestamp || row.updatedAt || row.lastUpdated || meta.updatedAt, Date.now() - index * 60_000);
-  const catalyst = catalystText(row, symbol, changePercent, relativeVolume, gapPercent);
-  const risk = text(row.risk || row.riskLabel, "") || riskOf({ changePercent, relativeVolume, price, floatValue });
+  let floatValue = numericOrNull(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat);
+  if (floatValue === null && fallbackMode) floatValue = volume * 6.5;
+  const timestamp = normalizeTimestamp(row.timestamp || row.updatedAt || row.lastUpdated || meta.updatedAt);
+  const catalyst = catalystText(row, symbol, changePercent || 0, relativeVolume || 0, gapPercent || 0);
+  const risk = text(row.risk || row.riskLabel, "") || riskOf({ changePercent: changePercent || 0, relativeVolume: relativeVolume || 0, price, floatValue: floatValue || 0 });
   const scannerScore = numeric(row.score ?? row.scannerScore, 0);
-  const score = scannerScore > 0 ? Math.round(Math.min(99, scannerScore)) : scoreRow({ changePercent, gapPercent, relativeVolume, volume, catalyst, timestamp, risk });
+  const score = scannerScore > 0 ? Math.round(Math.min(99, scannerScore)) : scoreRow({ changePercent: changePercent || 0, gapPercent: gapPercent || 0, relativeVolume: relativeVolume || 0, volume, catalyst, timestamp, risk });
   const freshness = row.freshness || freshnessOf(timestamp, meta);
   const source = cleanConfidenceLabel({
     ...meta,
@@ -176,15 +184,15 @@ export function normalizeScannerRow(row, meta = {}, index = 0) {
     price,
     currentPrice: price,
     changePercent,
-    change: signedPercent(changePercent),
+    change: changePercent === null ? "Unavailable" : signedPercent(changePercent),
     gapPercent,
     relativeVolume,
-    rvol: `${relativeVolume.toFixed(1)}x`,
+    rvol: relativeVolume === null ? "Unavailable" : `${relativeVolume.toFixed(1)}x`,
     volume,
     volumeLabel: compact(volume, 1),
     float: floatValue,
     floatShares: floatValue,
-    floatLabel: compact(floatValue, 1),
+    floatLabel: floatValue === null ? "Unavailable" : compact(floatValue, 1),
     catalyst,
     setup: catalyst,
     whyMoving: row.whyMoving || catalyst,
@@ -196,9 +204,9 @@ export function normalizeScannerRow(row, meta = {}, index = 0) {
     source,
     freshness,
     timestamp,
-    fallback: Boolean(row.fallback || meta.fallback),
+    fallback: fallbackMode,
     degraded: Boolean(row.degraded || meta.degraded),
-    rankScore: score + Math.abs(changePercent) * 2 + Math.min(relativeVolume, 8) * 4 + Math.abs(gapPercent) * 1.4,
+    rankScore: score + Math.abs(changePercent || 0) * 2 + Math.min(relativeVolume || 0, 8) * 4 + Math.abs(gapPercent || 0) * 1.4,
   };
 }
 
@@ -251,14 +259,15 @@ export function normalizeScannerGroups(groups = {}, meta = {}) {
   };
 }
 
-export function normalizeNewsRow(item, index = 0, selectedSymbol = "MARKET") {
+export function normalizeNewsRow(item, _index = 0, selectedSymbol = "MARKET") {
+  void _index;
   const headline = text(item?.headline || item?.title || item?.text || item?.summary);
   if (!headline) return null;
 
   const relatedTicker = symbolOf(item.relatedTicker || item.symbol || item.ticker || selectedSymbol) || "MARKET";
   const url = /^https?:\/\//i.test(String(item.url || item.link || "")) ? String(item.url || item.link) : null;
   const fallback = Boolean(item.fallback || item.degraded) || /fallback|scanner/i.test(String(item.source || ""));
-  const timestamp = normalizeTimestamp(item.timestamp || item.publishedDate || item.datetime || item.time, Date.now() - index * 60_000);
+  const timestamp = normalizeTimestamp(item.timestamp || item.publishedDate || item.datetime || item.time);
   const source = fallback
     ? String(item.source || "").toLowerCase().includes("scanner") ? "Scanner Catalyst" : "Fallback Context"
     : text(item.source || item.publisher || item.site, "Market News");
@@ -270,13 +279,13 @@ export function normalizeNewsRow(item, index = 0, selectedSymbol = "MARKET") {
     text: headline,
     source,
     timestamp,
-    time: new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    time: timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Unavailable",
     relatedTicker,
     symbol: relatedTicker,
     url,
-    summary: text(item.summary || item.description, headline),
-    sentiment: text(item.sentiment, "Neutral"),
-    impact: text(item.impact, fallback ? "Low" : "Medium"),
+    summary: text(item.summary || item.description, ""),
+    sentiment: text(item.sentiment, "Not classified"),
+    impact: text(item.impact, "Not classified"),
     fallback,
     sourceType: fallback ? (source === "Scanner Catalyst" ? "Scanner Catalyst" : "Fallback") : url ? "Real Article" : "Market Context",
     isClickable: Boolean(url),
@@ -301,12 +310,12 @@ export function createNormalizedNewsFallback(selectedSymbol = "MARKET", scannerR
       id: `${row.symbol}-scanner-catalyst`,
       headline: row.catalyst || row.whyMoving,
       source: "Scanner Catalyst",
-      timestamp: row.timestamp || new Date(Date.now() - index * 60_000).toISOString(),
+      timestamp: row.timestamp || null,
       relatedTicker: row.symbol,
       summary: row.whyMoving || row.catalyst,
       fallback: true,
-      sentiment: row.changePercent >= 0 ? "Bullish" : "Bearish",
-      impact: Math.abs(row.changePercent) >= 5 ? "High" : "Medium",
+      sentiment: "Not classified",
+      impact: "Not classified",
     }, index, selectedSymbol))
     .filter(Boolean);
   const baseFallback = newsFallbackRows.map((row, index) => normalizeNewsRow(row, index, selectedSymbol)).filter(Boolean);

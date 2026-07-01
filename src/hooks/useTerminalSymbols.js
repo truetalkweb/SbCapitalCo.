@@ -90,7 +90,15 @@ export function useTerminalSymbols({
   );
 
   const selectedStockData =
-    allSymbols.find((stock) => stock.symbol === selectedStock) || liveStocks[0];
+    allSymbols.find((stock) => stock.symbol === selectedStock) || {
+      symbol: selectedStock,
+      name: selectedStock,
+      price: null,
+      change: null,
+      volume: null,
+      pendingQuote: true,
+      dataMode: "unavailable",
+    };
   const activeMarket = marketRegions[marketRegion] || marketRegions.us;
   const regionSymbols = new Set(activeMarket.symbols);
   const displaySymbols = marketRegion === "us"
@@ -106,15 +114,27 @@ export function useTerminalSymbols({
 
   const secondaryStockData =
     allSymbols.find((stock) => stock.symbol === secondarySymbol) ||
-    allSymbols.find((stock) => stock.symbol === "TSLA") ||
-    liveStocks[0];
+    {
+      symbol: secondarySymbol,
+      name: secondarySymbol,
+      price: null,
+      change: null,
+      volume: null,
+      pendingQuote: true,
+      dataMode: "unavailable",
+    };
 
   const scannerStocks = useMemo(() => {
     const normalizeRows = (rows, source = "Provider Data") =>
       rankScannerRows(
         rows
           .map((stock) => applyLiveQuote(stock, liveQuotes))
-          .map((stock, index) => normalizeScannerRow(stock, { source, updatedAt: stock.lastUpdated }, index))
+          .map((stock, index) => normalizeScannerRow(stock, {
+            source,
+            updatedAt: stock.lastUpdated,
+            fallback: source === "Watchlist Context",
+            degraded: source === "Watchlist Context",
+          }, index))
       );
     const fallbackStocks = normalizeRows(liveStocks, "Watchlist Context");
     const scannerUniverse = [

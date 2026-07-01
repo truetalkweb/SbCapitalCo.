@@ -3,6 +3,7 @@ import axios from "axios";
 import { BROKER_TOOLS_ENABLED } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { loadSetting, saveSetting } from "../utils/storage";
+import { getAuthenticatedAxiosConfig } from "../services/authenticatedRequest";
 
 export function useBrokerData(brokerApiUrl) {
   const [brokerStatus, setBrokerStatus] = useState("Disconnected");
@@ -49,9 +50,10 @@ export function useBrokerData(brokerApiUrl) {
     setBrokerLoading(true);
 
     try {
+      const authConfig = await getAuthenticatedAxiosConfig({ timeout: 6000 });
       const [statusResponse, healthResponse] = await Promise.allSettled([
         BROKER_TOOLS_ENABLED
-          ? axios.get(`${brokerApiUrl}/api/questrade/status`, { timeout: 6000 })
+          ? axios.get(`${brokerApiUrl}/api/questrade/status`, authConfig)
           : Promise.resolve({ data: null }),
         axios.get(`${brokerApiUrl}/api/health/deep`, { timeout: 7000 }),
       ]);
@@ -130,9 +132,10 @@ export function useBrokerData(brokerApiUrl) {
     async (accountNumber = selectedBrokerAccount) => {
       try {
         const query = accountNumber ? `?accountId=${encodeURIComponent(accountNumber)}` : "";
-        const response = await axios.get(`${brokerApiUrl}/api/questrade/live-readiness${query}`, {
-          timeout: 8000,
-        });
+        const response = await axios.get(
+          `${brokerApiUrl}/api/questrade/live-readiness${query}`,
+          await getAuthenticatedAxiosConfig({ timeout: 8000 })
+        );
 
         setLiveReadiness(response.data || null);
         return response.data || null;
@@ -155,9 +158,11 @@ export function useBrokerData(brokerApiUrl) {
       setLiveOrderLoading(true);
 
       try {
-        const response = await axios.post(`${brokerApiUrl}/api/questrade/orders/preview`, orderPayload, {
-          timeout: 12000,
-        });
+        const response = await axios.post(
+          `${brokerApiUrl}/api/questrade/orders/preview`,
+          orderPayload,
+          await getAuthenticatedAxiosConfig({ timeout: 12000 })
+        );
 
         setLiveOrderPreview(response.data || null);
 
@@ -189,9 +194,11 @@ export function useBrokerData(brokerApiUrl) {
       setLiveOrderLoading(true);
 
       try {
-        const response = await axios.post(`${brokerApiUrl}/api/questrade/orders/live`, orderPayload, {
-          timeout: 15000,
-        });
+        const response = await axios.post(
+          `${brokerApiUrl}/api/questrade/orders/live`,
+          orderPayload,
+          await getAuthenticatedAxiosConfig({ timeout: 15000 })
+        );
 
         setLiveOrderPreview(response.data?.preview || null);
         setBrokerError("");
@@ -224,7 +231,10 @@ export function useBrokerData(brokerApiUrl) {
     setBrokerLoading(true);
 
     try {
-      const response = await axios.get(`${brokerApiUrl}/api/questrade/accounts`, { timeout: 8000 });
+      const response = await axios.get(
+        `${brokerApiUrl}/api/questrade/accounts`,
+        await getAuthenticatedAxiosConfig({ timeout: 8000 })
+      );
       const accounts = response.data?.accounts || [];
       const storedAccount = loadSetting("sb_selected_broker_account", "");
       const preferredAccount = selectedBrokerAccount || storedAccount;
@@ -278,10 +288,11 @@ export function useBrokerData(brokerApiUrl) {
       const startedAt = Date.now();
 
       try {
+        const authConfig = await getAuthenticatedAxiosConfig({ timeout: 8000 });
         const [balancesRes, positionsRes, ordersRes] = await Promise.all([
-          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/balances`, { timeout: 8000 }),
-          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/positions`, { timeout: 8000 }),
-          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/orders`, { timeout: 8000 }),
+          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/balances`, authConfig),
+          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/positions`, authConfig),
+          axios.get(`${brokerApiUrl}/api/questrade/accounts/${accountNumber}/orders`, authConfig),
         ]);
 
         setBrokerBalances(balancesRes.data);

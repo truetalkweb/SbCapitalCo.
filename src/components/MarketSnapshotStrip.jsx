@@ -1,14 +1,15 @@
-import { dashboardMockMarketIndexes } from "../mocks/dashboardMockData";
-
 function parseNumber(value) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
   return Number.isFinite(parsed) ? parsed : null;
 }
 
 function Sparkline({ points = [], color, compact = false }) {
-  const values = points.length >= 2 ? points : [0.2, 0.36, 0.31, 0.48, 0.42, 0.62, 0.71];
+  const values = points.length >= 2 ? points : [];
   const height = compact ? 18 : 32;
   const width = compact ? 72 : 92;
+  if (!values.length) {
+    return <span style={{ width, color, fontSize: compact ? 8 : 10, textAlign: "center" }}>No data</span>;
+  }
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
@@ -32,12 +33,10 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
   const monoFont =
     '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
   const wanted = ["SPY", "QQQ", "DIA", "IWM", "VIX"];
-  const rows = wanted.map((symbol, index) => {
+  const rows = wanted.map((symbol) => {
     const match = stocks.find((stock) => String(stock.symbol || "").toUpperCase() === symbol);
-    const fallback = dashboardMockMarketIndexes[index];
     return {
-      ...fallback,
-      ...match,
+      ...(match || {}),
       symbol,
     };
   });
@@ -56,10 +55,11 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
       }}
     >
       {rows.map((stock, index) => {
-        const move = parseNumber(stock.changePercent ?? stock.change ?? stock.percentChange);
-        const isUp = move === null ? index < 3 : move >= 0;
-        const color = isUp ? theme.green : theme.red;
-        const price = parseNumber(stock.price ?? stock.last);
+        const parsedPrice = parseNumber(stock.price ?? stock.last);
+        const price = parsedPrice !== null && parsedPrice > 0 ? parsedPrice : null;
+        const move = price === null ? null : parseNumber(stock.changePercent ?? stock.change ?? stock.percentChange);
+        const isUp = move !== null && move >= 0;
+        const color = move === null ? theme.muted : isUp ? theme.green : theme.red;
 
         return (
           <button
@@ -89,7 +89,7 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
                 {price ? price.toFixed(2) : "Quote"}
               </span>
               <span style={{ display: "block", marginTop: compact ? "2px" : "4px", fontFamily: monoFont, color, fontSize: compact ? "9px" : "11px", lineHeight: 1, fontWeight: 850 }}>
-                {move === null ? "Live" : `${move >= 0 ? "+" : ""}${move.toFixed(2)}%`}
+                {move === null ? "Unavailable" : `${move >= 0 ? "+" : ""}${move.toFixed(2)}%`}
               </span>
             </span>
             <Sparkline color={color} points={stock.sparkline} compact={compact} />

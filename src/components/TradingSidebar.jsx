@@ -34,7 +34,6 @@ export default function Tradingsidebar({
   setActiveWorkspace,
   brokerConnected,
   brokerToolsEnabled = true,
-  advancedMode = false,
   theme,
   isDark = true,
   expanded = false,
@@ -42,8 +41,7 @@ export default function Tradingsidebar({
 }) {
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
-    if (expanded) return true;
-    return advancedMode || !item.advanced;
+    return true;
   });
   const sidebarBackground = isDark
     ? "linear-gradient(180deg, #07090d 0%, #05070b 58%, #030407 100%)"

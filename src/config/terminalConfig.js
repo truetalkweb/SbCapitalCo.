@@ -12,22 +12,22 @@ export const terminalSansFont =
   '"Roboto", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export const defaultStocks = [
-  { symbol: "NVDA", price: 211.5, change: "+1.18%", volume: "6.25M" },
-  { symbol: "AMD", price: 168.22, change: "+0.74%", volume: "2.46M" },
-  { symbol: "TSLA", price: 251.44, change: "-0.52%", volume: "8.94M" },
-  { symbol: "PLTR", price: 42.7, change: "+1.06%", volume: "4.33M" },
+  { symbol: "NVDA", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "AMD", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "TSLA", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "PLTR", price: null, change: null, volume: null, pendingQuote: true },
 ];
 
 export const cryptoStocks = [
-  { symbol: "BTC-USD", price: 80739.85, change: "+0.69%", volume: "12.4B" },
-  { symbol: "ETH-USD", price: 2331.05, change: "+1.03%", volume: "8.1B" },
-  { symbol: "SOL-USD", price: 182.44, change: "+2.51%", volume: "2.8B" },
+  { symbol: "BTC-USD", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "ETH-USD", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "SOL-USD", price: null, change: null, volume: null, pendingQuote: true },
 ];
 
 export const forexStocks = [
-  { symbol: "EUR/USD", price: 1.1785, change: "+0.52%", volume: "-" },
-  { symbol: "GBP/USD", price: 1.3632, change: "+0.61%", volume: "-" },
-  { symbol: "USD/CAD", price: 1.3722, change: "-0.22%", volume: "-" },
+  { symbol: "EUR/USD", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "GBP/USD", price: null, change: null, volume: null, pendingQuote: true },
+  { symbol: "USD/CAD", price: null, change: null, volume: null, pendingQuote: true },
 ];
 
 export const marketRegions = {

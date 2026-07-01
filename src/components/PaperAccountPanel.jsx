@@ -7,9 +7,9 @@ export default function PaperAccountPanel({
   totalUnrealizedPnL,
 }) {
   const stats = [
-    ["Buying Power", "$100,000.00"],
+    ["Buying Power", "Not funded"],
     ["Active Symbol", selectedStock],
-    ["Current Price", selectedStockData?.price ? `$${selectedStockData.price}` : "-"],
+    ["Current Price", selectedStockData?.price ? `$${selectedStockData.price}` : "Unavailable"],
     ["Total Orders", orders.length],
   ];
 

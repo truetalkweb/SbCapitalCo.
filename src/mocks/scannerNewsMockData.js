@@ -1,5 +1,3 @@
-const now = Date.now();
-
 export const scannerFallbackRows = [
   {
     symbol: "AAPL",
@@ -12,7 +10,7 @@ export const scannerFallbackRows = [
     float: 15_760_000_000,
     catalyst: "Megacap technology leadership with above-average participation.",
     source: "Fallback Context",
-    timestamp: new Date(now - 3 * 60_000).toISOString(),
+    timestamp: null,
   },
   {
     symbol: "NVDA",
@@ -25,7 +23,7 @@ export const scannerFallbackRows = [
     float: 24_110_000_000,
     catalyst: "Semiconductor momentum and elevated AI-sector volume.",
     source: "Fallback Context",
-    timestamp: new Date(now - 4 * 60_000).toISOString(),
+    timestamp: null,
   },
   {
     symbol: "TSLA",
@@ -38,7 +36,7 @@ export const scannerFallbackRows = [
     float: 3_210_000_000,
     catalyst: "High-beta tape reacting to growth-stock risk sentiment.",
     source: "Fallback Context",
-    timestamp: new Date(now - 5 * 60_000).toISOString(),
+    timestamp: null,
   },
   {
     symbol: "PLTR",
@@ -51,7 +49,7 @@ export const scannerFallbackRows = [
     float: 2_090_000_000,
     catalyst: "AI software momentum with steady news-linked participation.",
     source: "Fallback Context",
-    timestamp: new Date(now - 6 * 60_000).toISOString(),
+    timestamp: null,
   },
   {
     symbol: "AMD",
@@ -64,7 +62,7 @@ export const scannerFallbackRows = [
     float: 1_630_000_000,
     catalyst: "Chip-sector sympathy bid with liquid volume profile.",
     source: "Fallback Context",
-    timestamp: new Date(now - 7 * 60_000).toISOString(),
+    timestamp: null,
   },
 ];
 
@@ -73,7 +71,7 @@ export const newsFallbackRows = [
     id: "fallback-market-breadth",
     headline: "Market breadth improves as active traders rotate back into large-cap technology",
     source: "Fallback Context",
-    timestamp: new Date(now - 2 * 60_000).toISOString(),
+    timestamp: null,
     relatedTicker: "MARKET",
     summary: "Broad market context is standing in while provider news is limited.",
     sentiment: "Neutral",
@@ -85,7 +83,7 @@ export const newsFallbackRows = [
     id: "fallback-ai-momentum",
     headline: "AI-linked momentum names remain active on above-average participation",
     source: "Fallback Context",
-    timestamp: new Date(now - 5 * 60_000).toISOString(),
+    timestamp: null,
     relatedTicker: "NVDA",
     summary: "Scanner context indicates AI-related tickers are drawing higher activity.",
     sentiment: "Bullish",
@@ -97,7 +95,7 @@ export const newsFallbackRows = [
     id: "fallback-risk-tape",
     headline: "Risk appetite stays selective as traders favor liquid, news-sensitive symbols",
     source: "Fallback Context",
-    timestamp: new Date(now - 8 * 60_000).toISOString(),
+    timestamp: null,
     relatedTicker: "SPY",
     summary: "Fallback market context only; confirm with live quotes and charts.",
     sentiment: "Neutral",

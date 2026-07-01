@@ -25,6 +25,7 @@ import ScannerTable from "./components/ScannerTable";
 import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
 import PublicOnboarding from "./components/PublicOnboarding";
+import AuthGate from "./components/AuthGate";
 import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
 import PremiumWorkspace from "./components/premium/PremiumWorkspace";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
@@ -61,6 +62,7 @@ import {
 } from "./utils/marketUtils";
 import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatus";
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
+import { getAuthHeaders } from "./services/authenticatedRequest";
 import {
   getDefaultIndicatorState,
   normalizeIndicatorState,
@@ -185,9 +187,18 @@ export default function App() {
   const [scannerTab, setScannerTab] = useState(() =>
     loadSetting("sb_scanner_tab", "Gainers")
   );
+  const [scannerPresets, setScannerPresets] = useState(() =>
+    loadSetting("sb_scanner_presets", [{ id: "default", name: "All results", minRvol: 0 }])
+  );
+  const [activeScannerPreset, setActiveScannerPreset] = useState(() =>
+    loadSetting("sb_active_scanner_preset", "default")
+  );
   const [premiumDockTab, setPremiumDockTab] = useState("positions");
   const [themeMode, setThemeMode] = useState(() =>
     loadSetting("sb_theme_mode", "dark")
+  );
+  const [timeZone, setTimeZone] = useState(() =>
+    loadSetting("sb_time_zone", "America/Vancouver")
   );
   const [marketRegion, setMarketRegion] = useState(() =>
     loadSetting("sb_market_region", "us")
@@ -298,12 +309,7 @@ export default function App() {
     typeof window === "undefined" ? 1440 : window.innerWidth
   );
 
-  const [level2, setLevel2] = useState([
-    { marketMaker: "ARCA", bid: 211.45, ask: 211.55, size: 500 },
-    { marketMaker: "NASDAQ", bid: 211.4, ask: 211.6, size: 1200 },
-    { marketMaker: "BATS", bid: 211.35, ask: 211.65, size: 850 },
-    { marketMaker: "IEX", bid: 211.3, ask: 211.7, size: 620 },
-  ]);
+  const [level2, setLevel2] = useState([]);
 
   const chartAreaRef = useRef(null);
   const brokerBootstrappedRef = useRef(false);
@@ -389,11 +395,12 @@ export default function App() {
     setOrderAuditTrail((prev) => [nextEntry, ...prev].slice(0, 150));
     setOrderAuditSyncStatus("Syncing latest audit row");
 
-    fetchWithTimeout(`${BROKER_API_URL}/api/audit/orders`, 6000, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(nextEntry),
-    })
+    getAuthHeaders({ "Content-Type": "application/json" })
+      .then((headers) => fetchWithTimeout(`${BROKER_API_URL}/api/audit/orders`, 6000, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(nextEntry),
+      }))
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
 
@@ -469,9 +476,12 @@ export default function App() {
 
   const liveSmallCapMovers = useMemo(
     () =>
-      (fmpSmallCaps.length ? fmpSmallCaps : defaultSmallCapMovers).map((stock) =>
-        applyLiveQuote(stock, liveQuotes)
-      ),
+      (fmpSmallCaps.length ? fmpSmallCaps : defaultSmallCapMovers).map((stock) => ({
+        ...applyLiveQuote(stock, liveQuotes),
+        fallback: !fmpSmallCaps.length,
+        degraded: !fmpSmallCaps.length,
+        source: fmpSmallCaps.length ? stock.source || "FMP Scanner" : "Fallback Context",
+      })),
     [fmpSmallCaps, liveQuotes]
   );
 
@@ -532,11 +542,14 @@ export default function App() {
     alertNotifications,
     alerts,
     addPriceAlert,
+    createPriceAlert,
     enableAlertNotifications,
     removeAlert,
     setAlertDirection,
     setAlertInput,
     setAlerts,
+    toggleAlert,
+    updateAlert,
   } = useTerminalAlerts({
     selectedStock,
     selectedStockData,
@@ -651,8 +664,11 @@ export default function App() {
       riskPerTrade,
       marketRegion,
       themeMode,
+      timeZone,
       chartIndicators,
       scannerTab,
+      scannerPresets,
+      activeScannerPreset,
       replayMode,
       replaySpeed,
       replayIndex,
@@ -687,8 +703,11 @@ export default function App() {
       riskPerTrade,
       marketRegion,
       themeMode,
+      timeZone,
       chartIndicators,
       scannerTab,
+      scannerPresets,
+      activeScannerPreset,
       replayMode,
       replaySpeed,
       replayIndex,
@@ -724,6 +743,7 @@ export default function App() {
     if (typeof data.riskPerTrade !== "undefined") setRiskPerTrade(data.riskPerTrade);
     if (data.marketRegion) setMarketRegion(data.marketRegion);
     if (data.themeMode) setThemeMode(data.themeMode);
+    if (data.timeZone) setTimeZone(data.timeZone);
     if (data.chartIndicators) {
       setChartIndicators(normalizeIndicatorState(data.chartIndicators));
     } else if (typeof data.showEMA9 === "boolean" || typeof data.showEMA20 === "boolean") {
@@ -736,6 +756,8 @@ export default function App() {
       );
     }
     if (data.scannerTab) setScannerTab(data.scannerTab);
+    if (Array.isArray(data.scannerPresets)) setScannerPresets(data.scannerPresets);
+    if (data.activeScannerPreset) setActiveScannerPreset(data.activeScannerPreset);
     if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
     if (typeof data.replaySpeed !== "undefined") setReplaySpeed(data.replaySpeed);
     if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
@@ -757,22 +779,30 @@ export default function App() {
   ]);
 
   const {
+    authBusy,
     authEmail,
     authMessage,
     authMode,
     authPassword,
+    authReady,
     cloudStatus,
     handleAuthSubmit,
     handleLogout,
+    handlePasswordReset,
+    handlePasswordUpdate,
+    isAuthConfigured,
     loadWorkspaceFromCloud,
+    passwordRecovery,
     saveWorkspaceToCloud,
     setAuthEmail,
     setAuthMode,
     setAuthPassword,
     user,
+    workspaceReady,
   } = useCloudWorkspace({
     applyWorkspace,
     pushActivity,
+    resetWorkspace,
     workspacePayload,
   });
 
@@ -1096,11 +1126,14 @@ export default function App() {
       "sb_layout_mode",
       "sb_grid_mode",
       "sb_theme_mode",
+      "sb_time_zone",
       "sb_market_region",
       "sb_chart_indicators",
       "sb_show_ema9",
       "sb_show_ema20",
       "sb_scanner_tab",
+      "sb_scanner_presets",
+      "sb_active_scanner_preset",
       "sb_watchlist",
       "sb_orders",
       "sb_order_audit_trail",
@@ -1130,9 +1163,12 @@ export default function App() {
     setTimeframe("15m");
     setSecondaryTimeframe("5m");
     setThemeMode("dark");
+    setTimeZone("America/Vancouver");
     setMarketRegion("us");
     setChartIndicators(getDefaultIndicatorState());
     setScannerTab("Gainers");
+    setScannerPresets([{ id: "default", name: "All results", minRvol: 0 }]);
+    setActiveScannerPreset("default");
     setOrders([]);
     setOrderAuditTrail([]);
     setPositions({});
@@ -1855,7 +1891,11 @@ export default function App() {
 
     async function loadBackendAuditTrail() {
       try {
-        const response = await fetchWithTimeout(`${BROKER_API_URL}/api/audit/orders?limit=80`, 6000);
+        const response = await fetchWithTimeout(
+          `${BROKER_API_URL}/api/audit/orders?limit=80`,
+          6000,
+          { headers: await getAuthHeaders() }
+        );
         const payload = await response.json();
 
         if (!response.ok) throw new Error(payload?.error || "Backend audit unavailable.");
@@ -1900,9 +1940,12 @@ export default function App() {
     saveSetting("sb_timeframe", timeframe);
     saveSetting("sb_secondary_timeframe", secondaryTimeframe);
     saveSetting("sb_theme_mode", themeMode);
+    saveSetting("sb_time_zone", timeZone);
     saveSetting("sb_market_region", marketRegion);
     saveSetting("sb_chart_indicators", chartIndicators);
     saveSetting("sb_scanner_tab", scannerTab);
+    saveSetting("sb_scanner_presets", scannerPresets);
+    saveSetting("sb_active_scanner_preset", activeScannerPreset);
     saveSetting("sb_orders", orders);
     saveSetting("sb_order_audit_trail", orderAuditTrail);
     saveSetting("sb_positions", positions);
@@ -1919,9 +1962,12 @@ export default function App() {
     timeframe,
     secondaryTimeframe,
     themeMode,
+    timeZone,
     marketRegion,
     chartIndicators,
     scannerTab,
+    scannerPresets,
+    activeScannerPreset,
     orders,
     orderAuditTrail,
     positions,
@@ -2035,6 +2081,9 @@ export default function App() {
   }, [trackedSymbols, updateLiveQuote]);
 
   useEffect(() => {
+    if (!BROKER_TOOLS_ENABLED) {
+      return undefined;
+    }
     const interval = setInterval(() => {
       const basePrice = Number(selectedStockData?.price || 100);
 
@@ -2082,7 +2131,7 @@ export default function App() {
     activeWorkspace === "replay" ||
     (BROKER_TOOLS_ENABLED && activeWorkspace === "portfolio") ||
     activeWorkspace === "alerts";
-  const usePremiumShell = !isCompactTerminal;
+  const usePremiumShell = true;
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
@@ -2937,7 +2986,9 @@ export default function App() {
           </div>
 
           <div style={{ color: theme.green, fontSize: "11px", fontWeight: 850, marginTop: "8px" }}>
-            {marketDataStatusLabel?.includes("LIVE") || mainChartSourceLabel?.includes("QTRD") ? "Market Data Live" : "Market Context Active"}
+            {marketDataStatusLabel?.includes("LIVE") || mainChartSourceLabel?.includes("QTRD")
+              ? "Market Data Live"
+              : marketDataStatusLabel || "Market Data Unavailable"}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
@@ -2950,7 +3001,7 @@ export default function App() {
               <div key={label} style={{ background: isDark ? "rgba(255,255,255,0.025)" : "#f6f9fd", borderRadius: "7px", padding: "8px" }}>
                 <div style={{ color: theme.muted, fontSize: "9px", fontWeight: 850, textTransform: "uppercase" }}>{label}</div>
                 <div style={{ marginTop: "4px", fontFamily: terminalMonoFont, color: theme.text, fontSize: "11px", fontWeight: 850 }}>
-                  {value || "Context"}
+                  {value ?? "Unavailable"}
                 </div>
               </div>
             ))}
@@ -3573,6 +3624,7 @@ export default function App() {
     return (
       <PremiumWorkspace
         activeWorkspace={activeWorkspace}
+        viewportWidth={viewportWidth}
         theme={theme}
         isDark={isDark}
         renderChartGrid={renderPremiumChartGrid}
@@ -3583,6 +3635,10 @@ export default function App() {
         news={news}
         newsLoading={newsLoading}
         alerts={alerts}
+        createPriceAlert={createPriceAlert}
+        toggleAlert={toggleAlert}
+        updateAlert={updateAlert}
+        removeAlert={removeAlert}
         orders={orders}
         positions={positions}
         allSymbols={allSymbols}
@@ -3600,18 +3656,26 @@ export default function App() {
         removeWatchlistSymbol={removeWatchlistSymbol}
         scannerTab={scannerTab}
         setScannerTab={setScannerTab}
+        scannerPresets={scannerPresets}
+        setScannerPresets={setScannerPresets}
+        activeScannerPreset={activeScannerPreset}
+        setActiveScannerPreset={setActiveScannerPreset}
         timeframe={timeframe}
         setTimeframe={setTimeframe}
         chartIndicators={chartIndicators}
         setChartIndicators={setChartIndicators}
         themeMode={themeMode}
         setThemeMode={setThemeMode}
+        timeZone={timeZone}
+        setTimeZone={setTimeZone}
         activePreset={activePreset}
         layoutMode={layoutMode}
         gridMode={gridMode}
         user={user}
+        handleLogout={handleLogout}
         saveWorkspaceToCloud={saveWorkspaceToCloud}
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
+        requestPasswordReset={handlePasswordReset}
         resetWorkspace={resetWorkspace}
         brokerConnected={brokerConnected}
         journalEntries={journalEntries}
@@ -3619,6 +3683,7 @@ export default function App() {
         replaySpeed={replaySpeed}
         replayStats={replayStats}
         replayTrades={replayTrades}
+        replayEquity={replayEquity}
         setReplayPlaying={setReplayPlaying}
         setReplaySpeed={setReplaySpeed}
         stepReplay={stepReplay}
@@ -3628,6 +3693,27 @@ export default function App() {
         addJournalEntry={addJournalEntry}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
+      />
+    );
+  }
+
+  if (!authReady || !user || !workspaceReady || passwordRecovery) {
+    return (
+      <AuthGate
+        busy={authBusy}
+        configured={isAuthConfigured}
+        email={authEmail}
+        message={authMessage}
+        mode={authMode}
+        onEmailChange={setAuthEmail}
+        onModeChange={setAuthMode}
+        onPasswordChange={setAuthPassword}
+        onPasswordUpdate={handlePasswordUpdate}
+        onResetPassword={handlePasswordReset}
+        onSubmit={handleAuthSubmit}
+        password={authPassword}
+        recovery={passwordRecovery}
+        ready={authReady && (!user || workspaceReady)}
       />
     );
   }
@@ -3684,6 +3770,7 @@ export default function App() {
         activeMarket={activeMarket}
         buttonStyle={buttonStyle}
         user={user}
+        handleLogout={handleLogout}
         compact={isCompactTerminal}
         advancedMode={advancedMode}
         setAdvancedMode={setAdvancedMode}
@@ -3693,7 +3780,7 @@ export default function App() {
         premiumShell={usePremiumShell}
       />
 
-      {usePremiumShell && !["replay", "journal"].includes(activeWorkspace) ? (
+      {usePremiumShell && !isCompactTerminal && !["replay", "journal"].includes(activeWorkspace) ? (
         <div style={{ padding: activeWorkspace === "charts" ? "0 10px 5px" : "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
@@ -3730,6 +3817,7 @@ export default function App() {
       )}
 
       <PanelGroup
+        key={`terminal-panels-${usePremiumShell ? "premium" : "compact"}-${showLeftDockPanel ? "left" : "no-left"}-${showRightDockPanel ? "right" : "no-right"}-${activeWorkspace}`}
         direction="horizontal"
         style={{
           flex: "1 1 auto",
@@ -3755,8 +3843,8 @@ export default function App() {
           brokerStatus={brokerStatus}
           theme={theme}
           isDark={isDark}
-          expanded={usePremiumShell}
-          accountSummary={usePremiumShell ? premiumAccountSummary : null}
+          expanded={usePremiumShell && !isCompactTerminal}
+          accountSummary={usePremiumShell && !isCompactTerminal ? premiumAccountSummary : null}
         />
         </Panel>
 

@@ -1,200 +1,288 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { auth, db } from "../firebase";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+  clearStoredSupabaseSession,
+  isSupabaseConfigured,
+  supabase,
+  terminalWorkspaceTable,
+} from "../services/supabaseClient";
 
-export function useCloudWorkspace({
-  applyWorkspace,
-  pushActivity,
-  workspacePayload,
-}) {
+function getAuthMessage(error, fallback) {
+  const message = String(error?.message || "").toLowerCase();
+  if (message.includes("invalid login")) return "Email or password is incorrect.";
+  if (message.includes("email not confirmed")) return "Confirm your email before signing in.";
+  if (message.includes("already registered")) return "An account already exists for this email.";
+  if (message.includes("password")) return "Use a password with at least 8 characters.";
+  if (message.includes("rate limit")) return "Too many attempts. Wait briefly and try again.";
+  return fallback;
+}
+
+function fallbackKey(userId) {
+  return `sb_workspace_fallback:${userId}`;
+}
+
+function loadLocalFallback(userId) {
+  try {
+    return JSON.parse(window.localStorage.getItem(fallbackKey(userId)) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalFallback(userId, payload) {
+  try {
+    window.localStorage.setItem(fallbackKey(userId), JSON.stringify(payload));
+  } catch {
+    // Hardened browsers may disable local storage; cloud persistence still works.
+  }
+}
+
+export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace, workspacePayload }) {
   const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authMode, setAuthMode] = useState("login");
   const [authMessage, setAuthMessage] = useState("");
-  const [cloudStatus, setCloudStatus] = useState("Local workspace");
+  const [cloudStatus, setCloudStatus] = useState("Authentication required");
   const cloudWorkspaceReadyRef = useRef(false);
+  const activeUserIdRef = useRef(null);
+
+  const loadWorkspaceForUser = useCallback(async (currentUser, { quiet = false } = {}) => {
+    if (!supabase || !currentUser?.id) return false;
+    resetWorkspace?.();
+    const localFallback = loadLocalFallback(currentUser.id);
+    if (localFallback) applyWorkspace(localFallback);
+    const { data, error } = await supabase
+      .from(terminalWorkspaceTable)
+      .select("data, updated_at")
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data?.data) {
+      applyWorkspace(data.data);
+      saveLocalFallback(currentUser.id, data.data);
+      if (!quiet) setCloudStatus("Workspace restored");
+      return true;
+    }
+    if (!quiet) setCloudStatus("New workspace");
+    return false;
+  }, [applyWorkspace, resetWorkspace]);
 
   const handleAuthSubmit = useCallback(async (mode = authMode) => {
     setAuthMessage("");
-
-    try {
-      if (!authEmail || !authPassword) {
-        setAuthMessage("Enter email and password.");
-        return;
-      }
-
-      if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-        setAuthMessage("Account created.");
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPassword);
-        setAuthMessage("Signed in.");
-      }
-
-      setAuthPassword("");
-    } catch (error) {
-      setAuthMessage(error.message || "Authentication failed.");
+    const email = authEmail.trim().toLowerCase();
+    if (!supabase) {
+      setAuthMessage("Authentication is not configured.");
+      return;
     }
-  }, [authEmail, authMode, authPassword]);
-
-  const saveWorkspaceToCloud = useCallback(async () => {
-    if (!user) {
-      setCloudStatus("Sign in to save cloud workspace");
-      pushActivity({
-        type: "cloud",
-        status: "blocked",
-        title: "Cloud Save Blocked",
-        detail: "User must be signed in before saving the workspace to cloud storage.",
-      });
+    if (!email || !authPassword) {
+      setAuthMessage("Enter your email and password.");
+      return;
+    }
+    if (authPassword.length < 8) {
+      setAuthMessage("Use a password with at least 8 characters.");
       return;
     }
 
+    setAuthBusy(true);
     try {
-      await setDoc(doc(db, "workspaces", user.uid), {
-        ...workspacePayload,
-        updatedAt: serverTimestamp(),
-        owner: user.uid,
-      });
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: authPassword,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (error) throw error;
+        setAuthMessage(data.session ? "Account created." : "Check your email to confirm the account.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
+        if (error) throw error;
+        setAuthMessage("Signed in.");
+      }
+      setAuthPassword("");
+    } catch (error) {
+      setAuthMessage(getAuthMessage(error, "Authentication failed. Try again."));
+    } finally {
+      setAuthBusy(false);
+    }
+  }, [authEmail, authMode, authPassword]);
 
-      setCloudStatus(`Cloud saved ${new Date().toLocaleTimeString()}`);
-      pushActivity({
-        type: "cloud",
-        status: "saved",
-        title: "Cloud Workspace Saved",
-        detail: "Workspace state saved to Firebase.",
-      });
+  const handlePasswordReset = useCallback(async () => {
+    const email = authEmail.trim().toLowerCase();
+    if (!supabase || !email) {
+      setAuthMessage("Enter your email first.");
+      return;
+    }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setAuthBusy(false);
+    setAuthMessage(error
+      ? getAuthMessage(error, "Password reset could not be sent.")
+      : "Password reset instructions were sent if the account exists.");
+  }, [authEmail]);
+
+  const handlePasswordUpdate = useCallback(async () => {
+    if (!supabase || authPassword.length < 8) {
+      setAuthMessage("Use a new password with at least 8 characters.");
+      return;
+    }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: authPassword });
+    setAuthBusy(false);
+    if (error) {
+      setAuthMessage(getAuthMessage(error, "Password could not be updated."));
+      return;
+    }
+    setAuthPassword("");
+    setPasswordRecovery(false);
+    setAuthMessage("Password updated.");
+  }, [authPassword]);
+
+  const saveWorkspaceToCloud = useCallback(async ({ quiet = false } = {}) => {
+    if (!supabase || !user?.id) {
+      setCloudStatus("Sign in to save");
+      return false;
+    }
+    try {
+      saveLocalFallback(user.id, workspacePayload);
+      const { error } = await supabase.from(terminalWorkspaceTable).upsert({
+        user_id: user.id,
+        data: workspacePayload,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (error) throw error;
+      if (!quiet) setCloudStatus("Workspace saved");
+      return true;
     } catch {
-      setCloudStatus("Cloud save failed");
-      pushActivity({
+      setCloudStatus("Cloud save unavailable; local fallback retained");
+      if (!quiet) pushActivity?.({
         type: "cloud",
         status: "failed",
-        title: "Cloud Save Failed",
-        detail: "Firebase workspace save did not complete.",
+        title: "Workspace Save Failed",
+        detail: "The local workspace remains available. Retry cloud sync later.",
       });
+      return false;
     }
   }, [pushActivity, user, workspacePayload]);
 
   const loadWorkspaceFromCloud = useCallback(async () => {
-    if (!user) {
-      setCloudStatus("Sign in to load cloud workspace");
-      pushActivity({
-        type: "cloud",
-        status: "blocked",
-        title: "Cloud Load Blocked",
-        detail: "User must be signed in before loading a cloud workspace.",
-      });
-      return;
-    }
-
+    if (!user) return false;
     try {
-      const snapshot = await getDoc(doc(db, "workspaces", user.uid));
-
-      if (!snapshot.exists()) {
-        setCloudStatus("No cloud workspace found");
-        pushActivity({
-          type: "cloud",
-          status: "warning",
-          title: "Cloud Workspace Missing",
-          detail: "No saved Firebase workspace exists for the signed-in user.",
-        });
-        return;
-      }
-
-      applyWorkspace(snapshot.data());
-      setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
-      pushActivity({
-        type: "cloud",
-        status: "loaded",
-        title: "Cloud Workspace Loaded",
-        detail: "Workspace state loaded from Firebase.",
-      });
+      return await loadWorkspaceForUser(user);
     } catch {
-      setCloudStatus("Cloud load failed");
-      pushActivity({
-        type: "cloud",
-        status: "failed",
-        title: "Cloud Load Failed",
-        detail: "Firebase workspace load did not complete.",
-      });
+      setCloudStatus("Cloud load unavailable; local fallback active");
+      return false;
     }
-  }, [applyWorkspace, pushActivity, user]);
+  }, [loadWorkspaceForUser, user]);
 
   const handleLogout = useCallback(async () => {
-    await signOut(auth);
-    setCloudStatus("Local workspace");
+    clearStoredSupabaseSession();
+    activeUserIdRef.current = null;
+    cloudWorkspaceReadyRef.current = false;
+    setUser(null);
+    setWorkspaceReady(false);
+    setCloudStatus("Authentication required");
+    if (supabase) {
+      await Promise.race([
+        supabase.auth.signOut({ scope: "local" }).catch(() => undefined),
+        new Promise((resolve) => window.setTimeout(resolve, 1500)),
+      ]);
+    }
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      cloudWorkspaceReadyRef.current = false;
-      setUser(currentUser);
+    if (!supabase) {
+      return undefined;
+    }
 
-      if (!currentUser) {
-        setCloudStatus("Local workspace");
-        return;
-      }
+    let active = true;
+    let initialized = false;
+    const finishSessionRestore = (session) => {
+      if (!active) return;
+      initialized = true;
+      setUser(session?.user || null);
+      setWorkspaceReady(false);
+      setAuthReady(true);
+    };
+    const restoreTimeout = window.setTimeout(() => {
+      if (!initialized) finishSessionRestore(null);
+    }, 5000);
 
-      setCloudStatus(`Signed in: ${currentUser.email}`);
-
-      try {
-        const snapshot = await getDoc(doc(db, "workspaces", currentUser.uid));
-
-        if (snapshot.exists()) {
-          applyWorkspace(snapshot.data());
-          setCloudStatus(`Cloud loaded ${new Date().toLocaleTimeString()}`);
-        } else {
-          setCloudStatus("Signed in - local workspace active");
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (error) throw error;
+        finishSessionRestore(data.session);
+      })
+      .catch(() => {
+        if (!initialized) {
+          setAuthMessage("The saved session could not be restored. Sign in again.");
+          finishSessionRestore(null);
         }
-        cloudWorkspaceReadyRef.current = true;
-      } catch {
-        cloudWorkspaceReadyRef.current = true;
-        setCloudStatus("Signed in - cloud load skipped");
-      }
+      });
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+      finishSessionRestore(session);
+      if (session?.user?.email) setAuthEmail(session.user.email);
     });
-
-    return () => unsubscribe();
-  }, [applyWorkspace]);
+    return () => {
+      active = false;
+      window.clearTimeout(restoreTimeout);
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
-    if (!user || !cloudWorkspaceReadyRef.current) return undefined;
+    if (!user?.id) {
+      activeUserIdRef.current = null;
+      return;
+    }
+    if (activeUserIdRef.current === user.id) return;
+    cloudWorkspaceReadyRef.current = false;
+    activeUserIdRef.current = user.id;
+    setCloudStatus("Restoring workspace...");
+    loadWorkspaceForUser(user)
+      .catch(() => setCloudStatus("Cloud unavailable; local fallback active"))
+      .finally(() => {
+        cloudWorkspaceReadyRef.current = true;
+        setWorkspaceReady(true);
+      });
+  }, [loadWorkspaceForUser, user]);
 
-    const timeoutId = window.setTimeout(async () => {
-      try {
-        await setDoc(doc(db, "workspaces", user.uid), {
-          ...workspacePayload,
-          updatedAt: serverTimestamp(),
-          owner: user.uid,
-        });
-
-        setCloudStatus(`Cloud autosaved ${new Date().toLocaleTimeString()}`);
-      } catch {
-        setCloudStatus("Cloud autosave failed");
-      }
-    }, 1500);
-
+  useEffect(() => {
+    if (!user?.id || !cloudWorkspaceReadyRef.current) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      saveWorkspaceToCloud({ quiet: true });
+    }, 1800);
     return () => window.clearTimeout(timeoutId);
-  }, [user, workspacePayload]);
+  }, [saveWorkspaceToCloud, user, workspacePayload]);
 
   return {
+    authBusy,
     authEmail,
     authMessage,
     authMode,
     authPassword,
+    authReady,
     cloudStatus,
     handleAuthSubmit,
     handleLogout,
+    handlePasswordReset,
+    handlePasswordUpdate,
+    isAuthConfigured: isSupabaseConfigured,
     loadWorkspaceFromCloud,
     saveWorkspaceToCloud,
     setAuthEmail,
     setAuthMode,
     setAuthPassword,
+    passwordRecovery,
     user,
+    workspaceReady,
   };
 }

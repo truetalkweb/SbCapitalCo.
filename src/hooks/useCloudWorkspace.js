@@ -205,6 +205,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     cloudWorkspaceReadyRef.current = false;
     setUser(null);
     setWorkspaceReady(false);
+    setAuthMessage("");
     setCloudStatus("Authentication required");
     if (supabase) {
       await Promise.race([

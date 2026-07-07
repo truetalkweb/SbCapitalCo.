@@ -924,7 +924,7 @@ export default function App() {
 
     try {
       await Promise.allSettled([
-        BROKER_TOOLS_ENABLED ? refreshBroker() : Promise.resolve(),
+        refreshBroker(),
         refreshScanner(),
         refreshNews(),
       ]);

@@ -128,6 +128,17 @@ export function useBrokerData(brokerApiUrl) {
     }
   }, [brokerApiUrl]);
 
+  useEffect(() => {
+    const initial = window.setTimeout(checkBrokerStatus, 0);
+
+    const interval = window.setInterval(checkBrokerStatus, 60_000);
+
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [checkBrokerStatus]);
+
   const loadLiveReadiness = useCallback(
     async (accountNumber = selectedBrokerAccount) => {
       try {

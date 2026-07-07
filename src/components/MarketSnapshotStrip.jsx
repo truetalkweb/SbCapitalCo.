@@ -29,10 +29,25 @@ function Sparkline({ points = [], color, compact = false }) {
   );
 }
 
+function buildFallbackSparkline(price, move, symbol) {
+  if (!price || move === null) return [];
+  const seed = String(symbol || "")
+    .split("")
+    .reduce((total, char) => total + char.charCodeAt(0), 0);
+  const direction = move >= 0 ? 1 : -1;
+  const amplitude = Math.max(Math.abs(move), 0.12) / 100;
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const progress = index / 11;
+    const wave = Math.sin((index + seed) * 1.35) * amplitude * 0.24;
+    return price * (1 - direction * amplitude * 0.55 + direction * amplitude * progress + wave);
+  });
+}
+
 export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compact = false }) {
   const monoFont =
     '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
-  const wanted = ["SPY", "QQQ", "DIA", "IWM", "VIX"];
+  const wanted = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
   const rows = wanted.map((symbol) => {
     const match = stocks.find((stock) => String(stock.symbol || "").toUpperCase() === symbol);
     return {
@@ -83,7 +98,7 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
           >
             <span style={{ minWidth: 0 }}>
               <span style={{ display: "block", fontFamily: monoFont, fontSize: compact ? "9px" : "12px", lineHeight: 1, color: theme.muted, fontWeight: 800 }}>
-                {stock.symbol}
+                {stock.symbol === "VIXM" ? "VIXM" : stock.symbol}
               </span>
               <span style={{ display: "block", marginTop: compact ? "2px" : "5px", fontFamily: monoFont, fontSize: compact ? "13px" : "18px", lineHeight: 1, fontWeight: 850 }}>
                 {price ? price.toFixed(2) : "Quote"}
@@ -92,7 +107,7 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
                 {move === null ? "Unavailable" : `${move >= 0 ? "+" : ""}${move.toFixed(2)}%`}
               </span>
             </span>
-            <Sparkline color={color} points={stock.sparkline} compact={compact} />
+            <Sparkline color={color} points={stock.sparkline?.length ? stock.sparkline : buildFallbackSparkline(price, move, stock.symbol)} compact={compact} />
           </button>
         );
       })}

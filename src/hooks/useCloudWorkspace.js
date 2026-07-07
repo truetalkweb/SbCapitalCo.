@@ -130,10 +130,10 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   }, [authEmail, authMode, authPassword]);
 
   const handlePasswordReset = useCallback(async () => {
-    const email = authEmail.trim().toLowerCase();
+    const email = (authEmail || user?.email || "").trim().toLowerCase();
     if (!supabase || !email) {
       setAuthMessage("Enter your email first.");
-      return;
+      return false;
     }
     setAuthBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -143,7 +143,8 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     setAuthMessage(error
       ? getAuthMessage(error, "Password reset could not be sent.")
       : "Password reset instructions were sent if the account exists.");
-  }, [authEmail]);
+    return !error;
+  }, [authEmail, user]);
 
   const handlePasswordUpdate = useCallback(async () => {
     if (!supabase || authPassword.length < 8) {

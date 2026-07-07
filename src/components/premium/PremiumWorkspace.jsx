@@ -737,6 +737,17 @@ export default function PremiumWorkspace({
   const [compactMode, setCompactMode] = useState(() => loadSetting("sb_compact_mode", false));
   const [scannerAutoRefresh, setScannerAutoRefresh] = useState(() => loadSetting("sb_scanner_auto_refresh", true));
   const [relativeVolumeThreshold, setRelativeVolumeThreshold] = useState(() => loadSetting("sb_relative_volume_threshold", "1.50"));
+  const [passwordResetStatus, setPasswordResetStatus] = useState("idle");
+
+  const sendPasswordReset = async () => {
+    setPasswordResetStatus("sending");
+    try {
+      const sent = await requestPasswordReset?.();
+      setPasswordResetStatus(sent ? "sent" : "failed");
+    } catch {
+      setPasswordResetStatus("failed");
+    }
+  };
   const activePresetConfig = scannerPresets.find((preset) => preset.id === activeScannerPreset);
   const scannerMinimumRvol = Number(relativeVolumeThreshold ?? activePresetConfig?.minRvol ?? 0);
   const scannerDisplayRows = stocks.filter((row) => {
@@ -1648,7 +1659,7 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} disabled title="Connection management stays in backend/Railway settings">Manage Connection</ActionButton> <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use the top Retry control to refresh provider health.")}><RefreshCw size={14} /></ActionButton></span>]])}
             {group("Notification Settings", [["Price alerts", disabledSetting("Coming later")], ["Order fills", disabledSetting("Requires broker execution")], ["News catalyst alerts", disabledSetting("Coming later")], ["Daily summary email", disabledSetting("Coming later")], ["Sound alerts", disabledSetting("Coming later")]])}
-            {group("Security", [["Authentication", <StatusPill key="auth" theme={theme} tone="good">Supabase session</StatusPill>], ["Two-factor authentication", disabledSetting("Configure in Supabase Auth when required")], ["Device management", comingLaterButton("Coming Later", "Device management is not available in this MVP")], ["Password", <ActionButton key="password" theme={theme} onClick={requestPasswordReset}>Send reset email</ActionButton>]])}
+            {group("Security", [["Authentication", <StatusPill key="auth" theme={theme} tone="good">Supabase session</StatusPill>], ["Two-factor authentication", disabledSetting("Configure in Supabase Auth when required")], ["Device management", comingLaterButton("Coming Later", "Device management is not available in this MVP")], ["Password", <div key="password" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><ActionButton theme={theme} onClick={sendPasswordReset} disabled={passwordResetStatus === "sending"}>{passwordResetStatus === "sending" ? "Sending..." : "Send reset email"}</ActionButton>{passwordResetStatus === "sent" && <span role="status" style={{ color: theme.green, fontSize: 11 }}>Reset email sent</span>}{passwordResetStatus === "failed" && <span role="status" style={{ color: theme.amber, fontSize: 11 }}>Reset email could not be sent</span>}</div>]])}
             {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", user ? "Use Save to update cloud workspace" : "Local browser storage only"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]])}
             <PremiumCard theme={theme} title="Current Local Preferences">
               <div style={{ padding: 14, display: "grid", gap: 10 }}>

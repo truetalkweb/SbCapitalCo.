@@ -508,7 +508,6 @@ export default function App() {
     symbolSuggestions,
     tickerTapeSymbols,
     trackedSymbols,
-    updateLiveQuote,
   } = useTerminalSymbols({
     activeWorkspace,
     fmpActive,
@@ -2090,60 +2089,6 @@ export default function App() {
       clearInterval(interval);
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const pollLiveQuotes = async () => {
-      const uniqueSymbols = [...new Set(trackedSymbols)].slice(0, 12);
-
-      if (!uniqueSymbols.length) return;
-
-      try {
-        const response = await fetchWithTimeout(
-          `${BROKER_API_URL}/api/questrade/quotes?symbols=${encodeURIComponent(uniqueSymbols.join(","))}`,
-          8000
-        );
-
-        if (!response.ok) return;
-
-        const payload = await response.json();
-        const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
-
-        if (cancelled) return;
-
-        quotes.forEach((quote) => {
-          const price = Number(quote.price ?? quote.lastTradePrice ?? quote.last ?? 0);
-          const changePercent = Number(quote.changePercent ?? quote.percentChange);
-
-          if (price <= 0) return;
-
-          updateLiveQuote(quote.symbol, price, {
-            change: Number.isFinite(changePercent)
-              ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`
-              : undefined,
-            volume: quote.volume || quote.tradeVolume || quote.volumeTotal || "QUOTE",
-            source: quote.delayed ? "QTRD DELAYED" : "QTRD",
-            delayed: Boolean(quote.delayed),
-            realtime: quote.realtime !== false,
-            bidPrice: quote.bidPrice,
-            askPrice: quote.askPrice,
-            lastTradeTime: quote.lastTradeTime,
-          });
-        });
-      } catch {
-        // Keep websocket/simulated values if the backend quote bridge is unavailable.
-      }
-    };
-
-    pollLiveQuotes();
-    const interval = setInterval(pollLiveQuotes, 10_000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [trackedSymbols, updateLiveQuote]);
 
   useEffect(() => {
     if (!BROKER_TOOLS_ENABLED) {

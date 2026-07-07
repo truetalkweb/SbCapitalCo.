@@ -2052,12 +2052,16 @@ export default function App() {
         if (cancelled) return;
 
         quotes.forEach((quote) => {
-          const price = Number(quote.price || 0);
+          const price = Number(quote.price ?? quote.lastTradePrice ?? quote.last ?? 0);
+          const changePercent = Number(quote.changePercent ?? quote.percentChange);
 
           if (price <= 0) return;
 
           updateLiveQuote(quote.symbol, price, {
-            volume: quote.volume || "QUOTE",
+            change: Number.isFinite(changePercent)
+              ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`
+              : undefined,
+            volume: quote.volume || quote.tradeVolume || quote.volumeTotal || "QUOTE",
             source: quote.delayed ? "QTRD DELAYED" : "QTRD",
             delayed: Boolean(quote.delayed),
             realtime: quote.realtime !== false,

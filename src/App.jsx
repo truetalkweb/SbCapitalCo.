@@ -93,6 +93,7 @@ const brokerRightTabIds = new Set(["broker", "order", "audit", "replay", "activi
 const brokerWorkspaceIds = new Set(["broker", "portfolio"]);
 const coreRightTabs = new Set(["intel", "health", "alerts"]);
 const advancedWorkspaceIds = new Set(["broker", "portfolio"]);
+const marketSnapshotSymbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
 
 function isRightTabAllowed(tabId) {
   if (!BROKER_TOOLS_ENABLED) return publicRightTabIds.has(tabId);
@@ -137,6 +138,7 @@ export default function App() {
     updateLiveQuote: updateContextLiveQuote,
     subscribeToSymbols,
   } = useMarketData();
+  const [marketSnapshotQuotes, setMarketSnapshotQuotes] = useState({});
 
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
@@ -523,6 +525,10 @@ export default function App() {
     syncCharts,
     updateContextLiveQuote,
   });
+  const marketSnapshotStocks = useMemo(
+    () => [...Object.values(marketSnapshotQuotes), ...allSymbols],
+    [allSymbols, marketSnapshotQuotes]
+  );
 
   const {
     news,
@@ -2029,6 +2035,61 @@ export default function App() {
   useEffect(() => {
     return subscribeToSymbols(trackedSymbols);
   }, [subscribeToSymbols, trackedSymbols]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshMarketSnapshot = async () => {
+      try {
+        const response = await fetchWithTimeout(
+          `${BROKER_API_URL}/api/questrade/quotes?symbols=${encodeURIComponent(marketSnapshotSymbols.join(","))}`,
+          8000
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
+        const nextQuotes = {};
+
+        quotes.forEach((quote) => {
+          const symbol = String(quote.symbol || "").trim().toUpperCase();
+          const price = Number(quote.price ?? quote.lastTradePrice ?? quote.last ?? 0);
+          const changePercent = Number(quote.changePercent ?? quote.percentChange);
+
+          if (!symbol || price <= 0 || !Number.isFinite(price)) return;
+
+          nextQuotes[symbol] = {
+            symbol,
+            price: price.toFixed(2),
+            change: Number.isFinite(changePercent)
+              ? `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`
+              : quote.change || null,
+            changePercent: Number.isFinite(changePercent) ? changePercent : null,
+            volume: quote.volume || quote.tradeVolume || quote.volumeTotal || "QUOTE",
+            source: quote.delayed ? "QTRD DELAYED" : "QTRD",
+            delayed: Boolean(quote.delayed),
+            realtime: quote.realtime !== false,
+            lastTradeTime: quote.lastTradeTime || payload.updatedAt || null,
+          };
+        });
+
+        if (!cancelled && Object.keys(nextQuotes).length) {
+          setMarketSnapshotQuotes(nextQuotes);
+        }
+      } catch {
+        // Keep the strip in a truthful unavailable state if the quote bridge fails.
+      }
+    };
+
+    refreshMarketSnapshot();
+    const interval = setInterval(refreshMarketSnapshot, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -3792,7 +3853,7 @@ export default function App() {
         <div style={{ padding: activeWorkspace === "charts" ? "0 10px 5px" : "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
-            stocks={allSymbols}
+            stocks={marketSnapshotStocks}
             onPick={selectMainSymbol}
             compact={activeWorkspace === "charts"}
           />

@@ -76,17 +76,20 @@ export function useTerminalSymbols({
     ]
   );
 
+  const activeMarket = marketRegions[marketRegion] || marketRegions.us;
+
   const trackedSymbols = useMemo(
     () =>
       [
         selectedStock,
         secondarySymbol,
+        ...activeMarket.symbols,
         ...liveStocks.map((stock) => stock.symbol),
         ...liveSmallCapMovers.map((stock) => stock.symbol),
       ]
         .filter(Boolean)
         .map((symbol) => symbol.trim().toUpperCase()),
-    [selectedStock, secondarySymbol, liveStocks, liveSmallCapMovers]
+    [activeMarket.symbols, selectedStock, secondarySymbol, liveStocks, liveSmallCapMovers]
   );
 
   const selectedStockData =
@@ -99,7 +102,6 @@ export function useTerminalSymbols({
       pendingQuote: true,
       dataMode: "unavailable",
     };
-  const activeMarket = marketRegions[marketRegion] || marketRegions.us;
   const regionSymbols = new Set(activeMarket.symbols);
   const displaySymbols = marketRegion === "us"
     ? allSymbols

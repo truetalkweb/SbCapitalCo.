@@ -35,7 +35,7 @@ export const marketRegions = {
     label: "US",
     currency: "USD",
     timezone: "America/New_York",
-    symbols: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "AMD", "TSLA", "PLTR"],
+    symbols: ["SPY", "QQQ", "DIA", "IWM", "VIX", "AAPL", "MSFT", "NVDA", "AMD", "TSLA", "PLTR"],
   },
   canada: { label: "Canada", currency: "CAD", timezone: "America/Toronto", symbols: ["SHOP.TO", "RY.TO", "TD.TO", "BNS.TO"] },
   crypto: { label: "Crypto", currency: "USD", timezone: "UTC", symbols: ["BTC-USD", "ETH-USD", "SOL-USD"] },

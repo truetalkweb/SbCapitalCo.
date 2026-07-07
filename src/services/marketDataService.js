@@ -5,6 +5,7 @@ const ENABLE_QUOTE_SSE = import.meta.env.VITE_ENABLE_QUOTE_SSE === "true";
 
 const STREAM_RECONNECT_BASE_MS = 1000;
 const STREAM_RECONNECT_MAX_MS = 15000;
+const REST_QUOTE_POLL_MS = 10000;
 
 function normalizeSymbol(value) {
   return String(value || "")
@@ -219,7 +220,7 @@ class MarketDataService {
         STREAM_RECONNECT_BASE_MS * 2 ** Math.max(this.reconnectAttempt - 1, 0),
         STREAM_RECONNECT_MAX_MS
       );
-      this.startRestFallback(this.reconnectAttempt ? retryDelay : 1500);
+      this.startRestFallback(this.reconnectAttempt ? retryDelay : REST_QUOTE_POLL_MS);
     }
   }
 

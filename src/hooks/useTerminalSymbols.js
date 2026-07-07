@@ -16,6 +16,8 @@ import {
 import { normalizeScannerRow, rankScannerRows } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
 
+const marketSnapshotSymbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
+
 function normalizeTerminalSymbol(symbol) {
   const clean = String(symbol || "").trim().toUpperCase();
 
@@ -83,6 +85,7 @@ export function useTerminalSymbols({
       [
         selectedStock,
         secondarySymbol,
+        ...marketSnapshotSymbols,
         ...activeMarket.symbols,
         ...liveStocks.map((stock) => stock.symbol),
         ...liveSmallCapMovers.map((stock) => stock.symbol),

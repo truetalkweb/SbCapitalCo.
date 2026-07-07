@@ -63,7 +63,6 @@ export default function ChartPanel({
 
     setSymbol?.(clean);
   };
-  const quoteIsPositive = !String(quoteChange || "").includes("-");
   const liveQuoteMeta = allSymbols.find((item) => item.symbol === cleanChartSymbol);
   const quoteSourceLabel = formatQuoteSourceStatus(liveQuoteMeta);
   const chartSourceLabel = formatChartSourceStatus(chartStatus);
@@ -117,6 +116,12 @@ export default function ChartPanel({
     setShowTrendTools(false);
     setShowIndicators?.((value) => !value);
   };
+  const quoteChangeNumber = Number(String(quoteChange ?? "").replace(/[%+,]/g, "").trim());
+  const hasQuoteChange = Number.isFinite(quoteChangeNumber);
+  const quoteIsPositive = hasQuoteChange ? quoteChangeNumber >= 0 : !String(quoteChange || "").includes("-");
+  const quoteChangeDisplay = hasQuoteChange
+    ? `${quoteChangeNumber >= 0 ? "+" : ""}${quoteChangeNumber.toFixed(2)}%`
+    : quoteChange;
 
   return (
     <div
@@ -157,7 +162,7 @@ export default function ChartPanel({
                 {livePrice ? `$${Number(livePrice).toFixed(2)}` : "QUOTE"}
               </span>
               <span style={{ color: quoteChange ? quoteIsPositive ? theme.green : theme.red : theme.muted, fontSize: "10px", fontWeight: 900, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
-                {quoteChange || "PENDING"}
+                {quoteChangeDisplay || "PENDING"}
               </span>
             </div>
             <div style={{ marginTop: "4px", fontSize: secondary ? "18px" : "22px", fontWeight: 950, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>

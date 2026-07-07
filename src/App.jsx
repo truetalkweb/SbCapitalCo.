@@ -2200,7 +2200,11 @@ export default function App() {
   };
   const visibleMarketDataHealth = BROKER_TOOLS_ENABLED ? qtrdHealth : publicMarketDataHealth;
   const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
-  const resolvedMarketDataStatusLabel = visibleMarketDataHealth.label || marketDataStatusLabel;
+  const hasRenderableMarketData = allSymbols.some((stock) => Number(stock?.price || 0) > 0);
+  const pendingMarketDataLabel = /PENDING/i.test(String(visibleMarketDataHealth.label || marketDataStatusLabel || ""));
+  const resolvedMarketDataStatusLabel = pendingMarketDataLabel && hasRenderableMarketData
+    ? "PROVIDER DATA"
+    : visibleMarketDataHealth.label || marketDataStatusLabel;
   const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || null;
   const aiHealthLabel = aiHealth?.source === "gemini" && (aiHealth?.live || aiHealth?.providerLabel === "LIVE")

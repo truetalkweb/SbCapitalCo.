@@ -1891,14 +1891,24 @@ export default function App() {
   }, [brokerError, pushActivity]);
 
   useEffect(() => {
+    if (!authReady || !user?.id) {
+      return undefined;
+    }
+
     let cancelled = false;
 
     async function loadBackendAuditTrail() {
       try {
+        const headers = await getAuthHeaders();
+        if (!headers.Authorization) {
+          if (!cancelled) setOrderAuditSyncStatus("Local audit ready");
+          return;
+        }
+
         const response = await fetchWithTimeout(
           `${BROKER_API_URL}/api/audit/orders?limit=80`,
           6000,
-          { headers: await getAuthHeaders() }
+          { headers }
         );
         const payload = await response.json();
 
@@ -1938,7 +1948,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authReady, user?.id]);
 
   useEffect(() => {
     saveSetting("sb_timeframe", timeframe);

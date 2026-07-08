@@ -884,7 +884,7 @@ export default function PremiumWorkspace({
     color: theme.text,
     fontFamily: terminalSansFont,
   };
-  if (!canUseWorkspace(entitlements, activeWorkspace)) {
+  if (activeWorkspace !== "settings" && !canUseWorkspace(entitlements, activeWorkspace)) {
     return (
       <div style={page}>
         <LockedWorkspace

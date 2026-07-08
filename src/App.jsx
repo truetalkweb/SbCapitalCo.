@@ -2374,7 +2374,8 @@ export default function App() {
 
   useEffect(() => {
     const handleWorkspaceNav = (event) => {
-      const target = event.target?.closest?.("[data-workspace-id]");
+      const eventTarget = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const target = eventTarget?.closest?.("[data-workspace-id]");
       if (!target) return;
       const workspaceId = target.getAttribute("data-workspace-id");
       if (!workspaceId || !isWorkspaceAllowed(workspaceId)) return;

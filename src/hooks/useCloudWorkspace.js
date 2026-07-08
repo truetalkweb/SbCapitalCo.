@@ -52,7 +52,7 @@ async function withTimeout(promise, timeoutMs, message) {
 
 export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace, workspacePayload }) {
   const [user, setUser] = useState(null);
-  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authReady, setAuthReady] = useState(true);
   const [authBusy, setAuthBusy] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);

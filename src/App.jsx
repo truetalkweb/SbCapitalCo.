@@ -2373,6 +2373,21 @@ export default function App() {
   }, [activeWorkspace, advancedMode, setActiveWorkspace, usePremiumShell]);
 
   useEffect(() => {
+    const handleWorkspaceNav = (event) => {
+      const target = event.target?.closest?.("[data-workspace-id]");
+      if (!target) return;
+      const workspaceId = target.getAttribute("data-workspace-id");
+      if (!workspaceId || !isWorkspaceAllowed(workspaceId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveWorkspace(workspaceId);
+    };
+
+    document.addEventListener("pointerdown", handleWorkspaceNav, true);
+    return () => document.removeEventListener("pointerdown", handleWorkspaceNav, true);
+  }, [setActiveWorkspace]);
+
+  useEffect(() => {
     if (!visibleRightPanelTabs.some((tab) => tab.id === rightTab)) {
       setRightTab("intel");
     }

@@ -435,6 +435,7 @@ export default function TerminalTopBar({
           <button
             key={view.id}
             type="button"
+            data-workspace-id={view.id}
             onPointerDown={(event) => switchWorkspace(event, view.id)}
             onClick={(event) => switchWorkspace(event, view.id)}
             style={compactButton(activeWorkspace === view.id)}

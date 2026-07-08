@@ -15,6 +15,23 @@ body {
   .sb-sidebar-account-summary {
     display: none !important;
   }
+
+  .sb-sidebar-nav {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    gap: 2px !important;
+  }
+
+  .sb-sidebar-nav-button {
+    height: 30px !important;
+    min-height: 30px !important;
+    border-radius: 7px !important;
+  }
+
+  .sb-sidebar-nav-button > span:first-child {
+    width: 20px !important;
+    height: 20px !important;
+  }
 }
 
 button,

@@ -127,6 +127,7 @@ export default function Tradingsidebar({
       </div>
 
       <nav
+        className="sb-sidebar-nav"
         style={{
           width: "100%",
           display: "flex",
@@ -146,6 +147,7 @@ export default function Tradingsidebar({
           return (
             <div key={`${item.id}-${item.label}`} style={{ display: "contents" }}>
             <button
+              className="sb-sidebar-nav-button"
               type="button"
               title={item.label}
               aria-label={item.label}

@@ -64,6 +64,10 @@ import { getCleanProviderMessage, getQuestradeHealth } from "./utils/healthStatu
 import { loadSetting, removeSettings, saveSetting } from "./utils/storage";
 import { getAuthHeaders } from "./services/authenticatedRequest";
 import {
+  DEFAULT_ENTITLEMENTS,
+  fetchCurrentEntitlements,
+} from "./services/entitlements";
+import {
   getDefaultIndicatorState,
   normalizeIndicatorState,
 } from "./indicators/chartIndicators";
@@ -809,6 +813,42 @@ export default function App() {
     resetWorkspace,
     workspacePayload,
   });
+  const [entitlements, setEntitlements] = useState(DEFAULT_ENTITLEMENTS);
+  const [entitlementsStatus, setEntitlementsStatus] = useState("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchCurrentEntitlements()
+      .then((payload) => {
+        if (cancelled) return;
+        setEntitlements({
+          ...DEFAULT_ENTITLEMENTS,
+          ...(payload || {}),
+          capabilities: {
+            ...DEFAULT_ENTITLEMENTS.capabilities,
+            ...(payload?.capabilities || {}),
+          },
+        });
+        setEntitlementsStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEntitlements(DEFAULT_ENTITLEMENTS);
+        setEntitlementsStatus("degraded");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+  const effectiveEntitlements = user ? entitlements : DEFAULT_ENTITLEMENTS;
+  const effectiveEntitlementsStatus = user ? entitlementsStatus : "idle";
 
   function panelStyle(extra = {}) {
     return createPanelStyle(theme, isDark, extra);
@@ -3716,6 +3756,8 @@ export default function App() {
         addJournalEntry={addJournalEntry}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
+        entitlements={effectiveEntitlements}
+        entitlementsStatus={effectiveEntitlementsStatus}
       />
     );
   }

@@ -30,6 +30,14 @@ import {
   rankScannerRows,
 } from "../../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../../utils/storage";
+import {
+  DEFAULT_ENTITLEMENTS,
+  PLAN_LABELS,
+  WORKSPACE_FEATURES,
+  canUseWorkspace,
+  getFeatureMinPlan,
+  normalizePlan,
+} from "../../services/entitlements";
 
 function num(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
@@ -128,6 +136,91 @@ function PremiumCard({ theme, children, style = {}, title, action }) {
       )}
       {children}
     </section>
+  );
+}
+
+function LockedWorkspace({ theme, activeWorkspace, entitlements, status }) {
+  const feature = WORKSPACE_FEATURES[activeWorkspace] || activeWorkspace;
+  const requiredPlan = getFeatureMinPlan(feature);
+  const currentPlan = normalizePlan(entitlements?.plan);
+  const title = PLAN_LABELS[requiredPlan] || "Premium";
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        placeItems: "center",
+        minHeight: "100%",
+        padding: 20,
+      }}
+    >
+      <PremiumCard
+        theme={theme}
+        style={{
+          width: "min(560px, 100%)",
+          background: `linear-gradient(180deg, ${theme.panel}, ${theme.bg})`,
+        }}
+      >
+        <div style={{ padding: 22, display: "grid", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                display: "grid",
+                placeItems: "center",
+                background: `${theme.blue}20`,
+                border: `1px solid ${theme.blue}55`,
+                color: theme.blue,
+              }}
+            >
+              <Lock size={18} />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, color: theme.text, fontSize: 18 }}>Upgrade required</h2>
+              <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
+                This workspace is part of the {title} plan.
+              </div>
+            </div>
+          </div>
+          <div style={{ color: theme.muted, lineHeight: 1.55, fontSize: 13 }}>
+            Your current plan is <b style={{ color: theme.text }}>{PLAN_LABELS[currentPlan] || "Free"}</b>.
+            Core market intelligence, scanner, charts, watchlist, news, alerts, and settings remain available.
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
+            }}
+          >
+            {[
+              ["Current plan", PLAN_LABELS[currentPlan] || "Free"],
+              ["Required plan", title],
+              ["Feature", feature],
+              ["Access check", status === "loading" ? "Checking" : "Locked"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  border: `1px solid ${theme.borderSoft || theme.border}`,
+                  borderRadius: 7,
+                  background: theme.panel2,
+                  padding: "10px 12px",
+                }}
+              >
+                <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
+                <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 12 }}>{value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ color: theme.muted, fontSize: 12 }}>
+            Plan upgrades are controlled from Supabase entitlement records or user app metadata. No broker execution is enabled by this lock.
+          </div>
+        </div>
+      </PremiumCard>
+    </div>
   );
 }
 
@@ -663,6 +756,8 @@ export default function PremiumWorkspace({
   addJournalEntry,
   exportJournalCsv,
   exportTradeSummaryCsv,
+  entitlements = DEFAULT_ENTITLEMENTS,
+  entitlementsStatus = "idle",
 }) {
   const isNarrowWorkspace = viewportWidth <= 900;
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock);
@@ -781,6 +876,19 @@ export default function PremiumWorkspace({
     color: theme.text,
     fontFamily: terminalSansFont,
   };
+  if (!canUseWorkspace(entitlements, activeWorkspace)) {
+    return (
+      <div style={page}>
+        <LockedWorkspace
+          theme={theme}
+          activeWorkspace={activeWorkspace}
+          entitlements={entitlements}
+          status={entitlementsStatus}
+        />
+      </div>
+    );
+  }
+
   const mainTwoCol = {
     display: "grid",
     gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) 360px",

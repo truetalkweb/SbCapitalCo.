@@ -215,8 +215,16 @@ function LockedWorkspace({ theme, activeWorkspace, entitlements, status }) {
               </div>
             ))}
           </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <ActionButton theme={theme} active disabled title="Stripe checkout will be connected in the payments phase">
+              View Pro
+            </ActionButton>
+            <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">
+              View Premium
+            </ActionButton>
+          </div>
           <div style={{ color: theme.muted, fontSize: 12 }}>
-            Plan upgrades are controlled from Supabase entitlement records or user app metadata. No broker execution is enabled by this lock.
+            Upgrade checkout is not connected yet. Access is controlled by Supabase entitlements or admin app metadata. No broker execution is enabled by this lock.
           </div>
         </div>
       </PremiumCard>
@@ -1718,6 +1726,29 @@ export default function PremiumWorkspace({
       </button>
     );
     const disabledSetting = (text = "Coming later") => <span style={{ color: theme.muted, fontSize: 11 }}>{text}</span>;
+    const accountPlan = normalizePlan(entitlements?.plan);
+    const entitlementSource = entitlements?.source || "default";
+    const planPill = (plan, active = false) => (
+      <div
+        key={plan}
+        style={{
+          border: `1px solid ${active ? theme.blue : theme.borderSoft || theme.border}`,
+          background: active ? `${theme.blue}22` : theme.panel2,
+          color: active ? theme.text : theme.muted,
+          borderRadius: 7,
+          padding: "10px 12px",
+          minHeight: 62,
+        }}
+      >
+        <div style={{ fontWeight: 900, color: active ? theme.blue : theme.text }}>{PLAN_LABELS[plan]}</div>
+        <div style={{ fontSize: 11, marginTop: 5, lineHeight: 1.35 }}>
+          {plan === "free" && "Core market terminal access."}
+          {plan === "pro" && "AI summaries, replay, and journal."}
+          {plan === "premium" && "Orders, positions, risk, performance, broker diagnostics."}
+          {plan === "admin" && "Internal entitlement administration."}
+        </div>
+      </div>
+    );
     const comingLaterButton = (label, title) => (
       <ActionButton key={label} theme={theme} disabled title={title || `${label} requires backend/account support`}>
         {label}
@@ -1741,6 +1772,27 @@ export default function PremiumWorkspace({
         <PremiumTabs theme={theme} tabs={["General", "Trading", "Layout", "Notifications", "Data & Connections", "Security"]} active="General" />
         <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.05fr) minmax(360px, 0.9fr)", gap: 10, marginTop: 12 }}>
           <div style={{ display: "grid", gap: 10 }}>
+            <PremiumCard theme={theme} title="Account & Plan">
+              <div style={{ padding: 16, display: "grid", gap: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ color: theme.text, fontSize: 15, fontWeight: 900 }}>{user?.email || "Authenticated workspace"}</div>
+                    <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>Plan source: {entitlementSource === "user_entitlements" ? "Supabase entitlement table" : entitlementSource === "app_metadata" ? "Supabase app metadata" : "Default free access"}</div>
+                  </div>
+                  <StatusPill theme={theme} tone={accountPlan === "free" ? "neutral" : "good"}>{PLAN_LABELS[accountPlan] || "Free"}</StatusPill>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "repeat(4, 1fr)", gap: 8 }}>
+                  {["free", "pro", "premium", "admin"].map((plan) => planPill(plan, plan === accountPlan))}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">Upgrade to Pro</ActionButton>
+                  <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">Upgrade to Premium</ActionButton>
+                </div>
+                <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
+                  Market data can be delayed, cached, or provider-limited. SbCapitalCo is an information and review workspace, not financial advice. Confirm liquidity, risk, and broker state before acting.
+                </div>
+              </div>
+            </PremiumCard>
             {group("Workspace Preferences", [
               ["Theme", settingSelect(themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
               ["Compact mode", settingToggle(compactMode, (value) => { setCompactMode(value); saveSetting("sb_compact_mode", value); setOrderMessage?.(`Compact mode ${value ? "enabled" : "disabled"} for future workspace polish.`); })],

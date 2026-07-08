@@ -211,6 +211,7 @@ export default function Tradingsidebar({
 
       {expanded && accountSummary && (
         <div
+          className="sb-sidebar-account-summary"
           style={{
             borderTop: `1px solid ${sidebarBorder}`,
             padding: "14px",

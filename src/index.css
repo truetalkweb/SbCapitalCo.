@@ -11,6 +11,12 @@ body {
   font-synthesis-weight: none;
 }
 
+@media (max-height: 820px) {
+  .sb-sidebar-account-summary {
+    display: none !important;
+  }
+}
+
 button,
 input,
 select,

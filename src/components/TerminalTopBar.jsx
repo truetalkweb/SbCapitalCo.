@@ -142,6 +142,11 @@ export default function TerminalTopBar({
   onOpenHelp,
   premiumShell = false,
 }) {
+  const switchWorkspace = (event, workspaceId) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveWorkspace(workspaceId);
+  };
   const now = new Date();
 
   const pacificTime = now.toLocaleTimeString("en-US", {
@@ -430,7 +435,8 @@ export default function TerminalTopBar({
           <button
             key={view.id}
             type="button"
-            onClick={() => setActiveWorkspace(view.id)}
+            onPointerDown={(event) => switchWorkspace(event, view.id)}
+            onClick={(event) => switchWorkspace(event, view.id)}
             style={compactButton(activeWorkspace === view.id)}
           >
             {view.label}

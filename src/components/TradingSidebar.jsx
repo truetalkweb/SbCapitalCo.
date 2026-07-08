@@ -39,6 +39,11 @@ export default function Tradingsidebar({
   expanded = false,
   accountSummary = null,
 }) {
+  const switchWorkspace = (event, workspaceId) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveWorkspace(workspaceId);
+  };
   const visibleItems = NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
     return true;
@@ -144,7 +149,8 @@ export default function Tradingsidebar({
               type="button"
               title={item.label}
               aria-label={item.label}
-              onClick={() => setActiveWorkspace(item.id)}
+              onPointerDown={(event) => switchWorkspace(event, item.id)}
+              onClick={(event) => switchWorkspace(event, item.id)}
               style={{
                 width: expanded ? "100%" : "38px",
                 height: "38px",

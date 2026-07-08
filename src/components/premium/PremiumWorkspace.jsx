@@ -1045,6 +1045,58 @@ export default function PremiumWorkspace({
     );
   }
 
+  if (activeWorkspace === "charts") {
+    const enabledIndicatorRows = CHART_INDICATOR_OPTIONS
+      .filter((indicator) => Boolean(chartIndicators?.[indicator.id]))
+      .map((indicator) => ({
+        indicator: indicator.label,
+        status: "Enabled",
+        params: indicator.id.startsWith("ema") ? `Period: ${indicator.id.replace("ema", "")}` : "Chart-calculated",
+        value: "See chart",
+        signal: "Not classified",
+      }));
+    return (
+      <div style={page}>
+        <div style={mainTwoCol}>
+          <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 220px", gap: 10, minHeight: 0 }}>
+            <PremiumCard theme={theme} style={{ minHeight: 520 }}>{renderChartGrid?.({ layoutMode: "1" })}</PremiumCard>
+            <PremiumCard theme={theme} style={{ minHeight: 0, overflow: "hidden" }}>
+              <PremiumTabs theme={theme} tabs={["Watchlist", "Indicators", "Alerts", "Notes"]} active="Indicators" />
+              <PremiumTable
+                theme={theme}
+                columns={[
+                  { key: "indicator", label: "Indicator", width: "1.4fr" },
+                  { key: "status", label: "Status", width: "110px", color: () => theme.green },
+                  { key: "params", label: "Parameters", width: "1fr" },
+                  { key: "value", label: "Value", width: "90px", align: "right" },
+                  { key: "signal", label: "Signal", width: "90px", color: () => theme.green },
+                ]}
+                rows={enabledIndicatorRows}
+                emptyMessage="No chart indicators enabled"
+                style={{ height: "calc(100% - 40px)" }}
+                rowMinHeight={34}
+                headerMinHeight={30}
+                cellPadding="0 12px"
+                columnGap={10}
+              />
+            </PremiumCard>
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {selectedRail(
+              <PremiumCard theme={theme} title="Chart Context">
+                <div style={{ padding: 14, display: "grid", gap: 10, color: theme.muted }}>
+                  <div><b style={{ color: theme.text }}>Catalyst:</b> {selected.catalyst || "No verified catalyst available"}</div>
+                  <div><b style={{ color: theme.text }}>Data mode:</b> {selected.dataMode === "provider" ? "Provider data" : "Unavailable"}</div>
+                  <div><b style={{ color: theme.text }}>Technical classification:</b> Not available from the current data feed</div>
+                </div>
+              </PremiumCard>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activeWorkspace === "scanner") {
     return (
       <div style={page}>

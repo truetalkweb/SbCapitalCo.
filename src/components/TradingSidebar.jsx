@@ -141,6 +141,7 @@ export default function Tradingsidebar({
           return (
             <div key={`${item.id}-${item.label}`} style={{ display: "contents" }}>
             <button
+              type="button"
               title={item.label}
               aria-label={item.label}
               onClick={() => setActiveWorkspace(item.id)}

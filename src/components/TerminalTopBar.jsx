@@ -429,6 +429,7 @@ export default function TerminalTopBar({
           .map((view) => (
           <button
             key={view.id}
+            type="button"
             onClick={() => setActiveWorkspace(view.id)}
             style={compactButton(activeWorkspace === view.id)}
           >

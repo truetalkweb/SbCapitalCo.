@@ -803,7 +803,6 @@ export default function App() {
     setAuthMode,
     setAuthPassword,
     user,
-    workspaceReady,
   } = useCloudWorkspace({
     applyWorkspace,
     pushActivity,
@@ -3711,7 +3710,7 @@ export default function App() {
     );
   }
 
-  if (!authReady || !user || !workspaceReady || passwordRecovery) {
+  if (!authReady || !user || passwordRecovery) {
     return (
       <AuthGate
         busy={authBusy}
@@ -3727,7 +3726,7 @@ export default function App() {
         onSubmit={handleAuthSubmit}
         password={authPassword}
         recovery={passwordRecovery}
-        ready={authReady && (!user || workspaceReady)}
+        ready={authReady && !user}
       />
     );
   }

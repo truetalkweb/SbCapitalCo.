@@ -9,6 +9,7 @@ This runbook prepares the current React/Vite frontend for Vercel and the Node/Ex
 3. Confirm `anon` has no table grants and `authenticated` has select, insert, update, and delete grants.
 4. Confirm each policy compares `auth.uid()` with `user_id` for its operation.
 5. Keep email confirmation enabled for public signup.
+6. Set the Auth Site URL and redirect allow-list to the production frontend domain, for example `https://www.sbcapitalco.com`.
 
 ## Vercel frontend variables
 
@@ -18,6 +19,7 @@ Required:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY` - preferred public browser key. `VITE_SUPABASE_ANON_KEY` remains supported for legacy projects.
 - `VITE_SUPABASE_WORKSPACE_TABLE=terminal_workspaces`
+- `VITE_AUTH_REDIRECT_URL=https://www.sbcapitalco.com` - recommended in production so signup and password reset emails return to the canonical domain.
 
 Production safety flags:
 

@@ -6,6 +6,14 @@ import {
   terminalWorkspaceTable,
 } from "../services/supabaseClient";
 
+const authRedirectOrigin = String(import.meta.env.VITE_AUTH_REDIRECT_URL || "").trim();
+
+function getAuthRedirectTo() {
+  if (authRedirectOrigin) return authRedirectOrigin;
+  if (typeof window !== "undefined") return window.location.origin;
+  return undefined;
+}
+
 function getAuthMessage(error, fallback) {
   const message = String(error?.message || "").toLowerCase();
   if (message.includes("invalid login")) return "Email or password is incorrect.";
@@ -112,7 +120,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
         const { data, error } = await supabase.auth.signUp({
           email,
           password: authPassword,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: getAuthRedirectTo() },
         });
         if (error) throw error;
         setAuthMessage(data.session ? "Account created." : "Check your email to confirm the account.");
@@ -137,7 +145,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     }
     setAuthBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: getAuthRedirectTo(),
     });
     setAuthBusy(false);
     setAuthMessage(error

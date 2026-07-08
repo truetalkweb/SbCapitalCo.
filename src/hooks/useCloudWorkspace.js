@@ -264,15 +264,28 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       return;
     }
     if (activeUserIdRef.current === user.id) return;
+    let cancelled = false;
     cloudWorkspaceReadyRef.current = false;
     activeUserIdRef.current = user.id;
     setCloudStatus("Restoring workspace...");
+    const restoreTimeoutId = window.setTimeout(() => {
+      if (cancelled || cloudWorkspaceReadyRef.current) return;
+      cloudWorkspaceReadyRef.current = true;
+      setWorkspaceReady(true);
+      setCloudStatus("Cloud restore timed out; local fallback active");
+    }, 7000);
     loadWorkspaceForUser(user)
       .catch(() => setCloudStatus("Cloud unavailable; local fallback active"))
       .finally(() => {
+        if (cancelled) return;
+        window.clearTimeout(restoreTimeoutId);
         cloudWorkspaceReadyRef.current = true;
         setWorkspaceReady(true);
       });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(restoreTimeoutId);
+    };
   }, [loadWorkspaceForUser, user]);
 
   useEffect(() => {

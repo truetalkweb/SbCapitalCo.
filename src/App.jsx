@@ -3671,7 +3671,7 @@ export default function App() {
     return renderPremiumScannerBoard();
   }
 
-  function renderPremiumChartGrid({ layoutMode: layoutModeOverride = "1", gridMode: gridModeOverride = "2", compact = false } = {}) {
+  function renderPremiumChartGrid({ layoutMode: layoutModeOverride = "1", gridMode: gridModeOverride = "2", compact = false, embeddedChart = false } = {}) {
     return (
       <WorkspaceGrid
         theme={theme}
@@ -3695,6 +3695,7 @@ export default function App() {
         setSecondaryChartStatus={setSecondaryChartStatus}
         syncCharts={syncCharts}
         compact={compact}
+        embeddedChart={embeddedChart}
       />
     );
   }

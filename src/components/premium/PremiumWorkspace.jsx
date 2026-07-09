@@ -1742,6 +1742,7 @@ export default function PremiumWorkspace({
                 theme={theme}
                 title={`${selectedStock} Replay Chart`}
                 action={<span style={{ color: theme.muted, fontFamily: terminalMonoFont }}>Historical simulation</span>}
+                style={{ display: "grid", gridTemplateRows: "auto auto minmax(420px, 1fr) auto", minHeight: 560 }}
               >
                 <div style={{ padding: "14px 16px 10px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "grid", gap: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
@@ -1770,7 +1771,7 @@ export default function PremiumWorkspace({
                     <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use browser fullscreen for replay review.")}>Fullscreen</ActionButton>
                   </div>
                 </div>
-                <div style={{ height: 330 }}>{renderChartGrid?.({ layoutMode: "1", compact: true })}</div>
+                <div style={{ minHeight: 420, height: "100%" }}>{renderChartGrid?.({ layoutMode: "1", compact: true, embeddedChart: true })}</div>
                 <div style={{ borderTop: `1px solid ${theme.borderSoft || theme.border}`, padding: "10px 14px", color: theme.muted, fontSize: 12 }}>
                   Replay indicators are shown only when calculated by the chart. No synthetic RSI series is generated.
                 </div>

@@ -22,6 +22,7 @@ export default function WorkspaceGrid({
   setSecondaryChartStatus,
   syncCharts,
   compact = false,
+  embeddedChart = false,
 }) {
   const isOneChart = compact || layoutMode === "1";
   const isFourChart = !isOneChart && gridMode === "4";
@@ -95,6 +96,7 @@ export default function WorkspaceGrid({
           quoteChange: selectedStockData?.change,
           chartStatus: mainChartStatus,
           onStatusChange: setMainChartStatus,
+          embedded: embeddedChart,
         })}
       </div>
 
@@ -112,6 +114,7 @@ export default function WorkspaceGrid({
             secondary: true,
             chartStatus: secondaryChartStatus,
             onStatusChange: setSecondaryChartStatus,
+            embedded: embeddedChart,
           })}
         </div>
       )}
@@ -130,6 +133,7 @@ export default function WorkspaceGrid({
           secondary: true,
           chartStatus: syncCharts ? mainChartStatus : thirdChartStatus,
           onStatusChange: syncCharts ? () => {} : setThirdChartStatus,
+          embedded: embeddedChart,
         })}
       </div>
       )}
@@ -148,6 +152,7 @@ export default function WorkspaceGrid({
             secondary: true,
             chartStatus: syncCharts ? secondaryChartStatus : fourthChartStatus,
             onStatusChange: syncCharts ? () => {} : setFourthChartStatus,
+            embedded: embeddedChart,
           })}
         </div>
       )}

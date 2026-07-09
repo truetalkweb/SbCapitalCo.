@@ -49,6 +49,7 @@ export default function ChartPanel({
   brokerApiUrl,
   advancedMode = false,
   premiumShell = false,
+  embedded = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
   const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
@@ -137,6 +138,7 @@ export default function ChartPanel({
         minHeight: 0,
       }}
     >
+      {!embedded && (
       <div
         style={{
           padding: isPhoneChart ? "10px" : premiumShell ? "9px 12px" : "10px 12px",
@@ -250,8 +252,9 @@ export default function ChartPanel({
           </div>
         </div>
       </div>
+      )}
 
-      {!secondary && (
+      {!embedded && !secondary && (
         <div
           style={{
             display: "flex",

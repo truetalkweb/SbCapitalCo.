@@ -1060,6 +1060,7 @@ export default function PremiumWorkspace({
         signal: "Not classified",
       }));
     const activeChartLayout = layoutMode === "1" ? "1" : gridMode === "4" ? "4" : gridMode === "3" ? "3" : "2";
+    const chartStageMinHeight = activeChartLayout === "4" ? 680 : activeChartLayout === "3" ? 660 : 620;
     const setDeskLayout = (nextLayout) => {
       setLayoutMode?.(nextLayout === "1" ? "1" : "2");
       setGridMode?.(nextLayout === "1" ? "2" : nextLayout);
@@ -1103,14 +1104,14 @@ export default function PremiumWorkspace({
     ];
 
     return (
-      <div style={{ ...page, overflow: "hidden" }}>
+      <div style={{ ...page, overflow: "auto" }}>
         <div
           style={{
-            height: "100%",
-            minHeight: 0,
+            height: "auto",
+            minHeight: isNarrowWorkspace ? 0 : chartStageMinHeight + 150,
             display: "grid",
             gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) clamp(300px, 20vw, 360px)",
-            gridTemplateRows: "minmax(0, 1fr) auto",
+            gridTemplateRows: `minmax(${chartStageMinHeight}px, 1fr) auto`,
             gap: 10,
           }}
         >

@@ -3750,7 +3750,9 @@ export default function App() {
         setTimeZone={setTimeZone}
         activePreset={activePreset}
         layoutMode={layoutMode}
+        setLayoutMode={setLayoutMode}
         gridMode={gridMode}
+        setGridMode={setGridMode}
         user={user}
         handleLogout={handleLogout}
         saveWorkspaceToCloud={saveWorkspaceToCloud}

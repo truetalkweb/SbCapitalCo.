@@ -26,6 +26,7 @@ export default function WorkspaceGrid({
 }) {
   const isOneChart = compact || layoutMode === "1";
   const isFourChart = !isOneChart && gridMode === "4";
+  const isThreeChart = !isOneChart && gridMode === "3";
   const [thirdChartSymbol, setThirdChartSymbol] = useState("SPY");
   const [fourthChartSymbol, setFourthChartSymbol] = useState("QQQ");
   const [thirdChartStatus, setThirdChartStatus] = useState("LOADING");
@@ -66,6 +67,11 @@ export default function WorkspaceGrid({
         gridTemplateColumns: "1fr 1fr",
         gridTemplateRows: "1fr 1fr",
       }
+    : isThreeChart
+    ? {
+        gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.9fr)",
+        gridTemplateRows: "1fr 1fr",
+      }
     : {
         gridTemplateColumns: "1fr 1fr",
         gridTemplateRows: "1fr",
@@ -84,7 +90,7 @@ export default function WorkspaceGrid({
         background: theme.bg,
       }}
     >
-      <div style={shellStyle}>
+      <div style={isThreeChart ? { ...shellStyle, gridRow: "1 / 3" } : shellStyle}>
         {renderChartPanel({
           title: "Main Chart",
           symbol: selectedStock,
@@ -119,7 +125,7 @@ export default function WorkspaceGrid({
         </div>
       )}
 
-      {isFourChart && (
+      {(isFourChart || isThreeChart) && (
         <div style={shellStyle}>
           {renderChartPanel({
           title: "Market Index",

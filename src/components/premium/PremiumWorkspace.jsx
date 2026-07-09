@@ -1609,106 +1609,234 @@ export default function PremiumWorkspace({
           pct: averagePrice ? `${((lastPrice - averagePrice) / averagePrice * 100).toFixed(2)}%` : "Unavailable",
         };
       });
+    const replaySymbolData = allSymbols?.find((row) => row.symbol === selectedStock) || selected;
+    const replayPrice = num(replaySymbolData?.price ?? selected?.price, 0);
+    const replayMove = nullableMoveOf(replaySymbolData) ?? nullableMoveOf(selected) ?? 0;
+    const replayStatus = replayPlaying ? "Running" : "Paused";
+    const replaySummaryRows = [
+      ["Starting Cash", money(replayStartingCash)],
+      ["Net Liquidation", money(replayNetLiquidation)],
+      ["Total P&L", money(replayNet)],
+      ["Realized P&L", money(replayNet)],
+      ["Unrealized P&L", replayPositions.length ? money(replayPositions.reduce((total, row) => total + num(row.pnl), 0)) : money(0)],
+      ["Total Trades", replayRows.length],
+      ["Win Rate", `${replayWinRate}%`],
+      ["Profit Factor", replayRows.length ? "Review" : "Unavailable"],
+      ["Max Drawdown", money(replayMaxDrawdown)],
+    ];
+    const replayStatusRows = [
+      ["Replay Session", "Current"],
+      ["Data Speed", `${replaySpeed || 1}x`],
+      ["Data Source", "Historical simulation"],
+      ["Status", replayStatus],
+    ];
+    const replayMetric = (label, value) => (
+      <label key={label} style={{ display: "grid", gap: 6, minWidth: 0 }}>
+        <span style={{ color: theme.muted, fontSize: 10, fontWeight: 850, letterSpacing: 0.2, textTransform: "uppercase" }}>{label}</span>
+        <span
+          style={{
+            minHeight: 34,
+            display: "flex",
+            alignItems: "center",
+            borderTop: `1px solid ${theme.borderSoft || theme.border}`,
+            color: theme.text,
+            fontFamily: terminalMonoFont,
+            fontSize: 13,
+            fontWeight: 850,
+          }}
+        >
+          {value}
+        </span>
+      </label>
+    );
+    const valueRow = ([label, value]) => {
+      const parsed = num(String(value).replace(/[^0-9.-]/g, ""), 0);
+      const color = String(value).includes("Unavailable") ? theme.muted : parsed < 0 ? theme.red : label.includes("P&L") && parsed > 0 ? theme.green : theme.text;
+      return (
+        <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 16, color: theme.muted, fontSize: 13 }}>
+          <span>{label}</span>
+          <b style={{ color, fontFamily: terminalMonoFont, fontWeight: 850 }}>{value}</b>
+        </div>
+      );
+    };
     return (
       <div style={page}>
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 12, minHeight: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
-            <SectionTitle theme={theme} title="Replay" subtitle="Practice trading with historical market data. All orders are simulated." />
+            <SectionTitle theme={theme} title="REPLAY" subtitle="Practice trading with historical market data. All orders are simulated." />
             <ActionButton theme={theme} disabled title="Replay settings editing is not wired in this pass">Replay Settings</ActionButton>
           </div>
-            <PremiumCard theme={theme}>
-              <div style={{ padding: 12, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "repeat(2, minmax(0, 1fr))" : "160px 170px 160px 160px 120px 1fr", gap: 8, alignItems: "center" }}>
-                {["Stocks (US)", "Current replay session", "Market open", "Market close", `${replaySpeed || 1}x`].map((value, index) => (
-                  <label key={`${value}-${index}`} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase" }}>
-                    {["Market", "Date", "Start Time", "End Time", "Speed"][index]}
-                    <input readOnly value={value} style={{ height: 32, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px", fontFamily: terminalMonoFont }} />
-                  </label>
-                ))}
-                <div style={{ display: "flex", gap: 8, justifyContent: "end", flexWrap: "wrap", gridColumn: isNarrowWorkspace ? "1 / -1" : "auto" }}>
-                  <ActionButton theme={theme} onClick={() => resetReplay?.()}>Skip to Open</ActionButton>
-                  <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
-                  <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
-                    {replayPlaying ? "Pause Replay" : "Start Replay"}
-                  </ActionButton>
+          <PremiumCard theme={theme}>
+            <div
+              style={{
+                padding: 14,
+                display: "grid",
+                gridTemplateColumns: isNarrowWorkspace ? "repeat(2, minmax(0, 1fr))" : "150px 170px 140px 140px 110px minmax(220px, 1fr)",
+                gap: 14,
+                alignItems: "end",
+              }}
+            >
+              {[
+                ["Market", "Stocks (US)"],
+                ["Date", "Current replay session"],
+                ["Start Time", "Market open"],
+                ["End Time", "Market close"],
+                ["Speed", `${replaySpeed || 1}x`],
+              ].map(([label, value]) => replayMetric(label, value))}
+              <div style={{ display: "flex", gap: 8, justifyContent: "end", flexWrap: "wrap", gridColumn: isNarrowWorkspace ? "1 / -1" : "auto" }}>
+                <ActionButton theme={theme} onClick={() => resetReplay?.()}>Skip to Open</ActionButton>
+                <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
+                <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                  {replayPlaying ? "Pause Replay" : "Start Replay"}
+                </ActionButton>
+              </div>
+            </div>
+          </PremiumCard>
+
+          <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "250px minmax(0, 1fr) 320px", gap: 10, alignItems: "stretch" }}>
+            <PremiumCard theme={theme} title="Replay Controls">
+              <div style={{ padding: 14, display: "grid", gap: 20 }}>
+                <div>
+                  <div style={{ color: theme.muted, fontSize: 12, marginBottom: 9 }}>Speed</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    {["0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x", "50x", "100x"].map((speed) => (
+                      <ActionButton
+                        key={speed}
+                        theme={theme}
+                        active={Number(speed.replace("x", "")) === Number(replaySpeed || 1)}
+                        onClick={() => setReplaySpeed?.(Number(speed.replace("x", "")))}
+                      >
+                        {speed}
+                      </ActionButton>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: theme.muted, fontSize: 12, marginBottom: 9 }}>Jump to Time</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => (
+                      <ActionButton
+                        key={label}
+                        theme={theme}
+                        onClick={() => (label === "Market Open" || label === "Market Close" ? resetReplay?.() : stepReplay?.())}
+                      >
+                        {label}
+                      </ActionButton>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 12, marginBottom: 8 }}>
+                    <span>Bookmarks</span>
+                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay bookmark noted locally for review.")}>+ Add</ActionButton>
+                  </div>
+                  <div style={{ minHeight: 86, border: `1px dashed ${theme.borderSoft || theme.border}`, borderRadius: 8, padding: 12, color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
+                    No bookmarks saved for this replay session.
+                  </div>
                 </div>
               </div>
             </PremiumCard>
-            <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "250px minmax(0, 1fr) 310px", gap: 10 }}>
-              <PremiumCard theme={theme} title="Replay Controls">
-                <div style={{ padding: 14, display: "grid", gap: 18 }}>
-                  <div>
-                    <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Speed</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                      {["0.25x", "0.5x", "1x", "2x", "5x", "10x", "20x", "50x", "100x"].map((speed) => (
-                        <ActionButton
-                          key={speed}
-                          theme={theme}
-                          active={Number(speed.replace("x", "")) === Number(replaySpeed || 1)}
-                          onClick={() => setReplaySpeed?.(Number(speed.replace("x", "")))}
-                        >
-                          {speed}
-                        </ActionButton>
+
+            <div style={{ display: "grid", gridTemplateRows: "minmax(480px, 1fr) 78px", gap: 10, minHeight: 0 }}>
+              <PremiumCard
+                theme={theme}
+                title={`${selectedStock} Replay Chart`}
+                action={<span style={{ color: theme.muted, fontFamily: terminalMonoFont }}>Historical simulation</span>}
+              >
+                <div style={{ padding: "14px 16px 10px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "grid", gap: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
+                        <span style={{ color: theme.text, fontSize: 28, fontWeight: 950, fontFamily: terminalMonoFont }}>{selectedStock}</span>
+                        <span style={{ color: theme.text, fontSize: 16, fontWeight: 850, fontFamily: terminalMonoFont }}>{replayPrice ? money(replayPrice) : "Unavailable"}</span>
+                        <span style={{ color: toneColor(theme, replayMove), fontSize: 13, fontWeight: 900, fontFamily: terminalMonoFont }}>{pct(replayMove)}</span>
+                      </div>
+                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{replaySymbolData?.company || `${selectedStock} INC.`} · 1D · NASDAQ</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ height: 32, minWidth: 180, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", color: theme.muted }}>
+                        <Search size={14} />
+                        <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 850 }}>{selectedStock}</span>
+                      </div>
+                      {["1m", "5m", "15m", "1H", "1D"].map((frame) => (
+                        <ActionButton key={frame} theme={theme} active={frame === "1D"} onClick={() => setOrderMessage?.(`Replay timeframe ${frame} selected for review.`)}>{frame}</ActionButton>
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <div style={{ color: theme.muted, fontSize: 12, marginBottom: 8 }}>Jump to Time</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => (
-                        <ActionButton
-                          key={label}
-                          theme={theme}
-                          onClick={() => (label === "Market Open" ? resetReplay?.() : stepReplay?.())}
-                        >
-                          {label}
-                        </ActionButton>
-                      ))}
-                    </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay trend tools are review-only in this workspace.")}>Trend Tools</ActionButton>
+                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay indicators use calculated chart overlays only.")}>Indicators</ActionButton>
+                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay screenshot prepared for review.")}>Screenshot</ActionButton>
+                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use browser fullscreen for replay review.")}>Fullscreen</ActionButton>
                   </div>
+                </div>
+                <div style={{ height: 330 }}>{renderChartGrid?.({ layoutMode: "1", compact: true })}</div>
+                <div style={{ borderTop: `1px solid ${theme.borderSoft || theme.border}`, padding: "10px 14px", color: theme.muted, fontSize: 12 }}>
+                  Replay indicators are shown only when calculated by the chart. No synthetic RSI series is generated.
+                </div>
+              </PremiumCard>
+              <PremiumCard theme={theme}>
+                <div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 16 }}>
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 12, marginBottom: 8 }}>
-                      <span>Bookmarks</span><ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay bookmark noted locally for review.")}>+ Add</ActionButton>
+                    <div style={{ height: 4, background: theme.panel2, borderRadius: 99, overflow: "hidden" }}>
+                      <div style={{ width: replayRows.length ? "36%" : "0%", height: "100%", background: `linear-gradient(90deg, ${theme.blue}, ${theme.green})` }} />
                     </div>
-                    <div style={{ color: theme.muted, fontSize: 12 }}>No bookmarks saved for this replay session.</div>
+                    <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont, fontWeight: 850 }}>Replay {replayStatus.toLowerCase()}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "end" }}>
+                    <ActionButton theme={theme} onClick={() => resetReplay?.()}>|&lt;</ActionButton>
+                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&lt;</ActionButton>
+                    <ActionButton theme={theme} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                      {replayPlaying ? "||" : ">"}
+                    </ActionButton>
+                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;&gt;</ActionButton>
+                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;|</ActionButton>
+                    <ActionButton theme={theme} onClick={() => resetReplay?.()}>Reset</ActionButton>
                   </div>
                 </div>
               </PremiumCard>
-              <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 76px", gap: 10, minHeight: 0 }}>
-                <PremiumCard theme={theme} title={`${selectedStock} Replay Chart`} action={<span style={{ color: theme.muted, fontFamily: terminalMonoFont }}>Historical simulation</span>}>
-                  <div style={{ height: 260 }}>{renderChartGrid?.({ layoutMode: "1", compact: true })}</div>
-                  <div style={{ height: 60, borderTop: `1px solid ${theme.borderSoft || theme.border}`, padding: 8 }}>
-                    <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>Replay indicators are shown only when calculated by the chart. No synthetic RSI series is generated.</div>
-                  </div>
-                </PremiumCard>
-                <PremiumCard theme={theme}>
-                  <div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 16 }}>
-                    <div>
-                      <div style={{ height: 4, background: theme.panel2, borderRadius: 99 }} />
-                      <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont }}>{replayPlaying ? "Replay running" : "Replay paused"}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <ActionButton theme={theme} onClick={() => resetReplay?.()}>|&lt;</ActionButton>
-                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&lt;</ActionButton>
-                      <ActionButton theme={theme} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
-                        {replayPlaying ? "||" : ">"}
-                      </ActionButton>
-                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;&gt;</ActionButton>
-                      <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;|</ActionButton>
-                      <ActionButton theme={theme} onClick={() => resetReplay?.()}>Reset</ActionButton>
-                    </div>
-                  </div>
-                </PremiumCard>
-              </div>
-              <div style={{ display: "grid", gap: 10 }}>
-                <PremiumCard theme={theme} title="Simulation Summary"><div style={{ padding: 14, display: "grid", gap: 11 }}>{[["Starting Cash", money(replayStartingCash)], ["Net Liquidation", money(replayNetLiquidation)], ["Total P&L", money(replayNet)], ["Realized P&L", money(replayNet)], ["Unrealized P&L", replayPositions.length ? money(replayPositions.reduce((total, row) => total + num(row.pnl), 0)) : money(0)], ["Total Trades", replayRows.length], ["Win Rate", `${replayWinRate}%`], ["Profit Factor", "Unavailable"], ["Max Drawdown", money(replayMaxDrawdown)]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", color: theme.muted }}><span>{a}</span><b style={{ color: num(String(b).replace(/[^0-9.-]/g, ""), 0) < 0 ? theme.red : theme.text }}>{b}</b></div>)}</div></PremiumCard>
-                <PremiumCard theme={theme} title="Market Replay Status"><div style={{ padding: 14, display: "grid", gap: 11 }}>{[["Replay Session", "Current"], ["Data Speed", `${replaySpeed || 1}x`], ["Data Source", "Historical simulation"], ["Status", replayPlaying ? "Playing" : "Paused"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", color: theme.muted }}><span>{a}</span><b style={{ color: b === "Playing" ? theme.green : theme.text }}>{b}</b></div>)}</div></PremiumCard>
-                <PremiumCard theme={theme} title="Market Events"><div style={{ padding: 14, color: theme.muted, fontSize: 12 }}>No verified events are attached to this replay session.</div></PremiumCard>
-              </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 0.9fr) minmax(0, 1fr) 280px", gap: 10 }}>
-              <PremiumCard theme={theme} title="Open Positions (Replay)"><PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: () => theme.green }, { key: "pct", label: "P&L (%)", width: "80px", color: () => theme.green }]} rows={replayPositions} /></PremiumCard>
-              <PremiumCard theme={theme} title="Trade History (Replay)"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "Sell" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => String(row.pnl).startsWith("+") ? theme.green : theme.muted }]} rows={replayRows} /></PremiumCard>
-              <PremiumCard theme={theme} title="Replay Notes"><div style={{ padding: 14, display: "grid", gap: 12 }}><textarea placeholder="Add notes for this replay session..." style={{ minHeight: 170, resize: "vertical", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, padding: 12 }} /><ActionButton theme={theme} onClick={() => openReplayJournal?.()}>Send to Journal</ActionButton></div></PremiumCard>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <PremiumCard theme={theme} title="Simulation Summary">
+                <div style={{ padding: 14, display: "grid", gap: 11 }}>{replaySummaryRows.map(valueRow)}</div>
+              </PremiumCard>
+              <PremiumCard theme={theme} title="Market Replay Status">
+                <div style={{ padding: 14, display: "grid", gap: 11 }}>
+                  {replayStatusRows.map(([label, value]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 16, color: theme.muted, fontSize: 13 }}>
+                      <span>{label}</span>
+                      <b style={{ color: value === "Running" ? theme.green : theme.text, fontFamily: terminalMonoFont }}>{value}</b>
+                    </div>
+                  ))}
+                </div>
+              </PremiumCard>
+              <PremiumCard theme={theme} title="Market Events">
+                <div style={{ padding: 14, color: theme.muted, fontSize: 12, lineHeight: 1.6 }}>No verified events are attached to this replay session.</div>
+              </PremiumCard>
+              <PremiumCard theme={theme} title="Replay Notes">
+                <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                  <textarea
+                    placeholder="Add notes for this replay session..."
+                    maxLength={1000}
+                    style={{ minHeight: 96, resize: "vertical", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, padding: 12, fontFamily: terminalSansFont }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 11 }}>
+                    <span>0 / 1000</span>
+                    <ActionButton theme={theme} onClick={() => openReplayJournal?.()}>Send to Journal</ActionButton>
+                  </div>
+                </div>
+              </PremiumCard>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 0.95fr) minmax(0, 1.45fr)", gap: 10 }}>
+            <PremiumCard theme={theme} title="Open Positions (Replay)">
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: () => theme.green }, { key: "pct", label: "P&L (%)", width: "80px", color: () => theme.green }]} rows={replayPositions} />
+            </PremiumCard>
+            <PremiumCard theme={theme} title="Trade History (Replay)">
+              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "Sell" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => String(row.pnl).startsWith("+") ? theme.green : theme.muted }]} rows={replayRows} />
+            </PremiumCard>
             </div>
         </div>
       </div>

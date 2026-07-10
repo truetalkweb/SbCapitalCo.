@@ -21,7 +21,6 @@ import {
   formatMultiple,
   formatPercent,
   formatPrice,
-  formatSignedCurrency,
 } from "../../utils/dashboardFormatters";
 import {
   createNormalizedNewsFallback,
@@ -701,6 +700,7 @@ function makeReplayTrades(replayTrades, selectedSymbol) {
 
 export default function PremiumWorkspace({
   activeWorkspace,
+  setActiveWorkspace,
   viewportWidth = 1440,
   theme,
   renderChartGrid,
@@ -2222,6 +2222,31 @@ export default function PremiumWorkspace({
     ],
   ];
 
+  const commandCenterMetrics = [
+    ["Quotes", dashboard.status?.hasLiveQuotes ? "Live feed" : "Market data pending", dashboard.status?.hasLiveQuotes ? "good" : "warn"],
+    ["Scanner", dashboard.status?.hasScannerRows ? `${dashboard.scannerRows.length} rows` : "Fallback context", dashboard.status?.hasScannerRows ? "good" : "warn"],
+    ["News", dashboard.status?.hasNews ? `${dashboard.newsRows.length} headlines` : "Provider limited", dashboard.status?.hasNews ? "good" : "warn"],
+    ["Account", dashboard.status?.hasAccountData ? "Connected" : "Review-only", dashboard.status?.hasAccountData ? "good" : "neutral"],
+  ];
+  const topMoverRows = [...dashboard.scannerRows]
+    .filter((row) => nullableMoveOf(row) !== null)
+    .sort((a, b) => Math.abs(nullableMoveOf(b)) - Math.abs(nullableMoveOf(a)))
+    .slice(0, 6);
+  const dashboardNewsRows = dashboard.newsRows.length ? dashboard.newsRows : headlines.slice(0, 8);
+  const advancingCount = stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) >= 0).length;
+  const decliningCount = stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) < 0).length;
+  const marketBreadthTotal = Math.max(advancingCount + decliningCount, 1);
+  const marketPulseRows = [
+    ["Advancing", advancingCount, "good"],
+    ["Declining", decliningCount, "bad"],
+    ["Watchlist", dashboard.watchlistRows.length, "neutral"],
+    ["Alerts", dashboard.alerts?.length || 0, "neutral"],
+  ];
+  const openDashboardChart = (symbol = dashboard.selected.symbol) => {
+    selectMainSymbol?.(symbol);
+    setActiveWorkspace?.("charts");
+  };
+
   return (
     <div style={page}>
       <div
@@ -2234,8 +2259,65 @@ export default function PremiumWorkspace({
           minHeight: isNarrowWorkspace ? 0 : 900,
         }}
       >
-        <PremiumCard theme={theme} style={{ gridColumn: isNarrowWorkspace ? "auto" : "1 / 2", gridRow: isNarrowWorkspace ? "auto" : "1 / 2", minHeight: isNarrowWorkspace ? 440 : 0 }}>
-          {renderChartGrid?.({ layoutMode: "1", compact: true })}
+        <PremiumCard theme={theme} style={{ gridColumn: isNarrowWorkspace ? "auto" : "1 / 2", gridRow: isNarrowWorkspace ? "auto" : "1 / 2", minHeight: isNarrowWorkspace ? 440 : 0, overflow: "hidden" }}>
+          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: theme.muted, fontSize: 11, fontWeight: 850, textTransform: "uppercase" }}>Market Command Center</div>
+              <h2 style={{ margin: "4px 0 0", color: theme.text, fontSize: 22, fontWeight: 900 }}>What deserves attention now</h2>
+            </div>
+            <ActionButton theme={theme} active onClick={() => openDashboardChart(dashboard.selected.symbol)}>
+              Open Chart
+            </ActionButton>
+          </div>
+          <div style={{ padding: 10, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))", gap: 8, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
+            {commandCenterMetrics.map(([label, value, tone]) => (
+              <MetricTile key={label} theme={theme} label={label} value={value} tone={tone} />
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) minmax(280px, 0.65fr)", minHeight: 0 }}>
+            <div style={{ minWidth: 0, borderRight: isNarrowWorkspace ? "none" : `1px solid ${theme.borderSoft || theme.border}` }}>
+              <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <PremiumTabs theme={theme} tabs={["Top Movers", "Gainers", "Losers", "Active", "Momentum"]} active="Top Movers" />
+                <StatusPill theme={theme} tone={dashboard.status?.hasScannerRows ? "good" : "warn"}>
+                  {dashboard.status?.hasScannerRows ? "Scanner live" : "Fallback context"}
+                </StatusPill>
+              </div>
+              {dashboardScannerTable(topMoverRows.length ? topMoverRows : dashboard.scannerRows.slice(0, 6), dashboard.selected.symbol)}
+            </div>
+            <div style={{ padding: 14, display: "grid", gap: 12, alignContent: "start", minWidth: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: theme.muted, fontSize: 11, textTransform: "uppercase", fontWeight: 850 }}>Selected Symbol</div>
+                  <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>{dashboard.selected.symbol}</div>
+                  <div style={{ color: theme.muted, fontSize: 12, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{dashboard.selected.name || "Market context"}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 20, fontWeight: 900 }}>{formatPrice(dashboard.selected.price)}</div>
+                  <div style={{ color: nullableMoveOf(dashboard.selected) === null ? theme.muted : toneColor(theme, nullableMoveOf(dashboard.selected)), fontFamily: terminalMonoFont, fontSize: 13, fontWeight: 900 }}>
+                    {nullableMoveOf(dashboard.selected) === null ? "Pending" : formatPercent(nullableMoveOf(dashboard.selected))}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                {selectedDetailStats.slice(0, 6).map(([label, value]) => (
+                  <div key={label} style={{ padding: "9px 10px", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, minWidth: 0 }}>
+                    <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>{label}</div>
+                    <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 12, fontWeight: 850, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatDetailValue(label, value)}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: 12, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 8, background: "rgba(45,140,255,0.055)" }}>
+                <div style={{ color: theme.blue, fontSize: 11, fontWeight: 900, textTransform: "uppercase", marginBottom: 6 }}>Why it matters</div>
+                <div style={{ color: theme.text, fontSize: 13, lineHeight: 1.45 }}>
+                  {dashboard.selected.catalyst || dashboard.selected.reason || `${dashboard.selected.symbol} is on the dashboard because scanner, watchlist, or headline context flagged it.`}
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <ActionButton theme={theme} active onClick={() => openDashboardChart(dashboard.selected.symbol)}>Open Chart</ActionButton>
+                <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", dashboard.selected.symbol)}>Alert Review</ActionButton>
+              </div>
+            </div>
+          </div>
         </PremiumCard>
         <div
           style={{
@@ -2265,120 +2347,69 @@ export default function PremiumWorkspace({
               columnGap={8}
             />
           </PremiumCard>
-          <DetailRail theme={theme} selected={dashboard.selected} compact detailStats={selectedDetailStats}>
-            <PremiumCard theme={theme} title="Latest News">
-              <div style={{ padding: "11px 14px", display: "grid", gap: 10, overflow: "auto", maxHeight: 130 }}>
-                {dashboard.newsRows.slice(0, 3).map((item) => {
-                  const content = (
-                    <>
-                      <div style={{ color: theme.muted, fontSize: 10 }}>
-                        <span style={{ fontFamily: terminalMonoFont }}>{item.time}</span> · {item.source}
-                      </div>
-                      <div style={{ color: theme.text, fontSize: 12, lineHeight: 1.35, fontWeight: 750 }}>{item.headline}</div>
-                    </>
-                  );
-                  return item.url ? (
-                    <a
-                      key={item.id}
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ textDecoration: "none", outlineOffset: 3 }}
-                    >
-                      {content}
-                    </a>
-                  ) : (
-                    <div key={item.id}>{content}</div>
-                  );
-                })}
-              </div>
-            </PremiumCard>
-          </DetailRail>
-          <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0 }}>
-            <div style={{ padding: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 64px 78px", gap: 8, minWidth: 0 }}>
-                {["Symbol", "Shares", "Order Type"].map((label, index) => (
-                  <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase", minWidth: 0 }}>
-                    {label}
-                    <input
-                      value={index === 0 ? dashboard.selected.symbol : index === 1 ? quantity : "LIMIT"}
-                      onChange={(event) => index === 1 && setQuantity?.(Number(event.target.value) || 1)}
-                      readOnly={index !== 1}
-                      style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 8px", fontFamily: terminalMonoFont }}
-                    />
-                  </label>
-                ))}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-                {["BUY", "SELL"].map((side) => (
-                  <ActionButton
-                    key={side}
-                    theme={theme}
-                    good={side === "BUY"}
-                    danger={side === "SELL"}
-                    onClick={() => {
-                      setOrderSide?.(side);
-                      setOrderConfirmed?.(false);
-                      setPremiumDockTab?.("orders");
-                      setOrderMessage?.(`${side} review prepared for ${dashboard.selected.symbol}. This shortcut is review-only.`);
-                    }}
-                  >
-                    {side === "BUY" ? "Buy" : "Sell"}
-                  </ActionButton>
-                ))}
+          <PremiumCard theme={theme} title="Market Pulse">
+            <div style={{ padding: 12, display: "grid", gap: 10 }}>
+              {marketPulseRows.map(([label, value, tone]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <span style={{ color: theme.muted, fontSize: 12 }}>{label}</span>
+                  <span style={{ color: tone === "good" ? theme.green : tone === "bad" ? theme.red : theme.text, fontFamily: terminalMonoFont, fontSize: 13, fontWeight: 900 }}>{value}</span>
+                </div>
+              ))}
+              <div style={{ height: 6, borderRadius: 99, background: theme.panel2, overflow: "hidden" }}>
+                <div style={{ width: `${Math.round((advancingCount / marketBreadthTotal) * 100)}%`, height: "100%", background: theme.green }} />
               </div>
             </div>
           </PremiumCard>
-        </div>
-        <PremiumCard theme={theme} style={{ gridColumn: isNarrowWorkspace ? "auto" : "1 / 2", gridRow: isNarrowWorkspace ? "auto" : "2 / 3", minHeight: 0, overflow: "hidden" }}>
-          <div style={{ padding: "10px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <PremiumTabs theme={theme} tabs={["Scanner", "Gainers", "Losers", "Active", "Momentum", "High RVOL", "News", "Earnings"]} active="Gainers" />
-            <ActionButton theme={theme} onClick={() => setOrderMessage?.(`Scanner view saved locally for ${selected.symbol}.`)}>Save Scan</ActionButton>
-          </div>
-          {dashboardScannerTable()}
-        </PremiumCard>
-        <div style={{ gridColumn: isNarrowWorkspace ? "auto" : "1 / 2", gridRow: isNarrowWorkspace ? "auto" : "3 / 4", display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(270px, 340px)", gap: 9, minHeight: 0 }}>
-          <PremiumCard theme={theme} style={{ minHeight: 0 }}>
-            <PremiumTabs
-              theme={theme}
-              tabs={[
-                `Positions (${dashboard.positionRows.length})`,
-                `Orders (${dashboard.orders?.length || 0})`,
-                `Alerts (${dashboard.alerts?.length || 0})`,
-                "Executions",
-                "Messages",
-              ]}
-              active={`Positions (${dashboard.positionRows.length})`}
-            />
-            <PremiumTable
-              theme={theme}
-              columns={[
-                { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
-                { key: "side", label: "Side", width: "80px", color: (row) => row.side === "SHORT" ? theme.red : theme.green, mono: true },
-                { key: "quantity", label: "Qty", width: "80px", align: "right", mono: true },
-                { key: "averagePrice", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => formatPrice(row.averagePrice) },
-                { key: "lastPrice", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => formatPrice(row.lastPrice) },
-                { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => toneColor(theme, row.pnl), render: (row) => formatSignedCurrency(row.pnl) },
-              ]}
-              rows={dashboard.positionRows.slice(0, 1)}
-              style={{ maxHeight: 86 }}
-            />
+          <PremiumCard theme={theme} title="AI Brief">
+            <div style={{ padding: 14, display: "grid", gap: 10, color: theme.text, fontSize: 13, lineHeight: 1.5 }}>
+              <div><b style={{ color: theme.green }}>Focus:</b> {dashboard.selected.symbol} is the active dashboard context.</div>
+              <div><b style={{ color: theme.blue }}>Signal:</b> scanner score {dashboard.selected.score || "limited"} with {dashboard.selected.rvolLabel || dashboard.selected.rvol || "context"} RVOL.</div>
+              <div><b style={{ color: theme.amber }}>Risk:</b> verify liquidity and data freshness before acting.</div>
+            </div>
           </PremiumCard>
-          <PremiumCard theme={theme} title="Risk Overview" style={{ minHeight: 0, overflow: "hidden" }}>
-            <div style={{ height: "calc(100% - 40px)", boxSizing: "border-box", padding: 10, display: "grid", gap: 7, overflow: "auto" }}>
-              {dashboard.riskOverview.map((row) => (
-                <div key={row.label} style={{ display: "grid", gap: 5 }}>
+        </div>
+        <div style={{ gridColumn: isNarrowWorkspace ? "auto" : "1 / 2", gridRow: isNarrowWorkspace ? "auto" : "2 / 4", display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.45fr) minmax(300px, 0.55fr)", gap: 9, minHeight: 0 }}>
+          <PremiumCard theme={theme} style={{ minHeight: 0, overflow: "hidden" }}>
+            <div style={{ padding: "11px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, color: theme.text, fontSize: 14, fontWeight: 900, textTransform: "uppercase" }}>Catalyst Feed</h2>
+                <div style={{ color: theme.muted, fontSize: 11, marginTop: 2 }}>{dashboard.selected.symbol} / backend feed / {dashboardNewsRows.length} rows</div>
+              </div>
+              <StatusPill theme={theme} tone={dashboard.status?.hasNews ? "good" : "warn"}>{dashboard.status?.hasNews ? "News live" : "Provider limited"}</StatusPill>
+            </div>
+            <div style={{ maxHeight: isNarrowWorkspace ? 340 : 260, overflow: "auto" }}>
+              {dashboardNewsRows.slice(0, 8).map((item, index) => {
+                const ticker = item.relatedTicker || item.symbol || dashboard.selected.symbol;
+                const row = (
+                  <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "64px minmax(0, 1fr)" : "76px 130px minmax(0, 1fr) 66px", gap: 12, alignItems: "center", minHeight: 44, padding: "8px 14px", borderBottom: `1px solid ${theme.borderSoft || theme.border}`, background: index % 2 ? "rgba(255,255,255,0.01)" : "transparent" }}>
+                    <span style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: 11 }}>{item.time || "Recent"}</span>
+                    {!isNarrowWorkspace && <span style={{ color: theme.muted, fontSize: 11 }}>{item.source || "Market News"}</span>}
+                    <span style={{ color: theme.text, fontSize: 13, lineHeight: 1.35, fontWeight: 760, minWidth: 0 }}>{item.headline}</span>
+                    {!isNarrowWorkspace && <span style={{ color: theme.blue, fontFamily: terminalMonoFont, fontSize: 11, fontWeight: 900, textAlign: "right" }}>{ticker}</span>}
+                  </div>
+                );
+                return item.url ? (
+                  <a key={item.id || `${ticker}-${index}`} href={item.url} target="_blank" rel="noreferrer" onClick={() => selectMainSymbol?.(ticker)} style={{ display: "block", textDecoration: "none", outlineOffset: 3 }}>{row}</a>
+                ) : (
+                  <button key={item.id || `${ticker}-${index}`} type="button" onClick={() => selectMainSymbol?.(ticker)} style={{ width: "100%", padding: 0, border: 0, background: "transparent", textAlign: "left", cursor: "pointer" }}>{row}</button>
+                );
+              })}
+            </div>
+          </PremiumCard>
+          <PremiumCard theme={theme} title="Risk / Status" style={{ minHeight: 0, overflow: "hidden" }}>
+            <div style={{ height: "calc(100% - 40px)", boxSizing: "border-box", padding: 12, display: "grid", gap: 9, overflow: "auto" }}>
+              {dashboard.riskOverview.slice(0, 4).map((row) => (
+                <div key={row.label} style={{ display: "grid", gap: 6 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, color: theme.text, fontSize: 12 }}>
                     <span>{row.label}</span>
-                    <span style={{ color: row.tone === "good" ? theme.green : row.tone === "warn" ? theme.amber : theme.text, fontFamily: terminalMonoFont }}>
-                      {row.value}
-                    </span>
+                    <span style={{ color: row.tone === "good" ? theme.green : row.tone === "warn" ? theme.amber : theme.text, fontFamily: terminalMonoFont }}>{row.value}</span>
                   </div>
-                  <div style={{ height: 4, borderRadius: 99, background: theme.panel2 }}>
+                  <div style={{ height: 5, borderRadius: 99, background: theme.panel2 }}>
                     <div style={{ width: `${row.percent}%`, height: "100%", borderRadius: 99, background: row.tone === "warn" ? theme.amber : theme.green }} />
                   </div>
                 </div>
               ))}
+              <div style={{ padding: 10, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, color: theme.muted, fontSize: 12, lineHeight: 1.4 }}>Dashboard is informational. Order and broker actions remain review-only from this workspace.</div>
             </div>
           </PremiumCard>
         </div>

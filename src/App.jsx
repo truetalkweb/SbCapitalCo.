@@ -3704,6 +3704,7 @@ export default function App() {
     return (
       <PremiumWorkspace
         activeWorkspace={activeWorkspace}
+        setActiveWorkspace={setActiveWorkspace}
         viewportWidth={viewportWidth}
         theme={theme}
         isDark={isDark}

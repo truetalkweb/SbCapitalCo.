@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { id: "charts", label: "Dashboard", group: "Main", icon: BarChart3 },
+  { id: "dashboard", label: "Dashboard", group: "Main", icon: BarChart3 },
   { id: "scanner", label: "Scanner", group: "Main", icon: Search },
   { id: "chart-analysis", label: "Charts", group: "Main", icon: BarChart3 },
   { id: "watchlist", label: "Watchlist", group: "Main", icon: Star },

@@ -314,6 +314,20 @@ export default function App() {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? 1440 : window.innerWidth
   );
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === "undefined" ? 900 : window.innerHeight
+  );
+  const devPreviewUser = useMemo(() => {
+    if (!import.meta.env.DEV || typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("devPreview") !== "1") return null;
+    return {
+      id: "local-dev-preview",
+      email: "local-preview@sbterminal.dev",
+      app_metadata: { plan: "admin" },
+      user_metadata: { name: "Local Preview" },
+    };
+  }, []);
 
   const [level2, setLevel2] = useState([]);
 
@@ -616,6 +630,7 @@ export default function App() {
   useEffect(() => {
     function handleResize() {
       setViewportWidth(window.innerWidth);
+      setViewportHeight(window.innerHeight);
     }
 
     window.addEventListener("resize", handleResize);
@@ -847,8 +862,9 @@ export default function App() {
       cancelled = true;
     };
   }, [user]);
-  const effectiveEntitlements = user ? entitlements : DEFAULT_ENTITLEMENTS;
-  const effectiveEntitlementsStatus = user ? entitlementsStatus : "idle";
+  const activeUser = user || devPreviewUser;
+  const effectiveEntitlements = activeUser ? entitlements : DEFAULT_ENTITLEMENTS;
+  const effectiveEntitlementsStatus = activeUser ? entitlementsStatus : "idle";
 
   function panelStyle(extra = {}) {
     return createPanelStyle(theme, isDark, extra);
@@ -3696,6 +3712,7 @@ export default function App() {
         syncCharts={syncCharts}
         compact={compact}
         embeddedChart={embeddedChart}
+        viewportWidth={viewportWidth}
       />
     );
   }
@@ -3706,6 +3723,7 @@ export default function App() {
         activeWorkspace={activeWorkspace}
         setActiveWorkspace={setActiveWorkspace}
         viewportWidth={viewportWidth}
+        viewportHeight={viewportHeight}
         theme={theme}
         isDark={isDark}
         renderChartGrid={renderPremiumChartGrid}
@@ -3782,7 +3800,7 @@ export default function App() {
     );
   }
 
-  if (!authReady || !user || passwordRecovery) {
+  if ((!authReady || !activeUser || passwordRecovery) && !devPreviewUser) {
     return (
       <AuthGate
         busy={authBusy}
@@ -3854,7 +3872,7 @@ export default function App() {
         setMarketRegion={setMarketRegion}
         activeMarket={activeMarket}
         buttonStyle={buttonStyle}
-        user={user}
+        user={activeUser}
         handleLogout={handleLogout}
         compact={isCompactTerminal}
         advancedMode={advancedMode}

@@ -23,16 +23,20 @@ export default function WorkspaceGrid({
   syncCharts,
   compact = false,
   embeddedChart = false,
+  viewportWidth = 1920,
 }) {
   const isOneChart = compact || layoutMode === "1";
   const isFourChart = !isOneChart && gridMode === "4";
   const isThreeChart = !isOneChart && gridMode === "3";
+  const isTwoChart = !isOneChart && !isThreeChart && !isFourChart;
+  const useDenseTwoChartPanels = isTwoChart && viewportWidth < 1800;
   const [thirdChartSymbol, setThirdChartSymbol] = useState("SPY");
   const [fourthChartSymbol, setFourthChartSymbol] = useState("QQQ");
   const [thirdChartStatus, setThirdChartStatus] = useState("LOADING");
   const [fourthChartStatus, setFourthChartStatus] = useState("LOADING");
   const thirdSymbol = syncCharts ? selectedStock : thirdChartSymbol;
   const fourthSymbol = syncCharts ? selectedStock : fourthChartSymbol;
+  const useEmbeddedTiles = embeddedChart || isThreeChart || isFourChart;
 
   function findChartData(symbol, fallback = null) {
     const cleanSymbol = String(symbol || "").toUpperCase();
@@ -48,9 +52,9 @@ export default function WorkspaceGrid({
   const fourthStockData = findChartData(fourthSymbol, syncCharts ? selectedStockData : secondaryStockData);
 
   const shellStyle = {
-    height: "100%",
     minHeight: 0,
     overflow: "hidden",
+    display: "grid",
     borderRadius: "8px",
     border: `1px solid ${theme.borderSoft || theme.border}`,
     background: "#050b14",
@@ -59,22 +63,22 @@ export default function WorkspaceGrid({
 
   const gridStyle = isOneChart
     ? {
-        gridTemplateColumns: "1fr",
-        gridTemplateRows: "1fr",
+        gridTemplateColumns: "minmax(0, 1fr)",
+        gridTemplateRows: "minmax(0, 1fr)",
       }
     : isFourChart
     ? {
-        gridTemplateColumns: "1fr 1fr",
-        gridTemplateRows: "1fr 1fr",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gridTemplateRows: "repeat(2, minmax(0, 1fr))",
       }
     : isThreeChart
     ? {
-        gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.9fr)",
-        gridTemplateRows: "1fr 1fr",
+        gridTemplateColumns: "minmax(0, 1.35fr) minmax(260px, 0.9fr)",
+        gridTemplateRows: "repeat(2, minmax(0, 1fr))",
       }
     : {
-        gridTemplateColumns: "1fr 1fr",
-        gridTemplateRows: "1fr",
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gridTemplateRows: "minmax(0, 1fr)",
       };
 
   return (
@@ -102,7 +106,8 @@ export default function WorkspaceGrid({
           quoteChange: selectedStockData?.change,
           chartStatus: mainChartStatus,
           onStatusChange: setMainChartStatus,
-          embedded: embeddedChart,
+          embedded: useEmbeddedTiles,
+          dense: useDenseTwoChartPanels,
         })}
       </div>
 
@@ -120,7 +125,8 @@ export default function WorkspaceGrid({
             secondary: true,
             chartStatus: secondaryChartStatus,
             onStatusChange: setSecondaryChartStatus,
-            embedded: embeddedChart,
+            embedded: useEmbeddedTiles,
+            dense: useDenseTwoChartPanels,
           })}
         </div>
       )}
@@ -139,7 +145,7 @@ export default function WorkspaceGrid({
           secondary: true,
           chartStatus: syncCharts ? mainChartStatus : thirdChartStatus,
           onStatusChange: syncCharts ? () => {} : setThirdChartStatus,
-          embedded: embeddedChart,
+          embedded: useEmbeddedTiles,
         })}
       </div>
       )}
@@ -158,7 +164,7 @@ export default function WorkspaceGrid({
             secondary: true,
             chartStatus: syncCharts ? secondaryChartStatus : fourthChartStatus,
             onStatusChange: syncCharts ? () => {} : setFourthChartStatus,
-            embedded: embeddedChart,
+            embedded: useEmbeddedTiles,
           })}
         </div>
       )}

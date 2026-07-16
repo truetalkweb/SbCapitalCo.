@@ -34,6 +34,19 @@ body {
   }
 }
 
+@media (min-width: 701px) and (max-width: 1300px) {
+  .sb-sidebar-nav-button {
+    gap: 7px !important;
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+
+  .sb-sidebar-nav-button > span:last-child {
+    min-width: 0;
+    font-size: 11px !important;
+  }
+}
+
 button,
 input,
 select,

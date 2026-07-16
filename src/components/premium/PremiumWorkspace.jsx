@@ -702,6 +702,7 @@ export default function PremiumWorkspace({
   activeWorkspace,
   setActiveWorkspace,
   viewportWidth = 1440,
+  viewportHeight = 900,
   theme,
   renderChartGrid,
   selectedStock,
@@ -1060,7 +1061,16 @@ export default function PremiumWorkspace({
         signal: "Not classified",
       }));
     const activeChartLayout = layoutMode === "1" ? "1" : gridMode === "4" ? "4" : gridMode === "3" ? "3" : "2";
-    const chartStageMinHeight = activeChartLayout === "4" ? 680 : activeChartLayout === "3" ? 660 : 620;
+    const chartStageHeight = isNarrowWorkspace
+      ? "auto"
+      : Math.max(
+          activeChartLayout === "1" ? 520 : 470,
+          Math.min(
+            activeChartLayout === "1" ? 680 : 620,
+            viewportHeight - (activeChartLayout === "1" ? 300 : 190)
+          )
+        );
+    const showChartIntelCards = activeChartLayout === "1" && !isNarrowWorkspace;
     const setDeskLayout = (nextLayout) => {
       setLayoutMode?.(nextLayout === "1" ? "1" : "2");
       setGridMode?.(nextLayout === "1" ? "2" : nextLayout);
@@ -1104,15 +1114,20 @@ export default function PremiumWorkspace({
     ];
 
     return (
-      <div style={{ ...page, overflow: "auto" }}>
+      <div style={{ ...page, overflow: isNarrowWorkspace ? "auto" : "hidden" }}>
         <div
           style={{
-            height: "auto",
-            minHeight: isNarrowWorkspace ? 0 : chartStageMinHeight + 150,
+            height: isNarrowWorkspace ? "auto" : "100%",
+            minHeight: 0,
             display: "grid",
             gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) clamp(300px, 20vw, 360px)",
-            gridTemplateRows: `minmax(${chartStageMinHeight}px, 1fr) auto`,
+            gridTemplateRows: isNarrowWorkspace
+              ? "auto"
+              : showChartIntelCards
+                ? `minmax(0, ${chartStageHeight}px) minmax(108px, 118px)`
+                : `minmax(0, ${chartStageHeight}px)`,
             gap: 10,
+            overflow: "hidden",
           }}
         >
           <PremiumCard
@@ -1122,6 +1137,7 @@ export default function PremiumWorkspace({
               display: "grid",
               gridTemplateRows: "auto minmax(0, 1fr)",
               gridColumn: isNarrowWorkspace ? "auto" : "1 / 2",
+              overflow: "hidden",
             }}
           >
             <div
@@ -1164,7 +1180,7 @@ export default function PremiumWorkspace({
                 ))}
               </div>
             </div>
-            <div style={{ minHeight: 0, padding: 8 }}>
+            <div style={{ minHeight: 0, padding: 8, overflow: "hidden" }}>
               {renderChartGrid?.({
                 layoutMode: activeChartLayout === "1" ? "1" : "2",
                 gridMode: activeChartLayout,
@@ -1180,7 +1196,7 @@ export default function PremiumWorkspace({
               display: "grid",
               gap: 10,
               alignContent: "start",
-              overflow: "auto",
+              overflow: "hidden",
             }}
           >
             <DetailRail theme={theme} selected={selected} actions={selectedActions} compact detailStats={chartStats}>
@@ -1212,28 +1228,31 @@ export default function PremiumWorkspace({
             </DetailRail>
           </div>
 
-          <div
-            style={{
-              gridColumn: isNarrowWorkspace ? "auto" : "1 / 2",
-              display: "grid",
-              gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "repeat(4, minmax(0, 1fr))",
-              gap: 10,
-              minHeight: 0,
-            }}
-          >
-            {intelligenceCards.map((card) => {
-              const tone = card.tone === "good" ? theme.green : card.tone === "bad" ? theme.red : card.tone === "warn" ? theme.amber : theme.blue;
-              return (
-                <PremiumCard key={card.title} theme={theme}>
-                  <div style={{ padding: 13, display: "grid", gap: 9, minHeight: 116 }}>
-                    <div style={{ color: theme.text, fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>{card.title}</div>
-                    <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.45 }}>{card.body}</div>
-                    <div style={{ marginTop: "auto", color: tone, fontFamily: terminalMonoFont, fontSize: 11, fontWeight: 900 }}>{card.footer}</div>
-                  </div>
-                </PremiumCard>
-              );
-            })}
-          </div>
+          {showChartIntelCards && (
+            <div
+              style={{
+                gridColumn: isNarrowWorkspace ? "auto" : "1 / 2",
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 10,
+                minHeight: 0,
+                overflow: "hidden",
+              }}
+            >
+              {intelligenceCards.map((card) => {
+                const tone = card.tone === "good" ? theme.green : card.tone === "bad" ? theme.red : card.tone === "warn" ? theme.amber : theme.blue;
+                return (
+                  <PremiumCard key={card.title} theme={theme} style={{ overflow: "hidden" }}>
+                    <div style={{ padding: 12, display: "grid", gap: 6, minHeight: 0 }}>
+                      <div style={{ color: theme.text, fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>{card.title}</div>
+                      <div style={{ color: theme.muted, fontSize: 11, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{card.body}</div>
+                      <div style={{ marginTop: "auto", color: tone, fontFamily: terminalMonoFont, fontSize: 10, fontWeight: 900 }}>{card.footer}</div>
+                    </div>
+                  </PremiumCard>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );

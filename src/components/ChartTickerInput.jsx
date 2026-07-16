@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { terminalMonoFont } from "../config/terminalConfig";
 
-export default function ChartTickerInput({ value, onCommit, theme, label }) {
+export default function ChartTickerInput({ value, onCommit, theme, label, compact = false }) {
   const cleanValue = String(value || "").trim().toUpperCase();
   const [draftState, setDraftState] = useState(() => ({
     sourceValue: cleanValue,
@@ -44,8 +44,8 @@ export default function ChartTickerInput({ value, onCommit, theme, label }) {
       style={{
         position: "relative",
         display: "block",
-        width: "168px",
-        flex: "0 0 168px",
+        width: compact ? "128px" : "168px",
+        flex: compact ? "0 0 128px" : "0 0 168px",
       }}
     >
       <Search

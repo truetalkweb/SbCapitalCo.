@@ -50,6 +50,7 @@ export default function ChartPanel({
   advancedMode = false,
   premiumShell = false,
   embedded = false,
+  dense = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
   const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
@@ -81,13 +82,13 @@ export default function ChartPanel({
         : theme.amber;
   const toolButtonStyle = {
     ...buttonStyle(false),
-    height: premiumShell ? "26px" : "28px",
+    height: dense ? "24px" : premiumShell ? "26px" : "28px",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: isPhoneChart ? 0 : "6px",
-    padding: isPhoneChart ? "0" : premiumShell ? "0 10px" : "0 9px",
-    width: isPhoneChart ? "36px" : premiumShell ? "104px" : "112px",
+    padding: isPhoneChart ? "0" : dense ? "0 7px" : premiumShell ? "0 10px" : "0 9px",
+    width: isPhoneChart ? "36px" : dense ? "78px" : premiumShell ? "104px" : "112px",
     background: theme.panel2,
     borderColor: theme.borderSoft || theme.border,
     fontSize: "10px",
@@ -141,7 +142,7 @@ export default function ChartPanel({
       {!embedded && (
       <div
         style={{
-          padding: isPhoneChart ? "10px" : premiumShell ? "9px 12px" : "10px 12px",
+          padding: isPhoneChart ? "10px" : dense ? "6px 8px" : premiumShell ? "9px 12px" : "10px 12px",
           marginBottom: "0px",
           background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
@@ -157,7 +158,7 @@ export default function ChartPanel({
             flexWrap: "wrap",
           }}
         >
-          <div style={{ minWidth: 0, flex: "1 1 260px" }}>
+          <div style={{ minWidth: 0, flex: dense ? "1 1 100%" : "1 1 260px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "88px 86px 74px", alignItems: "baseline", gap: "8px", minWidth: 0 }}>
               <span style={{ fontSize: "10px", color: theme.muted, fontWeight: 900, textTransform: "uppercase" }}>{title}</span>
               <span style={{ color: livePrice ? theme.text : theme.muted, fontSize: "11px", fontWeight: 900, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
@@ -167,10 +168,10 @@ export default function ChartPanel({
                 {quoteChangeDisplay || "PENDING"}
               </span>
             </div>
-            <div style={{ marginTop: "4px", fontSize: secondary ? "18px" : "22px", fontWeight: 950, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ marginTop: dense ? "2px" : "4px", fontSize: dense ? "16px" : secondary ? "18px" : "22px", fontWeight: 950, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
               {cleanChartSymbol}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "82px 82px", gap: "8px", marginTop: "4px" }}>
+            <div style={{ display: dense ? "none" : "grid", gridTemplateColumns: "82px 82px", gap: "8px", marginTop: "4px" }}>
               <span
                 style={{
                   color: statusColor,
@@ -217,6 +218,7 @@ export default function ChartPanel({
                 onCommit={commitChartSymbol}
                 theme={theme}
                 label={title}
+                compact={dense}
               />
             )}
 
@@ -239,8 +241,8 @@ export default function ChartPanel({
                   onClick={() => setTf(item)}
                   style={{
                     ...timeframeButtonStyle(tf === item),
-                    height: "24px",
-                    width: "38px",
+                    height: dense ? "22px" : "24px",
+                    width: dense ? "30px" : "38px",
                     borderColor: tf === item ? "rgba(45,140,255,0.7)" : "transparent",
                     background: tf === item ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
                   }}
@@ -260,8 +262,8 @@ export default function ChartPanel({
             display: "flex",
             gap: "4px",
             marginBottom: "0px",
-            padding: premiumShell ? "6px 10px" : "7px 10px",
-            flexWrap: "wrap",
+            padding: dense ? "4px 8px" : premiumShell ? "6px 10px" : "7px 10px",
+            flexWrap: dense ? "nowrap" : "wrap",
             position: "relative",
             background: theme.panel,
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,

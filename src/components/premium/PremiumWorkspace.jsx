@@ -1500,7 +1500,13 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Place New Order"><div style={{ padding: 16 }}>{quickOrder.props.children}</div></PremiumCard>
             <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(num(selectedOrder?.price, selected.price) * num(selectedOrder?.qty, quantity))], ["Mode", "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Quick Actions"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}><ActionButton theme={theme} danger onClick={() => prepareReviewAction("Cancel orders review", selectedOrder?.symbol || selected.symbol)}><X size={14} /><br />Cancel Review</ActionButton><ActionButton theme={theme} onClick={() => prepareReviewAction("Close positions review", selected.symbol)}><Lock size={14} /><br />Close Review</ActionButton><ActionButton theme={theme} onClick={() => prepareReviewAction("Flatten day review", selected.symbol)}><Shield size={14} /><br />Flatten Review</ActionButton></div></PremiumCard>
+            <PremiumCard theme={theme} title="Quick Actions">
+              <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                <ActionButton theme={theme} danger title="Prepare a cancel-orders review" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, padding: "0 7px", whiteSpace: "nowrap", fontSize: 11 }} onClick={() => prepareReviewAction("Cancel orders review", selectedOrder?.symbol || selected.symbol)}><X size={13} />Cancel</ActionButton>
+                <ActionButton theme={theme} title="Prepare a close-positions review" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, padding: "0 7px", whiteSpace: "nowrap", fontSize: 11 }} onClick={() => prepareReviewAction("Close positions review", selected.symbol)}><Lock size={13} />Close</ActionButton>
+                <ActionButton theme={theme} title="Prepare a flatten-day review" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, padding: "0 7px", whiteSpace: "nowrap", fontSize: 11 }} onClick={() => prepareReviewAction("Flatten day review", selected.symbol)}><Shield size={13} />Flatten</ActionButton>
+              </div>
+            </PremiumCard>
           </div>
         </div>
       </div>

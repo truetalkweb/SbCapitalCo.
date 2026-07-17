@@ -152,7 +152,6 @@ export default function Tradingsidebar({
               title={item.label}
               aria-label={item.label}
               data-workspace-id={item.id}
-              onPointerDown={(event) => switchWorkspace(event, item.id)}
               onClick={(event) => switchWorkspace(event, item.id)}
               style={{
                 width: expanded ? "100%" : "38px",

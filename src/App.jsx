@@ -863,8 +863,24 @@ export default function App() {
     };
   }, [user]);
   const activeUser = user || devPreviewUser;
-  const effectiveEntitlements = activeUser ? entitlements : DEFAULT_ENTITLEMENTS;
-  const effectiveEntitlementsStatus = activeUser ? entitlementsStatus : "idle";
+  const devPreviewEntitlements = useMemo(() => ({
+    ...DEFAULT_ENTITLEMENTS,
+    plan: "admin",
+    source: "dev-preview",
+    capabilities: Object.fromEntries(
+      Object.keys(DEFAULT_ENTITLEMENTS.capabilities).map((feature) => [feature, true])
+    ),
+  }), []);
+  const effectiveEntitlements = devPreviewUser
+    ? devPreviewEntitlements
+    : activeUser
+      ? entitlements
+      : DEFAULT_ENTITLEMENTS;
+  const effectiveEntitlementsStatus = devPreviewUser
+    ? "ready"
+    : activeUser
+      ? entitlementsStatus
+      : "idle";
 
   function panelStyle(extra = {}) {
     return createPanelStyle(theme, isDark, extra);
@@ -2389,22 +2405,6 @@ export default function App() {
   }, [activeWorkspace, advancedMode, setActiveWorkspace, usePremiumShell]);
 
   useEffect(() => {
-    const handleWorkspaceNav = (event) => {
-      const eventTarget = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
-      const target = eventTarget?.closest?.("[data-workspace-id]");
-      if (!target) return;
-      const workspaceId = target.getAttribute("data-workspace-id");
-      if (!workspaceId || !isWorkspaceAllowed(workspaceId)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setActiveWorkspace(workspaceId);
-    };
-
-    document.addEventListener("pointerdown", handleWorkspaceNav, true);
-    return () => document.removeEventListener("pointerdown", handleWorkspaceNav, true);
-  }, [setActiveWorkspace]);
-
-  useEffect(() => {
     if (!visibleRightPanelTabs.some((tab) => tab.id === rightTab)) {
       setRightTab("intel");
     }
@@ -3785,8 +3785,11 @@ export default function App() {
         replayStats={replayStats}
         replayTrades={replayTrades}
         replayEquity={replayEquity}
+        replayIndex={replayIndex}
+        replayDataLength={mainReplayData.length}
         setReplayPlaying={setReplayPlaying}
         setReplaySpeed={setReplaySpeed}
+        setReplayIndex={setReplayIndex}
         stepReplay={stepReplay}
         resetReplay={resetReplay}
         openReplayJournal={openReplayJournal}

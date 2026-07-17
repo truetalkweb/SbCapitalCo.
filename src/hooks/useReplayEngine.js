@@ -79,7 +79,7 @@ export function useReplayEngine({
 
     const lastOpenBuy = [...replayTrades]
       .reverse()
-      .find((trade) => trade.type === "BUY" && !trade.closed);
+      .find((trade) => trade.type === "BUY" && trade.symbol === symbol && !trade.closed);
 
     if (!lastOpenBuy) return;
 

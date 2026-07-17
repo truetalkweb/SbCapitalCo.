@@ -760,8 +760,11 @@ export default function PremiumWorkspace({
   replayStats,
   replayTrades,
   replayEquity = [],
+  replayIndex = 0,
+  replayDataLength = 0,
   setReplayPlaying,
   setReplaySpeed,
+  setReplayIndex,
   stepReplay,
   resetReplay,
   openReplayJournal,
@@ -842,10 +845,46 @@ export default function PremiumWorkspace({
   const [selectedPositionSymbol, setSelectedPositionSymbol] = useState(null);
   const [alertDraftPrice, setAlertDraftPrice] = useState("");
   const [defaultLandingTab, setDefaultLandingTab] = useState(() => loadSetting("sb_default_landing_tab", activeWorkspace || "dashboard"));
-  const [compactMode, setCompactMode] = useState(() => loadSetting("sb_compact_mode", false));
+  const [compactMode] = useState(() => loadSetting("sb_compact_mode", false));
   const [scannerAutoRefresh, setScannerAutoRefresh] = useState(() => loadSetting("sb_scanner_auto_refresh", true));
   const [relativeVolumeThreshold, setRelativeVolumeThreshold] = useState(() => loadSetting("sb_relative_volume_threshold", "1.50"));
+  const [replayBookmarks, setReplayBookmarks] = useState(() => loadSetting("sb_replay_bookmarks", []));
   const [passwordResetStatus, setPasswordResetStatus] = useState("idle");
+
+  const jumpReplay = (target) => {
+    if (!replayDataLength || !setReplayIndex) return;
+    if (target === "open") {
+      setReplayIndex(Math.min(80, replayDataLength - 1));
+      return;
+    }
+    if (target === "close") {
+      setReplayIndex(replayDataLength - 1);
+      return;
+    }
+    const candleMinutes = {
+      "1m": 1,
+      "5m": 5,
+      "15m": 15,
+      "1H": 60,
+      "1D": 390,
+    }[timeframe] || 5;
+    const candleSteps = Math.max(1, Math.round(target / candleMinutes));
+    setReplayIndex((current) => Math.min(current + candleSteps, replayDataLength - 1));
+  };
+
+  const addReplayBookmark = () => {
+    const bookmark = {
+      id: `${selectedStock}-${replayIndex}-${Date.now()}`,
+      symbol: selectedStock,
+      index: replayIndex,
+      label: `${selectedStock} step ${replayIndex + 1}`,
+    };
+    setReplayBookmarks((current) => {
+      const next = [bookmark, ...current.filter((item) => item.symbol !== bookmark.symbol || item.index !== bookmark.index)].slice(0, 12);
+      saveSetting("sb_replay_bookmarks", next);
+      return next;
+    });
+  };
 
   const sendPasswordReset = async () => {
     setPasswordResetStatus("sending");
@@ -1849,7 +1888,7 @@ export default function PremiumWorkspace({
                 ["Speed", `${replaySpeed || 1}x`],
               ].map(([label, value]) => replayMetric(label, value))}
               <div style={{ display: "flex", gap: 8, justifyContent: "end", flexWrap: "wrap", gridColumn: isNarrowWorkspace ? "1 / -1" : "auto" }}>
-                <ActionButton theme={theme} onClick={() => resetReplay?.()}>Skip to Open</ActionButton>
+                <ActionButton theme={theme} onClick={() => jumpReplay("open")}>Skip to Open</ActionButton>
                 <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
                 <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
                   {replayPlaying ? "Pause Replay" : "Start Replay"}
@@ -1879,11 +1918,17 @@ export default function PremiumWorkspace({
                 <div>
                   <div style={{ color: theme.muted, fontSize: 12, marginBottom: 9 }}>Jump to Time</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {["Market Open", "+ 1 Hour", "+ 2 Hours", "+ 3 Hours", "Market Close"].map((label) => (
+                    {[
+                      ["Market Open", "open"],
+                      ["+ 1 Hour", 60],
+                      ["+ 2 Hours", 120],
+                      ["+ 3 Hours", 180],
+                      ["Market Close", "close"],
+                    ].map(([label, target]) => (
                       <ActionButton
                         key={label}
                         theme={theme}
-                        onClick={() => (label === "Market Open" || label === "Market Close" ? resetReplay?.() : stepReplay?.())}
+                        onClick={() => jumpReplay(target)}
                       >
                         {label}
                       </ActionButton>
@@ -1893,10 +1938,21 @@ export default function PremiumWorkspace({
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: theme.muted, fontSize: 12, marginBottom: 8 }}>
                     <span>Bookmarks</span>
-                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay bookmark noted locally for review.")}>+ Add</ActionButton>
+                    <ActionButton theme={theme} onClick={addReplayBookmark}>+ Add</ActionButton>
                   </div>
-                  <div style={{ minHeight: 86, border: `1px dashed ${theme.borderSoft || theme.border}`, borderRadius: 8, padding: 12, color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
-                    No bookmarks saved for this replay session.
+                  <div style={{ minHeight: 86, border: `1px dashed ${theme.borderSoft || theme.border}`, borderRadius: 8, padding: 8, color: theme.muted, fontSize: 12, lineHeight: 1.5, display: "grid", gap: 4, alignContent: "start" }}>
+                    {replayBookmarks.length
+                      ? replayBookmarks.slice(0, 5).map((bookmark) => (
+                          <button
+                            key={bookmark.id}
+                            type="button"
+                            onClick={() => setReplayIndex?.(bookmark.index)}
+                            style={{ border: 0, background: "transparent", color: theme.text, padding: "4px 3px", textAlign: "left", cursor: "pointer", fontFamily: terminalMonoFont }}
+                          >
+                            {bookmark.label}
+                          </button>
+                        ))
+                      : "No bookmarks saved for this replay session."}
                   </div>
                 </div>
               </div>
@@ -1917,7 +1973,7 @@ export default function PremiumWorkspace({
                         <span style={{ color: theme.text, fontSize: 16, fontWeight: 850, fontFamily: terminalMonoFont }}>{replayPrice ? money(replayPrice) : "Unavailable"}</span>
                         <span style={{ color: toneColor(theme, replayMove), fontSize: 13, fontWeight: 900, fontFamily: terminalMonoFont }}>{pct(replayMove)}</span>
                       </div>
-                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{replaySymbolData?.company || `${selectedStock} INC.`} · 1D · NASDAQ</div>
+                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{replaySymbolData?.company || `${selectedStock} INC.`} · {timeframe} · NASDAQ</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <div style={{ height: 32, minWidth: 180, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", color: theme.muted }}>
@@ -1925,15 +1981,15 @@ export default function PremiumWorkspace({
                         <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 850 }}>{selectedStock}</span>
                       </div>
                       {["1m", "5m", "15m", "1H", "1D"].map((frame) => (
-                        <ActionButton key={frame} theme={theme} active={frame === "1D"} onClick={() => setOrderMessage?.(`Replay timeframe ${frame} selected for review.`)}>{frame}</ActionButton>
+                        <ActionButton key={frame} theme={theme} active={frame === timeframe} disabled={frame !== timeframe} title={frame === timeframe ? "Current replay timeframe" : "Change the chart timeframe before starting a replay"}>{frame}</ActionButton>
                       ))}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay trend tools are review-only in this workspace.")}>Trend Tools</ActionButton>
-                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay indicators use calculated chart overlays only.")}>Indicators</ActionButton>
-                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Replay screenshot prepared for review.")}>Screenshot</ActionButton>
-                    <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use browser fullscreen for replay review.")}>Fullscreen</ActionButton>
+                    <ActionButton theme={theme} disabled title="Replay drawing tools are not available yet">Trend Tools</ActionButton>
+                    <ActionButton theme={theme} disabled title="Replay uses the chart's calculated overlays">Indicators</ActionButton>
+                    <ActionButton theme={theme} disabled title="Replay screenshot export is not available yet">Screenshot</ActionButton>
+                    <ActionButton theme={theme} disabled title="Use the browser fullscreen command for now">Fullscreen</ActionButton>
                   </div>
                 </div>
                 <div style={{ minHeight: 420, height: "100%" }}>{renderChartGrid?.({ layoutMode: "1", compact: true, embeddedChart: true })}</div>
@@ -2141,7 +2197,7 @@ export default function PremiumWorkspace({
             </PremiumCard>
             {group("Workspace Preferences", [
               ["Theme", settingSelect(themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
-              ["Compact mode", settingToggle(compactMode, (value) => { setCompactMode(value); saveSetting("sb_compact_mode", value); setOrderMessage?.(`Compact mode ${value ? "enabled" : "disabled"} for future workspace polish.`); })],
+              ["Compact mode", disabledSetting(compactMode ? "Saved preference; layout support coming later" : "Coming later")],
               ["Default landing tab", settingSelect(defaultLandingTab, landingOptions, (value) => { setDefaultLandingTab(value); saveSetting("sb_default_landing_tab", value); setOrderMessage?.(`Default landing tab saved: ${landingOptions.find(([id]) => id === value)?.[1] || value}.`); })],
               ["Time zone", settingSelect(timeZone, [["America/Vancouver", "Pacific (PT)"], ["America/New_York", "Eastern (ET)"], ["Europe/London", "London"], ["UTC", "UTC"]], (value) => setTimeZone?.(value))],
               ["Currency display", settingSelect("USD", ["USD"], null, true)],
@@ -2160,7 +2216,7 @@ export default function PremiumWorkspace({
               ["Default universe", disabledSetting("US stocks only in this MVP")],
               ["Relative volume threshold", settingSelect(relativeVolumeThreshold, ["1.25", "1.50", "2.00", "3.00"], (value) => { setRelativeVolumeThreshold(value); saveSetting("sb_relative_volume_threshold", value); })],
             ])}
-            <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>{["Trader", "Research", "Minimal", "Risk"].map((x, i) => <button key={x} type="button" onClick={() => setOrderMessage?.(`${x} layout preset selected for local review.`)} style={{ minHeight: 72, border: `1px solid ${i === 0 ? theme.blue : theme.borderSoft}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12, cursor: "pointer" }}>{x}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>Chart, Watchlist, Orders</div></button>)}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>{["Trader", "Research", "Minimal", "Risk"].map((x, i) => <button key={x} type="button" disabled title="Layout presets are not available yet" style={{ minHeight: 72, border: `1px solid ${i === 0 ? theme.blue : theme.borderSoft}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12, cursor: "not-allowed", opacity: 0.6 }}>{x}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>Coming later</div></button>)}</div></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Actions", <span key="a"><ActionButton theme={theme} disabled title="Connection management stays in backend/Railway settings">Manage Connection</ActionButton> <ActionButton theme={theme} onClick={() => setOrderMessage?.("Use the top Retry control to refresh provider health.")}><RefreshCw size={14} /></ActionButton></span>]])}

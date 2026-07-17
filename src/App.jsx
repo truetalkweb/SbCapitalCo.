@@ -3731,8 +3731,21 @@ export default function App() {
         selectedStockData={selectedStockData}
         liveStocks={liveStocks}
         scannerStocks={scannerStocks}
+        scannerGroups={{
+          gainers: fmpGainers,
+          losers: fmpLosers,
+          active: fmpActive,
+          momentum: fmpMomentum,
+          relativeVolume: fmpRelativeVolume,
+          aiMovers: fmpAiMovers,
+          smallCaps: fmpSmallCaps,
+        }}
+        scannerMeta={scannerMeta}
         news={news}
         newsLoading={newsLoading}
+        newsMeta={newsMeta}
+        marketIndexes={marketSnapshotStocks}
+        brokerApiUrl={BROKER_API_URL}
         alerts={alerts}
         createPriceAlert={createPriceAlert}
         toggleAlert={toggleAlert}
@@ -3886,7 +3899,7 @@ export default function App() {
         premiumShell={usePremiumShell}
       />
 
-      {usePremiumShell && !isCompactTerminal && !["replay", "journal"].includes(activeWorkspace) ? (
+      {usePremiumShell && !isCompactTerminal && !["dashboard", "replay", "journal"].includes(activeWorkspace) ? (
         <div style={{ padding: activeWorkspace === "charts" ? "0 10px 5px" : "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}

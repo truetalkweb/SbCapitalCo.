@@ -16,6 +16,7 @@ import {
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { CHART_INDICATOR_OPTIONS } from "../../indicators/chartIndicators";
+import DashboardMarketIntelligence from "./DashboardMarketIntelligence";
 import {
   formatCompactNumber,
   formatMultiple,
@@ -709,7 +710,12 @@ export default function PremiumWorkspace({
   selectedStockData,
   liveStocks,
   scannerStocks,
+  scannerGroups = {},
+  scannerMeta = {},
   news,
+  newsMeta = {},
+  marketIndexes = [],
+  brokerApiUrl = "",
   alerts,
   createPriceAlert,
   toggleAlert,
@@ -2283,6 +2289,31 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>{selectedRail(<PremiumCard theme={theme} title="Chart Context"><div style={{ padding: 14, display: "grid", gap: 10, color: theme.muted }}><div><b style={{ color: theme.text }}>Catalyst:</b> {selected.catalyst || "No verified catalyst available"}</div><div><b style={{ color: theme.text }}>Data mode:</b> {selected.dataMode === "provider" ? "Provider data" : "Unavailable"}</div><div><b style={{ color: theme.text }}>Technical classification:</b> Not available from the current data feed</div></div></PremiumCard>)}</div>
         </div>
       </div>
+    );
+  }
+
+  if (activeWorkspace === "dashboard") {
+    return (
+      <DashboardMarketIntelligence
+        theme={theme}
+        viewportWidth={viewportWidth}
+        chart={renderChartGrid?.({ layoutMode: "1" })}
+        marketIndexes={marketIndexes}
+        brokerApiUrl={brokerApiUrl}
+        breadthRows={allSymbols}
+        scannerGroups={scannerGroups}
+        scannerMeta={scannerMeta}
+        news={dashboard.newsRows.length ? dashboard.newsRows : headlines}
+        newsMeta={newsMeta}
+        selected={dashboard.selected}
+        watchlist={dashboard.watchlistRows}
+        onSelect={selectMainSymbol}
+        onOpenChart={(symbol) => {
+          selectMainSymbol?.(symbol);
+          setActiveWorkspace?.("charts");
+        }}
+        onAddWatch={addSymbolToWatchlist}
+      />
     );
   }
 

@@ -29,21 +29,6 @@ function Sparkline({ points = [], color, compact = false }) {
   );
 }
 
-function buildFallbackSparkline(price, move, symbol) {
-  if (!price || move === null) return [];
-  const seed = String(symbol || "")
-    .split("")
-    .reduce((total, char) => total + char.charCodeAt(0), 0);
-  const direction = move >= 0 ? 1 : -1;
-  const amplitude = Math.max(Math.abs(move), 0.12) / 100;
-
-  return Array.from({ length: 12 }, (_, index) => {
-    const progress = index / 11;
-    const wave = Math.sin((index + seed) * 1.35) * amplitude * 0.24;
-    return price * (1 - direction * amplitude * 0.55 + direction * amplitude * progress + wave);
-  });
-}
-
 export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compact = false }) {
   const monoFont =
     '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
@@ -106,8 +91,16 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
               <span style={{ display: "block", marginTop: compact ? "2px" : "4px", fontFamily: monoFont, color, fontSize: compact ? "9px" : "11px", lineHeight: 1, fontWeight: 850 }}>
                 {move === null ? "Unavailable" : `${move >= 0 ? "+" : ""}${move.toFixed(2)}%`}
               </span>
+              {!compact && (
+                <span
+                  title={stock.lastTradeTime || stock.updatedAt || stock.source || "Quote unavailable"}
+                  style={{ display: "block", marginTop: "4px", color: theme.muted, fontSize: "8px", lineHeight: 1, textTransform: "uppercase" }}
+                >
+                  {stock.source || (price ? "Provider quote" : "Unavailable")}
+                </span>
+              )}
             </span>
-            <Sparkline color={color} points={stock.sparkline?.length ? stock.sparkline : buildFallbackSparkline(price, move, stock.symbol)} compact={compact} />
+            <Sparkline color={color} points={stock.sparkline || stock.intraday || stock.history || []} compact={compact} />
           </button>
         );
       })}

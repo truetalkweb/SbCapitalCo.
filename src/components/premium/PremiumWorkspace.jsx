@@ -2294,26 +2294,45 @@ export default function PremiumWorkspace({
 
   if (activeWorkspace === "dashboard") {
     return (
-      <DashboardMarketIntelligence
-        theme={theme}
-        viewportWidth={viewportWidth}
-        chart={renderChartGrid?.({ layoutMode: "1" })}
-        marketIndexes={marketIndexes}
-        brokerApiUrl={brokerApiUrl}
-        breadthRows={allSymbols}
-        scannerGroups={scannerGroups}
-        scannerMeta={scannerMeta}
-        news={dashboard.newsRows.length ? dashboard.newsRows : headlines}
-        newsMeta={newsMeta}
-        selected={dashboard.selected}
-        watchlist={dashboard.watchlistRows}
-        onSelect={selectMainSymbol}
-        onOpenChart={(symbol) => {
-          selectMainSymbol?.(symbol);
-          setActiveWorkspace?.("charts");
+      <div
+        onWheelCapture={(event) => {
+          const target = event.target;
+          if (
+            target instanceof Element &&
+            target.closest("canvas") &&
+            Math.abs(event.deltaY) > Math.abs(event.deltaX)
+          ) {
+            event.preventDefault();
+            event.currentTarget.scrollTop += event.deltaY;
+          }
         }}
-        onAddWatch={addSymbolToWatchlist}
-      />
+        style={{
+          ...page,
+          overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        <DashboardMarketIntelligence
+          theme={theme}
+          viewportWidth={viewportWidth}
+          chart={renderChartGrid?.({ layoutMode: "1" })}
+          marketIndexes={marketIndexes}
+          brokerApiUrl={brokerApiUrl}
+          breadthRows={allSymbols}
+          scannerGroups={scannerGroups}
+          scannerMeta={scannerMeta}
+          news={dashboard.newsRows.length ? dashboard.newsRows : headlines}
+          newsMeta={newsMeta}
+          selected={dashboard.selected}
+          watchlist={dashboard.watchlistRows}
+          onSelect={selectMainSymbol}
+          onOpenChart={(symbol) => {
+            selectMainSymbol?.(symbol);
+            setActiveWorkspace?.("charts");
+          }}
+          onAddWatch={addSymbolToWatchlist}
+        />
+      </div>
     );
   }
 

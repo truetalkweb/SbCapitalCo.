@@ -121,10 +121,13 @@ backend route checks both plan rank and server-issued capability.
 9. Confirm browser console/network logs contain no secrets, raw provider errors, or
    unexpected 401/403/500 responses.
 
-## Known Pre-Deployment Items
+## Production Status
 
-- Frontend and backend application changes have not been deployed.
+- Frontend security changes are deployed to Vercel production at
+  `https://www.sbcapitalco.com`.
+- Backend security changes are deployed to Railway production.
+- Production signup confirmation, password reset, password update, logout, login,
+  and session restoration were verified with an isolated test account, which was
+  deleted after verification.
 - Supabase leaked-password protection is unavailable on the current Free plan.
-- Production email confirmation/reset must be exercised after the canonical redirect
-  settings and verified frontend build are deployed.
 - Stripe and live broker execution are intentionally outside this phase.

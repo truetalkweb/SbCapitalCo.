@@ -1,8 +1,8 @@
 # Public Launch Security Completion Audit
 
 Status is based on inspected source, local tests, browser QA, production Supabase
-queries, and the production migration applied on July 19, 2026. Frontend and
-backend application deployments remain intentionally pending.
+queries, the production migration applied on July 19, 2026, and production Auth
+email flows exercised against `https://www.sbcapitalco.com`.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
@@ -20,18 +20,20 @@ backend application deployments remain intentionally pending.
 | Saving/offline/error states | Verified in source | Saving, saved, offline, restoring, conflict-restored, and cloud-unavailable states are present. |
 | Signup/login/reset enumeration safety | Verified locally | Signup/reset use generic responses; invalid login does not reveal account existence. |
 | Expired Auth link UX | Verified in browser | Invalid callback parameters show a recovery message and are removed from the URL. |
-| Production confirmation/reset redirects | Configured, E2E pending | Site URL is `https://www.sbcapitalco.com`; the redirect allowlist includes `https://www.sbcapitalco.com/**`. Live email confirmation and reset links still need mailbox-level testing after application deployment. |
+| Production confirmation/reset redirects | Verified live | Signup confirmation and password-reset emails were delivered to an isolated test account. Both links returned to `https://www.sbcapitalco.com`; confirmation established a session, recovery accepted a new password, and subsequent login succeeded. |
 | Protected API authentication | Verified locally | Diagnostic, Admin, AI, watchlist, audit, and account APIs use authenticated middleware and plan/capability checks. |
 | Input validation/rate limits/CORS | Verified locally | Bounded inputs, route-specific rate limits, production allowlist CORS, and untrusted-origin rejection are implemented. |
 | Public error sanitization | Verified locally | Health/provider responses omit tokens, private URLs, keys, cache internals, and raw provider diagnostics. |
 | Structured secret-safe logs | Verified in source | Server logging records event metadata and error codes without tokens, emails, or raw provider messages. |
 | Supabase advisors | Partially clear | Performance has no findings. Leaked-password protection is unavailable on the current Supabase Free plan; minimum password length is now 8. |
 
-## Remaining Release Gate
+## Deployment And Remaining Limitation
 
-1. Upgrade Supabase to Pro and enable leaked-password protection, or explicitly
-   accept that Free-plan limitation for the initial release.
-2. Deploy the verified frontend/backend changes only after explicit approval.
-3. Exercise signup confirmation, reset, logout, restoration, expired sessions,
-   two-user persistence, stale-session conflict handling, and plan-specific UI/API
-   behavior on the production domain.
+The hardened frontend is deployed to Vercel and aliased to
+`https://www.sbcapitalco.com`. The hardened backend is deployed to Railway.
+Production signup confirmation, password recovery, logout, session restoration,
+protected-route rejection, and two-user isolation have been verified.
+
+Supabase leaked-password protection remains unavailable on the current Free plan.
+Upgrade to Supabase Pro before enabling that optional Auth protection. Stripe and
+live broker execution remain intentionally outside this security phase.

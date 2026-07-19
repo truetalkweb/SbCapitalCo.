@@ -74,7 +74,7 @@ function getScannerRowCount(data) {
   ].reduce((total, rows) => total + (Array.isArray(rows) ? rows.length : 0), 0);
 }
 
-export function useScannerData({ brokerApiUrl, onActivity }) {
+export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true }) {
   const [scannerGroups, setScannerGroups] = useState(emptyScannerGroups);
   const [scannerMeta, setScannerMeta] = useState(defaultScannerMeta);
   const [scannerLoading, setScannerLoading] = useState(false);
@@ -131,13 +131,13 @@ export function useScannerData({ brokerApiUrl, onActivity }) {
 
   useEffect(() => {
     const initialLoad = window.setTimeout(loadScanner, 0);
-    const interval = setInterval(loadScanner, 5 * 60 * 1000);
+    const interval = autoRefresh ? setInterval(loadScanner, 5 * 60 * 1000) : null;
 
     return () => {
       window.clearTimeout(initialLoad);
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
-  }, [loadScanner]);
+  }, [autoRefresh, loadScanner]);
 
   useEffect(() => {
     saveSetting("sb_selected_scanner_stock", selectedScannerStock);

@@ -209,12 +209,32 @@ export default function App() {
   const [marketRegion, setMarketRegion] = useState(() =>
     loadSetting("sb_market_region", "us")
   );
+  const [premiumPreferences, setPremiumPreferences] = useState(() => ({
+    defaultLandingTab: "dashboard",
+    compactMode: false,
+    scannerAutoRefresh: true,
+    relativeVolumeThreshold: "1.50",
+    riskWarnings: true,
+    notificationPreferences: {
+      priceAlerts: true,
+      newsCatalysts: false,
+      soundAlerts: false,
+    },
+    scannerFilters: {},
+    ...loadSetting("sb_premium_preferences", {}),
+  }));
 
   const [journalEntries, setJournalEntries] = useState(() =>
     loadSetting("sb_journal_entries", [])
   );
   const [journalDraft, setJournalDraft] = useState(() =>
     loadSetting("sb_journal_draft", defaultJournalDraft)
+  );
+  const [replayBookmarks, setReplayBookmarks] = useState(() =>
+    loadSetting("sb_replay_bookmarks", [])
+  );
+  const [replayNotes, setReplayNotes] = useState(() =>
+    loadSetting("sb_replay_notes", "")
   );
   const [activityLog, setActivityLog] = useState(() =>
     loadSetting("sb_activity_log", [])
@@ -317,18 +337,6 @@ export default function App() {
   const [viewportHeight, setViewportHeight] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight
   );
-  const devPreviewUser = useMemo(() => {
-    if (!import.meta.env.DEV || typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("devPreview") !== "1") return null;
-    return {
-      id: "local-dev-preview",
-      email: "local-preview@sbterminal.dev",
-      app_metadata: { plan: "admin" },
-      user_metadata: { name: "Local Preview" },
-    };
-  }, []);
-
   const [level2, setLevel2] = useState([]);
 
   const chartAreaRef = useRef(null);
@@ -480,6 +488,7 @@ export default function App() {
   } = useScannerData({
     brokerApiUrl: BROKER_API_URL,
     onActivity: pushActivity,
+    autoRefresh: premiumPreferences.scannerAutoRefresh !== false,
   });
 
   const resizeHandleStyle = {
@@ -576,6 +585,7 @@ export default function App() {
   } = useTerminalAlerts({
     selectedStock,
     selectedStockData,
+    quotes: allSymbols,
   });
 
   const replayBuy = useCallback(() => {
@@ -592,6 +602,8 @@ export default function App() {
     setPositions({});
     setRealizedPnL(0);
     setAlerts([]);
+    setReplayBookmarks([]);
+    setReplayNotes("");
   }, [resetReplayState, setAlerts]);
 
   const {
@@ -689,6 +701,7 @@ export default function App() {
       marketRegion,
       themeMode,
       timeZone,
+      premiumPreferences,
       chartIndicators,
       scannerTab,
       scannerPresets,
@@ -698,6 +711,8 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      replayBookmarks,
+      replayNotes,
       journalEntries,
       journalDraft,
       activePreset,
@@ -728,6 +743,7 @@ export default function App() {
       marketRegion,
       themeMode,
       timeZone,
+      premiumPreferences,
       chartIndicators,
       scannerTab,
       scannerPresets,
@@ -737,6 +753,8 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      replayBookmarks,
+      replayNotes,
       journalEntries,
       journalDraft,
       activePreset,
@@ -768,6 +786,9 @@ export default function App() {
     if (data.marketRegion) setMarketRegion(data.marketRegion);
     if (data.themeMode) setThemeMode(data.themeMode);
     if (data.timeZone) setTimeZone(data.timeZone);
+    if (data.premiumPreferences && typeof data.premiumPreferences === "object") {
+      setPremiumPreferences((current) => ({ ...current, ...data.premiumPreferences }));
+    }
     if (data.chartIndicators) {
       setChartIndicators(normalizeIndicatorState(data.chartIndicators));
     } else if (typeof data.showEMA9 === "boolean" || typeof data.showEMA20 === "boolean") {
@@ -787,6 +808,8 @@ export default function App() {
     if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
     if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
     if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
+    if (Array.isArray(data.replayBookmarks)) setReplayBookmarks(data.replayBookmarks);
+    if (typeof data.replayNotes === "string") setReplayNotes(data.replayNotes);
     if (Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
     if (data.journalDraft) setJournalDraft(data.journalDraft);
     if (data.selectedScannerStock) setSelectedScannerStock(data.selectedScannerStock);
@@ -822,6 +845,7 @@ export default function App() {
     setAuthMode,
     setAuthPassword,
     user,
+    workspaceReady,
   } = useCloudWorkspace({
     applyWorkspace,
     pushActivity,
@@ -845,6 +869,7 @@ export default function App() {
         setEntitlements({
           ...DEFAULT_ENTITLEMENTS,
           ...(payload || {}),
+          userId: user.id,
           capabilities: {
             ...DEFAULT_ENTITLEMENTS.capabilities,
             ...(payload?.capabilities || {}),
@@ -854,7 +879,10 @@ export default function App() {
       })
       .catch(() => {
         if (cancelled) return;
-        setEntitlements(DEFAULT_ENTITLEMENTS);
+        setEntitlements({
+          ...DEFAULT_ENTITLEMENTS,
+          userId: user.id,
+        });
         setEntitlementsStatus("degraded");
       });
 
@@ -862,25 +890,9 @@ export default function App() {
       cancelled = true;
     };
   }, [user]);
-  const activeUser = user || devPreviewUser;
-  const devPreviewEntitlements = useMemo(() => ({
-    ...DEFAULT_ENTITLEMENTS,
-    plan: "admin",
-    source: "dev-preview",
-    capabilities: Object.fromEntries(
-      Object.keys(DEFAULT_ENTITLEMENTS.capabilities).map((feature) => [feature, true])
-    ),
-  }), []);
-  const effectiveEntitlements = devPreviewUser
-    ? devPreviewEntitlements
-    : activeUser
-      ? entitlements
-      : DEFAULT_ENTITLEMENTS;
-  const effectiveEntitlementsStatus = devPreviewUser
-    ? "ready"
-    : activeUser
-      ? entitlementsStatus
-      : "idle";
+  const activeUser = user;
+  const effectiveEntitlements = activeUser ? entitlements : DEFAULT_ENTITLEMENTS;
+  const effectiveEntitlementsStatus = activeUser ? entitlementsStatus : "idle";
 
   function panelStyle(extra = {}) {
     return createPanelStyle(theme, isDark, extra);
@@ -1070,6 +1082,7 @@ export default function App() {
         `Replay net P&L: $${replayNetPnl.toFixed(2)}`,
         `Closed trades: ${closedReplayTrades.length}`,
         `Win rate: ${replayStats.winRate}%`,
+        replayNotes ? `Session notes: ${replayNotes}` : "Session notes: none",
         latestReplayTrade
           ? `Last close: ${latestReplayTrade.type} ${latestReplayTrade.qty} @ $${Number(latestReplayTrade.price || 0).toFixed(2)} with P&L $${Number(latestReplayTrade.pnl || 0).toFixed(2)}`
           : "Last close: none yet",
@@ -1204,6 +1217,7 @@ export default function App() {
       "sb_theme_mode",
       "sb_time_zone",
       "sb_market_region",
+      "sb_premium_preferences",
       "sb_chart_indicators",
       "sb_show_ema9",
       "sb_show_ema20",
@@ -1216,6 +1230,8 @@ export default function App() {
       "sb_positions",
       "sb_realized_pnl",
       "sb_alerts",
+      "sb_replay_bookmarks",
+      "sb_replay_notes",
       "sb_journal_entries",
       "sb_journal_draft",
       "sb_activity_log",
@@ -1241,6 +1257,19 @@ export default function App() {
     setThemeMode("dark");
     setTimeZone("America/Vancouver");
     setMarketRegion("us");
+    setPremiumPreferences({
+      defaultLandingTab: "dashboard",
+      compactMode: false,
+      scannerAutoRefresh: true,
+      relativeVolumeThreshold: "1.50",
+      riskWarnings: true,
+      notificationPreferences: {
+        priceAlerts: true,
+        newsCatalysts: false,
+        soundAlerts: false,
+      },
+      scannerFilters: {},
+    });
     setChartIndicators(getDefaultIndicatorState());
     setScannerTab("Gainers");
     setScannerPresets([{ id: "default", name: "All results", minRvol: 0 }]);
@@ -1250,6 +1279,8 @@ export default function App() {
     setPositions({});
     setRealizedPnL(0);
     setAlerts([]);
+    setReplayBookmarks([]);
+    setReplayNotes("");
     setJournalEntries([]);
     setJournalDraft({ ...defaultJournalDraft, symbol: "NVDA" });
     setActivityLog([]);
@@ -1262,6 +1293,8 @@ export default function App() {
   }
 
   const placeOrder = useCallback((side, options = {}) => {
+    if (!BROKER_TOOLS_ENABLED || !brokerConnected) return false;
+
     const currentPrice = Number(selectedStockData?.price || 0);
     const executionPrice = Number(options.price || currentPrice);
     const qty = Number(quantity);
@@ -1345,7 +1378,7 @@ export default function App() {
       requestedQty: qty,
       partiallyFilled: filledQty < qty,
     };
-  }, [positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
+  }, [brokerConnected, positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
 
   function buildBrokerOrderPayload(sideOverride = orderSide, confirmed = false) {
     const currentPrice = Number(selectedStockData?.price || 0);
@@ -1443,6 +1476,20 @@ export default function App() {
 
   async function submitOrderTicket(sideOverride = orderSide) {
     setOrderMessage("");
+
+    if (!BROKER_TOOLS_ENABLED || !brokerConnected) {
+      const reason = "Order review prepared. Execution requires an active supported broker connection.";
+      setOrderMessage(reason);
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, "review_only", reason));
+      pushActivity({
+        type: "order",
+        status: "review",
+        title: "Order Review Prepared",
+        detail: reason,
+        symbol: selectedStock,
+      });
+      return;
+    }
 
     const qty = Number(quantity);
     const currentPrice = Number(selectedStockData?.price || 0);
@@ -2028,6 +2075,7 @@ export default function App() {
     saveSetting("sb_theme_mode", themeMode);
     saveSetting("sb_time_zone", timeZone);
     saveSetting("sb_market_region", marketRegion);
+    saveSetting("sb_premium_preferences", premiumPreferences);
     saveSetting("sb_chart_indicators", chartIndicators);
     saveSetting("sb_scanner_tab", scannerTab);
     saveSetting("sb_scanner_presets", scannerPresets);
@@ -2037,6 +2085,8 @@ export default function App() {
     saveSetting("sb_positions", positions);
     saveSetting("sb_realized_pnl", realizedPnL);
     saveSetting("sb_alerts", alerts);
+    saveSetting("sb_replay_bookmarks", replayBookmarks);
+    saveSetting("sb_replay_notes", replayNotes);
     saveSetting("sb_journal_entries", journalEntries);
     saveSetting("sb_journal_draft", journalDraft);
     saveSetting("sb_activity_log", activityLog);
@@ -2050,6 +2100,7 @@ export default function App() {
     themeMode,
     timeZone,
     marketRegion,
+    premiumPreferences,
     chartIndicators,
     scannerTab,
     scannerPresets,
@@ -2059,6 +2110,8 @@ export default function App() {
     positions,
     realizedPnL,
     alerts,
+    replayBookmarks,
+    replayNotes,
     journalEntries,
     journalDraft,
     activityLog,
@@ -3780,6 +3833,8 @@ export default function App() {
         setThemeMode={setThemeMode}
         timeZone={timeZone}
         setTimeZone={setTimeZone}
+        premiumPreferences={premiumPreferences}
+        setPremiumPreferences={setPremiumPreferences}
         activePreset={activePreset}
         layoutMode={layoutMode}
         setLayoutMode={setLayoutMode}
@@ -3800,11 +3855,17 @@ export default function App() {
         replayEquity={replayEquity}
         replayIndex={replayIndex}
         replayDataLength={mainReplayData.length}
+        replayBookmarks={replayBookmarks}
+        setReplayBookmarks={setReplayBookmarks}
+        replayNotes={replayNotes}
+        setReplayNotes={setReplayNotes}
         setReplayPlaying={setReplayPlaying}
         setReplaySpeed={setReplaySpeed}
         setReplayIndex={setReplayIndex}
         stepReplay={stepReplay}
         resetReplay={resetReplay}
+        takeScreenshot={takeScreenshot}
+        toggleFullscreen={toggleFullscreen}
         openReplayJournal={openReplayJournal}
         journalDraft={journalDraft}
         addJournalEntry={addJournalEntry}
@@ -3816,7 +3877,19 @@ export default function App() {
     );
   }
 
-  if ((!authReady || !activeUser || passwordRecovery) && !devPreviewUser) {
+  if (
+    !authReady
+    || !activeUser
+    || passwordRecovery
+    || (
+      activeUser
+      && (
+        !workspaceReady
+        || entitlementsStatus === "idle"
+        || entitlements?.userId !== activeUser.id
+      )
+    )
+  ) {
     return (
       <AuthGate
         busy={authBusy}

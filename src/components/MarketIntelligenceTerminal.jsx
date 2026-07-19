@@ -282,7 +282,7 @@ export default function MarketIntelligenceTerminal({
       setDetailLoading(true);
 
       try {
-        const response = await fetch(`${brokerApiUrl}/api/ticker/${encodeURIComponent(cleanSymbol)}?includeAi=true`);
+        const response = await authenticatedFetch(`${brokerApiUrl}/api/ticker/${encodeURIComponent(cleanSymbol)}?includeAi=true`);
         if (!response.ok) throw new Error("Ticker detail unavailable");
         const detail = await response.json();
 

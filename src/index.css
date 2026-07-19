@@ -399,3 +399,34 @@ h3 {
     -webkit-tap-highlight-color: transparent;
   }
 }
+/* Keep the desktop command bar usable before the shell switches to its compact layout. */
+@media (max-width: 1500px) {
+  .terminal-top-account-label {
+    display: none !important;
+  }
+
+  .terminal-top-search {
+    min-width: 210px !important;
+    max-width: 280px;
+  }
+
+  .terminal-top-dock {
+    min-width: 0 !important;
+    flex-basis: 430px !important;
+  }
+}
+
+@media (max-width: 1380px) {
+  .terminal-top-secondary-action {
+    display: none !important;
+  }
+
+  .terminal-top-search {
+    min-width: 180px !important;
+    max-width: 230px;
+  }
+
+  .terminal-top-dock {
+    flex-basis: 350px !important;
+  }
+}

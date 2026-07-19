@@ -285,6 +285,7 @@ export default function TerminalTopBar({
 
   return (
     <div
+      className="terminal-top-bar"
       style={{
         minHeight: compact ? "66px" : premiumShell ? "64px" : "78px",
         background: chromeBackground,
@@ -318,11 +319,12 @@ export default function TerminalTopBar({
       </div>
 
       <div
+        className="terminal-top-search"
         style={{
           position: "relative",
           width: compact ? "100%" : premiumShell ? "330px" : "238px",
           minWidth: compact ? "190px" : premiumShell ? "280px" : "214px",
-          flexShrink: 0,
+          flex: compact ? "0 0 100%" : premiumShell ? "1 1 280px" : "0 1 238px",
         }}
       >
         <span
@@ -601,6 +603,7 @@ export default function TerminalTopBar({
       )}
 
       <div
+        className="terminal-top-dock"
         style={{
           ...topRightDockStyle,
         }}
@@ -684,6 +687,7 @@ export default function TerminalTopBar({
 
         {!compact && onOpenHelp && (
         <button
+          className="terminal-top-secondary-action"
           onClick={onOpenHelp}
           aria-label="Open help and data sources"
           style={{
@@ -723,7 +727,7 @@ export default function TerminalTopBar({
         )}
 
         {user && (
-          <span style={{ ...topStatusLaneStyle, maxWidth: 150 }} title={user.email || "Authenticated user"}>
+          <span className="terminal-top-account-label" style={{ ...topStatusLaneStyle, maxWidth: 150 }} title={user.email || "Authenticated user"}>
             <span style={{ ...topStatusValueStyle, textTransform: "none", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email || "Signed in"}</span>
           </span>
         )}
@@ -735,13 +739,13 @@ export default function TerminalTopBar({
         )}
 
         {showAdvancedControls && (
-        <button onClick={loadWorkspaceFromCloud} style={{ ...compactButton(false), ...quietButton }}>
+        <button className="terminal-top-secondary-action" onClick={loadWorkspaceFromCloud} style={{ ...compactButton(false), ...quietButton }}>
           Load
         </button>
         )}
 
         {showAdvancedControls && (
-        <button onClick={resetWorkspace} style={{ ...compactButton(false), ...quietButton }}>
+        <button className="terminal-top-secondary-action" onClick={resetWorkspace} style={{ ...compactButton(false), ...quietButton }}>
           Reset
         </button>
         )}

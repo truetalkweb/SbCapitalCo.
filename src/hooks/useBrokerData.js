@@ -55,7 +55,7 @@ export function useBrokerData(brokerApiUrl) {
         BROKER_TOOLS_ENABLED
           ? axios.get(`${brokerApiUrl}/api/questrade/status`, authConfig)
           : Promise.resolve({ data: null }),
-        axios.get(`${brokerApiUrl}/api/health/deep`, { timeout: 7000 }),
+        axios.get(`${brokerApiUrl}/api/health/deep`, await getAuthenticatedAxiosConfig({ timeout: 7000 })),
       ]);
       let resolvedHealthResponse = healthResponse;
 

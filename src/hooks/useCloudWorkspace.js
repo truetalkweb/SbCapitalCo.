@@ -5,12 +5,48 @@ import {
   supabase,
   terminalWorkspaceTable,
 } from "../services/supabaseClient";
+import {
+  isValidWorkspacePayload,
+} from "../services/workspacePayloadPolicy";
 
 const authRedirectOrigin = String(import.meta.env.VITE_AUTH_REDIRECT_URL || "").trim();
+const WORKSPACE_SCHEMA_VERSION = 1;
+const LEGACY_COLUMN_ERROR_CODES = new Set(["42703", "PGRST204"]);
+const INTENDED_DESTINATION_KEY = "sb_auth_intended_destination";
+
+function getCurrentDestination() {
+  if (typeof window === "undefined") return "/";
+  const url = new URL(window.location.href);
+  ["access_token", "error", "error_code", "error_description", "refresh_token", "type"].forEach(
+    (key) => url.searchParams.delete(key),
+  );
+  return `${url.pathname}${url.search}${url.hash && !url.hash.includes("access_token") ? url.hash : ""}` || "/";
+}
+
+function rememberIntendedDestination() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(INTENDED_DESTINATION_KEY, getCurrentDestination());
+}
+
+function restoreIntendedDestination() {
+  if (typeof window === "undefined") return;
+  const destination = window.sessionStorage.getItem(INTENDED_DESTINATION_KEY);
+  window.sessionStorage.removeItem(INTENDED_DESTINATION_KEY);
+  if (!destination?.startsWith("/") || destination.startsWith("//")) return;
+  window.history.replaceState({}, "", destination);
+}
+
+function getInitialAuthMessage() {
+  if (typeof window === "undefined") return "";
+  const url = new URL(window.location.href);
+  return url.searchParams.get("error_description") || url.searchParams.get("error")
+    ? "This authentication link is invalid or expired. Request a new link and try again."
+    : "";
+}
 
 function getAuthRedirectTo() {
-  if (authRedirectOrigin) return authRedirectOrigin;
-  if (typeof window !== "undefined") return window.location.origin;
+  if (authRedirectOrigin) return authRedirectOrigin.replace(/\/+$/, "");
+  if (typeof window !== "undefined") return `${window.location.origin}${window.location.pathname}`;
   return undefined;
 }
 
@@ -18,7 +54,6 @@ function getAuthMessage(error, fallback) {
   const message = String(error?.message || "").toLowerCase();
   if (message.includes("invalid login")) return "Email or password is incorrect.";
   if (message.includes("email not confirmed")) return "Confirm your email before signing in.";
-  if (message.includes("already registered")) return "An account already exists for this email.";
   if (message.includes("password")) return "Use a password with at least 8 characters.";
   if (message.includes("rate limit")) return "Too many attempts. Wait briefly and try again.";
   return fallback;
@@ -30,17 +65,21 @@ function fallbackKey(userId) {
 
 function loadLocalFallback(userId) {
   try {
-    return JSON.parse(window.localStorage.getItem(fallbackKey(userId)) || "null");
+    const payload = JSON.parse(window.localStorage.getItem(fallbackKey(userId)) || "null");
+    return isValidWorkspacePayload(payload) ? payload : null;
   } catch {
     return null;
   }
 }
 
 function saveLocalFallback(userId, payload) {
+  if (!isValidWorkspacePayload(payload)) return false;
   try {
     window.localStorage.setItem(fallbackKey(userId), JSON.stringify(payload));
+    return true;
   } catch {
     // Hardened browsers may disable local storage; cloud persistence still works.
+    return false;
   }
 }
 
@@ -60,40 +99,58 @@ async function withTimeout(promise, timeoutMs, message) {
 
 export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace, workspacePayload }) {
   const [user, setUser] = useState(null);
-  const [authReady, setAuthReady] = useState(true);
+  const [authReady, setAuthReady] = useState(() => !supabase);
   const [authBusy, setAuthBusy] = useState(false);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [passwordRecovery, setPasswordRecovery] = useState(false);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authMode, setAuthMode] = useState("login");
-  const [authMessage, setAuthMessage] = useState("");
+  const [authMessage, setAuthMessage] = useState(getInitialAuthMessage);
   const [cloudStatus, setCloudStatus] = useState("Authentication required");
   const cloudWorkspaceReadyRef = useRef(false);
   const activeUserIdRef = useRef(null);
+  const remoteRevisionRef = useRef(0);
+  const legacyWorkspaceSchemaRef = useRef(false);
+  const saveQueueRef = useRef(Promise.resolve());
 
   const loadWorkspaceForUser = useCallback(async (currentUser, { quiet = false } = {}) => {
     if (!supabase || !currentUser?.id) return false;
     resetWorkspace?.();
     const localFallback = loadLocalFallback(currentUser.id);
     if (localFallback) applyWorkspace(localFallback);
-    const { data, error } = await withTimeout(
+    let { data, error } = await withTimeout(
       supabase
         .from(terminalWorkspaceTable)
-        .select("data, updated_at")
+        .select("data, updated_at, revision, schema_version, client_updated_at")
         .eq("user_id", currentUser.id)
         .maybeSingle(),
       5000,
       "Workspace restore timed out",
     );
 
+    if (error && LEGACY_COLUMN_ERROR_CODES.has(error.code)) {
+      legacyWorkspaceSchemaRef.current = true;
+      ({ data, error } = await supabase
+        .from(terminalWorkspaceTable)
+        .select("data, updated_at")
+        .eq("user_id", currentUser.id)
+        .maybeSingle());
+    } else {
+      legacyWorkspaceSchemaRef.current = false;
+    }
     if (error) throw error;
+    if (data?.data && !isValidWorkspacePayload(data.data)) {
+      throw new Error("Workspace data is invalid or exceeds the supported size.");
+    }
     if (data?.data) {
+      remoteRevisionRef.current = Number(data.revision || 1);
       applyWorkspace(data.data);
       saveLocalFallback(currentUser.id, data.data);
       if (!quiet) setCloudStatus("Workspace restored");
       return true;
     }
+    remoteRevisionRef.current = 0;
     if (!quiet) setCloudStatus("New workspace");
     return false;
   }, [applyWorkspace, resetWorkspace]);
@@ -116,6 +173,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
 
     setAuthBusy(true);
     try {
+      rememberIntendedDestination();
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -123,7 +181,9 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
           options: { emailRedirectTo: getAuthRedirectTo() },
         });
         if (error) throw error;
-        setAuthMessage(data.session ? "Account created." : "Check your email to confirm the account.");
+        setAuthMessage(data.session
+          ? "Account created."
+          : "If this address can be registered, confirmation instructions have been sent.");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password: authPassword });
         if (error) throw error;
@@ -144,6 +204,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       return false;
     }
     setAuthBusy(true);
+    rememberIntendedDestination();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: getAuthRedirectTo(),
     });
@@ -171,20 +232,78 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     setAuthMessage("Password updated.");
   }, [authPassword]);
 
-  const saveWorkspaceToCloud = useCallback(async ({ quiet = false } = {}) => {
+  const persistWorkspaceToCloud = useCallback(async ({ quiet = false } = {}) => {
     if (!supabase || !user?.id) {
       setCloudStatus("Sign in to save");
       return false;
     }
     try {
+      if (!isValidWorkspacePayload(workspacePayload)) {
+        setCloudStatus("Workspace is too large to save");
+        if (!quiet) pushActivity?.({
+          type: "cloud",
+          status: "blocked",
+          title: "Workspace Save Blocked",
+          detail: "Workspace data must be a valid object smaller than 2 MB.",
+        });
+        return false;
+      }
       saveLocalFallback(user.id, workspacePayload);
-      const { error } = await supabase.from(terminalWorkspaceTable).upsert({
-        user_id: user.id,
-        data: workspacePayload,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "user_id" });
-      if (error) throw error;
-      if (!quiet) setCloudStatus("Workspace saved");
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        setCloudStatus("Offline; changes saved on this device");
+        return false;
+      }
+      setCloudStatus("Saving...");
+      const now = new Date().toISOString();
+
+      if (legacyWorkspaceSchemaRef.current) {
+        const { error } = await supabase.from(terminalWorkspaceTable).upsert({
+          user_id: user.id,
+          data: workspacePayload,
+          updated_at: now,
+        }, { onConflict: "user_id" });
+        if (error) throw error;
+      } else if (remoteRevisionRef.current === 0) {
+        const { data, error } = await supabase
+          .from(terminalWorkspaceTable)
+          .insert({
+            user_id: user.id,
+            data: workspacePayload,
+            schema_version: WORKSPACE_SCHEMA_VERSION,
+            revision: 1,
+            client_updated_at: now,
+          })
+          .select("revision")
+          .single();
+        if (error?.code === "23505") {
+          await loadWorkspaceForUser(user);
+          setCloudStatus("Newer cloud workspace restored");
+          return false;
+        }
+        if (error) throw error;
+        remoteRevisionRef.current = Number(data?.revision || 1);
+      } else {
+        const expectedRevision = remoteRevisionRef.current;
+        const { data, error } = await supabase
+          .from(terminalWorkspaceTable)
+          .update({
+            data: workspacePayload,
+            schema_version: WORKSPACE_SCHEMA_VERSION,
+            client_updated_at: now,
+          })
+          .eq("user_id", user.id)
+          .eq("revision", expectedRevision)
+          .select("revision")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          await loadWorkspaceForUser(user);
+          setCloudStatus("Newer cloud workspace restored");
+          return false;
+        }
+        remoteRevisionRef.current = Number(data.revision || expectedRevision + 1);
+      }
+      setCloudStatus("Workspace saved");
       return true;
     } catch {
       setCloudStatus("Cloud save unavailable; local fallback retained");
@@ -196,7 +315,29 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       });
       return false;
     }
-  }, [pushActivity, user, workspacePayload]);
+  }, [loadWorkspaceForUser, pushActivity, user, workspacePayload]);
+
+  const saveWorkspaceToCloud = useCallback((options = {}) => {
+    const operation = () => persistWorkspaceToCloud(options);
+    saveQueueRef.current = saveQueueRef.current.then(operation, operation);
+    return saveQueueRef.current;
+  }, [persistWorkspaceToCloud]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleOffline = () => setCloudStatus("Offline; changes saved on this device");
+    const handleOnline = () => {
+      if (!user?.id) return;
+      setCloudStatus("Back online; syncing...");
+      saveWorkspaceToCloud({ quiet: true });
+    };
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [saveWorkspaceToCloud, user?.id]);
 
   const loadWorkspaceFromCloud = useCallback(async () => {
     if (!user) return false;
@@ -211,6 +352,8 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   const handleLogout = useCallback(async () => {
     clearStoredSupabaseSession();
     activeUserIdRef.current = null;
+    remoteRevisionRef.current = 0;
+    legacyWorkspaceSchemaRef.current = false;
     cloudWorkspaceReadyRef.current = false;
     setUser(null);
     setWorkspaceReady(false);
@@ -231,6 +374,13 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
 
     let active = true;
     let initialized = false;
+    const authUrl = new URL(window.location.href);
+    const authUrlError = authUrl.searchParams.get("error_description")
+      || authUrl.searchParams.get("error");
+    if (authUrlError) {
+      ["error", "error_code", "error_description"].forEach((key) => authUrl.searchParams.delete(key));
+      window.history.replaceState({}, "", `${authUrl.pathname}${authUrl.search}${authUrl.hash}`);
+    }
     const finishSessionRestore = (session) => {
       if (!active) return;
       initialized = true;
@@ -256,6 +406,10 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
       if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+      if (event === "SIGNED_IN") restoreIntendedDestination();
+      if (event === "SIGNED_OUT" && initialized) {
+        setAuthMessage("Your session ended. Sign in to continue.");
+      }
       finishSessionRestore(session);
       if (session?.user?.email) setAuthEmail(session.user.email);
     });

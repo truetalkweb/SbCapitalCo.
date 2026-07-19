@@ -1,0 +1,6 @@
+artifacts
+.qa-artifacts
+qa-screenshots
+*.log
+*-verify.png
+qa-*.png

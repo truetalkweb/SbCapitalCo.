@@ -175,16 +175,38 @@ export function useTerminalSymbols({
         .slice(0, 20);
     }
 
-    if (scannerTab === "Relative Volume") {
+    if (scannerTab === "Relative Volume" || scannerTab === "High RVOL") {
       return (fmpRelativeVolume.length ? normalizeRows(fmpRelativeVolume, "FMP Scanner") : normalizedUniverse)
         .sort((a, b) => getRelativeVolumeScore(b) - getRelativeVolumeScore(a))
         .slice(0, 20);
     }
 
-    if (scannerTab === "AI Movers") {
+    if (scannerTab === "AI Movers" || scannerTab === "News Movers" || scannerTab === "News") {
       return (fmpAiMovers.length ? normalizeRows(fmpAiMovers, "FMP Scanner") : normalizedUniverse)
-        .filter((stock) => parsePercent(stock.change) > 0)
+        .filter((stock) => stock.catalyst || stock.whyMoving || stock.newsHeadline)
         .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
+        .slice(0, 20);
+    }
+
+    if (scannerTab === "New Highs") {
+      return normalizedUniverse
+        .filter((stock) => {
+          const price = Number(stock.price);
+          const high = Number(stock.dayHigh ?? stock.high);
+          return Number.isFinite(price) && Number.isFinite(high) && high > 0 && price >= high * 0.995;
+        })
+        .sort((a, b) => getMomentumScore(b) - getMomentumScore(a))
+        .slice(0, 20);
+    }
+
+    if (scannerTab === "New Lows") {
+      return normalizedUniverse
+        .filter((stock) => {
+          const price = Number(stock.price);
+          const low = Number(stock.dayLow ?? stock.low);
+          return Number.isFinite(price) && Number.isFinite(low) && low > 0 && price <= low * 1.005;
+        })
+        .sort((a, b) => parsePercent(a.change) - parsePercent(b.change))
         .slice(0, 20);
     }
 

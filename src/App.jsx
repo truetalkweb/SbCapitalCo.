@@ -845,7 +845,6 @@ export default function App() {
     setAuthMode,
     setAuthPassword,
     user,
-    workspaceReady,
   } = useCloudWorkspace({
     applyWorkspace,
     pushActivity,
@@ -3887,14 +3886,6 @@ export default function App() {
     !authReady
     || !activeUser
     || passwordRecovery
-    || (
-      activeUser
-      && (
-        !workspaceReady
-        || entitlementsStatus === "idle"
-        || entitlements?.userId !== activeUser.id
-      )
-    )
   ) {
     return (
       <AuthGate

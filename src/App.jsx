@@ -854,22 +854,26 @@ export default function App() {
   });
   const [entitlements, setEntitlements] = useState(DEFAULT_ENTITLEMENTS);
   const [entitlementsStatus, setEntitlementsStatus] = useState("idle");
+  const entitlementUserId = user?.id;
 
   useEffect(() => {
     let cancelled = false;
-    if (!user) {
+    if (!entitlementUserId) {
       return () => {
         cancelled = true;
       };
     }
 
-    fetchCurrentEntitlements()
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
+    fetchCurrentEntitlements({ signal: controller.signal })
       .then((payload) => {
         if (cancelled) return;
         setEntitlements({
           ...DEFAULT_ENTITLEMENTS,
           ...(payload || {}),
-          userId: user.id,
+          userId: entitlementUserId,
           capabilities: {
             ...DEFAULT_ENTITLEMENTS.capabilities,
             ...(payload?.capabilities || {}),
@@ -881,15 +885,17 @@ export default function App() {
         if (cancelled) return;
         setEntitlements({
           ...DEFAULT_ENTITLEMENTS,
-          userId: user.id,
+          userId: entitlementUserId,
         });
         setEntitlementsStatus("degraded");
       });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
+      controller.abort();
     };
-  }, [user]);
+  }, [entitlementUserId]);
   const activeUser = user;
   const effectiveEntitlements = activeUser ? entitlements : DEFAULT_ENTITLEMENTS;
   const effectiveEntitlementsStatus = activeUser ? entitlementsStatus : "idle";

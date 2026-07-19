@@ -113,12 +113,19 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   const remoteRevisionRef = useRef(0);
   const legacyWorkspaceSchemaRef = useRef(false);
   const saveQueueRef = useRef(Promise.resolve());
+  const applyWorkspaceRef = useRef(applyWorkspace);
+  const resetWorkspaceRef = useRef(resetWorkspace);
+
+  useEffect(() => {
+    applyWorkspaceRef.current = applyWorkspace;
+    resetWorkspaceRef.current = resetWorkspace;
+  }, [applyWorkspace, resetWorkspace]);
 
   const loadWorkspaceForUser = useCallback(async (currentUser, { quiet = false } = {}) => {
     if (!supabase || !currentUser?.id) return false;
-    resetWorkspace?.();
+    resetWorkspaceRef.current?.();
     const localFallback = loadLocalFallback(currentUser.id);
-    if (localFallback) applyWorkspace(localFallback);
+    if (localFallback) applyWorkspaceRef.current(localFallback);
     let { data, error } = await withTimeout(
       supabase
         .from(terminalWorkspaceTable)
@@ -145,7 +152,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     }
     if (data?.data) {
       remoteRevisionRef.current = Number(data.revision || 1);
-      applyWorkspace(data.data);
+      applyWorkspaceRef.current(data.data);
       saveLocalFallback(currentUser.id, data.data);
       if (!quiet) setCloudStatus("Workspace restored");
       return true;
@@ -153,7 +160,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     remoteRevisionRef.current = 0;
     if (!quiet) setCloudStatus("New workspace");
     return false;
-  }, [applyWorkspace, resetWorkspace]);
+  }, []);
 
   const handleAuthSubmit = useCallback(async (mode = authMode) => {
     setAuthMessage("");

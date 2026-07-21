@@ -43,6 +43,7 @@ import {
   terminalSansFont,
   workspaceViews,
 } from "./config/terminalConfig";
+import { premiumWorkspaceViews } from "./config/premiumNavigation";
 import { useMarketData } from "./hooks/useMarketData";
 import { useBrokerData } from "./hooks/useBrokerData";
 import { useCloudWorkspace } from "./hooks/useCloudWorkspace";
@@ -67,6 +68,9 @@ import {
   DEFAULT_ENTITLEMENTS,
   fetchCurrentEntitlements,
 } from "./services/entitlements";
+import { getTradingActionMode } from "./services/tradingActionPolicy";
+import { serializeWatchlistForWorkspace } from "./services/workspacePayloadPolicy";
+import { buildCsv } from "./utils/csvExport";
 import {
   getDefaultIndicatorState,
   normalizeIndicatorState,
@@ -133,6 +137,7 @@ function getRequestedMobileDockTab() {
 }
 
 export default function App() {
+  const usePremiumShell = true;
   const requestedPresetId = useMemo(() => getRequestedPresetId(), []);
   const requestedMobileDockTab = useMemo(() => getRequestedMobileDockTab(), []);
   const requestedPreset = requestedPresetId ? layoutPresets[requestedPresetId] : null;
@@ -349,6 +354,12 @@ export default function App() {
   const isCompactTerminal = viewportWidth <= 1180;
   const isPhoneTerminal = viewportWidth <= 700;
   const effectiveTradingMode = LIVE_TRADING_ENABLED ? tradingMode : "paper";
+  const tradingActionMode = getTradingActionMode({
+    brokerConnected,
+    brokerToolsEnabled: BROKER_TOOLS_ENABLED,
+    liveTradingEnabled: LIVE_TRADING_ENABLED,
+    requestedMode: effectiveTradingMode,
+  });
 
   const theme = {
     mode: themeMode,
@@ -678,11 +689,22 @@ export default function App() {
     });
   }, [basePrice, level2]);
 
+  const watchlistSymbolsKey = liveStocks
+    .map((stock) => String(stock?.symbol || "").trim().toUpperCase())
+    .filter(Boolean)
+    .join("|");
+  const cloudWatchlist = useMemo(
+    () => serializeWatchlistForWorkspace(
+      watchlistSymbolsKey.split("|").filter(Boolean).map((symbol) => ({ symbol }))
+    ),
+    [watchlistSymbolsKey]
+  );
+
   const workspacePayload = useMemo(
     () => ({
       selectedStock,
       secondarySymbol,
-      liveStocks,
+      liveStocks: cloudWatchlist,
       timeframe,
       secondaryTimeframe,
       layoutMode,
@@ -724,7 +746,7 @@ export default function App() {
     [
       selectedStock,
       secondarySymbol,
-      liveStocks,
+      cloudWatchlist,
       timeframe,
       secondaryTimeframe,
       layoutMode,
@@ -1060,9 +1082,15 @@ export default function App() {
       ...defaultJournalDraft,
       symbol,
       bias: journalDraft.bias,
-      setup: journalDraft.setup,
+      setup: "",
       grade: "B",
+      result: "Review",
+      review: "",
     });
+  }
+
+  function removeJournalEntry(entryId) {
+    setJournalEntries((current) => current.filter((entry) => entry.id !== entryId));
   }
 
   function openReplayJournal() {
@@ -1133,7 +1161,8 @@ export default function App() {
       onRun: () => applyLayoutPreset(id),
     }));
 
-    const workspaceActions = workspaceViews.filter((view) => isWorkspaceAllowed(view.id)).map((view) => ({
+    const commandWorkspaceViews = usePremiumShell ? premiumWorkspaceViews : workspaceViews;
+    const workspaceActions = commandWorkspaceViews.filter((view) => isWorkspaceAllowed(view.id)).map((view) => ({
       id: `workspace-${view.id}`,
       label: `Go to ${view.label}`,
       detail: "Switch workspace",
@@ -1209,6 +1238,7 @@ export default function App() {
     setReplayMode,
     setRightTab,
     showIndicators,
+    usePremiumShell,
   ]);
 
   function resetWorkspace() {
@@ -1482,7 +1512,7 @@ export default function App() {
   async function submitOrderTicket(sideOverride = orderSide) {
     setOrderMessage("");
 
-    if (!BROKER_TOOLS_ENABLED || !brokerConnected) {
+    if (tradingActionMode === "review-only") {
       const reason = "Order review prepared. Execution requires an active supported broker connection.";
       setOrderMessage(reason);
       pushOrderAudit(buildOrderAuditRecord(sideOverride, "review_only", reason));
@@ -1758,11 +1788,6 @@ export default function App() {
     URL.revokeObjectURL(url);
   }
 
-  function csvValue(value) {
-    const text = String(value ?? "");
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
   function exportJournalCsv() {
     const headers = [
       "createdAt",
@@ -1779,13 +1804,9 @@ export default function App() {
       "plan",
       "review",
     ];
-    const rows = journalEntries.map((entry) =>
-      headers.map((header) => csvValue(entry[header])).join(",")
-    );
-
     downloadFile(
       `journal-${new Date().toISOString().slice(0, 10)}.csv`,
-      [headers.join(","), ...rows].join("\n"),
+      buildCsv(headers, journalEntries),
       "text/csv;charset=utf-8"
     );
   }
@@ -1804,13 +1825,9 @@ export default function App() {
       "riskReward",
       "status",
     ];
-    const rows = orders.map((order) =>
-      headers.map((header) => csvValue(order[header])).join(",")
-    );
-
     downloadFile(
       `trade-summary-${new Date().toISOString().slice(0, 10)}.csv`,
-      [headers.join(","), ...rows].join("\n"),
+      buildCsv(headers, orders),
       "text/csv;charset=utf-8"
     );
   }
@@ -2205,8 +2222,9 @@ export default function App() {
               : quote.change || null,
             changePercent: Number.isFinite(changePercent) ? changePercent : null,
             volume: quote.volume || quote.tradeVolume || quote.volumeTotal || "QUOTE",
-            source: quote.delayed ? "QTRD DELAYED" : "QTRD",
+            source: quote.delayed ? "QTRD DELAYED" : payload.cached ? "QTRD CACHED" : "QTRD",
             delayed: Boolean(quote.delayed),
+            cached: Boolean(payload.cached),
             realtime: quote.realtime !== false,
             lastTradeTime: quote.lastTradeTime || payload.updatedAt || null,
           };
@@ -2280,7 +2298,6 @@ export default function App() {
     activeWorkspace === "replay" ||
     (BROKER_TOOLS_ENABLED && activeWorkspace === "portfolio") ||
     activeWorkspace === "alerts";
-  const usePremiumShell = true;
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
@@ -3873,7 +3890,9 @@ export default function App() {
         toggleFullscreen={toggleFullscreen}
         openReplayJournal={openReplayJournal}
         journalDraft={journalDraft}
+        setJournalDraft={setJournalDraft}
         addJournalEntry={addJournalEntry}
+        removeJournalEntry={removeJournalEntry}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
         entitlements={effectiveEntitlements}

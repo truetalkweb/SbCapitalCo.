@@ -12,22 +12,29 @@ import {
   Newspaper,
   Activity,
 } from "lucide-react";
+import { premiumWorkspaceViews } from "../config/premiumNavigation";
 
-const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", group: "Main", icon: BarChart3 },
-  { id: "scanner", label: "Scanner", group: "Main", icon: Search },
-  { id: "chart-analysis", label: "Charts", group: "Main", icon: BarChart3 },
-  { id: "watchlist", label: "Watchlist", group: "Main", icon: Star },
-  { id: "news", label: "News", group: "Main", icon: Newspaper },
-  { id: "alerts", label: "Alerts", group: "Main", icon: Bell },
-  { id: "orders", label: "Orders", group: "Advanced", icon: DollarSign, advanced: true },
-  { id: "positions", label: "Positions", group: "Advanced", icon: Briefcase, advanced: true },
-  { id: "risk", label: "Risk", group: "Advanced", icon: Brain, advanced: true },
-  { id: "performance", label: "Performance", group: "Advanced", icon: Activity, advanced: true },
-  { id: "replay", label: "Replay", group: "Advanced", icon: Play, advanced: true },
-  { id: "journal", label: "Journal", group: "Advanced", icon: BookOpen, advanced: true },
-  { id: "settings", label: "Settings", group: "Advanced", icon: Settings, advanced: true },
-];
+const NAV_ICONS = {
+  dashboard: BarChart3,
+  scanner: Search,
+  "chart-analysis": BarChart3,
+  watchlist: Star,
+  news: Newspaper,
+  alerts: Bell,
+  orders: DollarSign,
+  positions: Briefcase,
+  risk: Brain,
+  performance: Activity,
+  replay: Play,
+  journal: BookOpen,
+  settings: Settings,
+};
+
+const PREMIUM_NAV_ITEMS = premiumWorkspaceViews.map((item) => ({
+  ...item,
+  icon: NAV_ICONS[item.id],
+  advanced: item.group === "Advanced",
+}));
 
 export default function Tradingsidebar({
   activeWorkspace,
@@ -44,7 +51,7 @@ export default function Tradingsidebar({
     event.stopPropagation();
     setActiveWorkspace(workspaceId);
   };
-  const visibleItems = NAV_ITEMS.filter((item) => {
+  const visibleItems = PREMIUM_NAV_ITEMS.filter((item) => {
     if (!brokerToolsEnabled && item.id === "broker") return false;
     return true;
   });
@@ -127,6 +134,7 @@ export default function Tradingsidebar({
       </div>
 
       <nav
+        aria-label="Terminal workspaces"
         className="sb-sidebar-nav"
         style={{
           width: "100%",
@@ -151,6 +159,7 @@ export default function Tradingsidebar({
               type="button"
               title={item.label}
               aria-label={item.label}
+              aria-current={active ? "page" : undefined}
               data-workspace-id={item.id}
               onClick={(event) => switchWorkspace(event, item.id)}
               style={{

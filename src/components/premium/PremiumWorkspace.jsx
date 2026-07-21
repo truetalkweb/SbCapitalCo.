@@ -3,7 +3,6 @@ import {
   ChevronRight,
   Download,
   Edit3,
-  Filter,
   Lock,
   MoreVertical,
   Plus,
@@ -233,6 +232,34 @@ function LockedWorkspace({ theme, activeWorkspace, entitlements, status }) {
 
 function PremiumTabs({ theme, tabs, active, onChange }) {
   const interactive = typeof onChange === "function";
+  if (!interactive) {
+    const activeTab = tabs.find((tab) => {
+      const id = typeof tab === "string" ? tab : tab.id;
+      const label = typeof tab === "string" ? tab : tab.label;
+      return active === id || active === label;
+    });
+    const label = typeof activeTab === "string" ? activeTab : activeTab?.label || active;
+    return (
+      <div aria-label="Current view" style={{ display: "flex", alignItems: "center", minHeight: 30 }}>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: 30,
+            padding: "0 13px",
+            borderRadius: 6,
+            border: "1px solid rgba(45,140,255,0.75)",
+            background: "linear-gradient(180deg, #176fd7, #0c4f9e)",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          {label}
+        </span>
+      </div>
+    );
+  }
   return (
     <div role="tablist" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
       {tabs.map((tab) => {
@@ -245,8 +272,6 @@ function PremiumTabs({ theme, tabs, active, onChange }) {
             type="button"
             role="tab"
             aria-selected={selected}
-            disabled={!interactive}
-            title={interactive ? "" : "Tab switching is visual in this premium pass"}
             onClick={() => onChange?.(id)}
             style={{
               height: 30,
@@ -257,8 +282,8 @@ function PremiumTabs({ theme, tabs, active, onChange }) {
               color: selected ? "#fff" : theme.muted,
               fontSize: 12,
               fontWeight: 800,
-              cursor: interactive ? "pointer" : "not-allowed",
-              opacity: interactive ? 1 : 0.72,
+              cursor: "pointer",
+              opacity: 1,
               outlineOffset: 2,
             }}
           >
@@ -328,42 +353,56 @@ function ActionButton({ theme, children, active = false, danger = false, good = 
   );
 }
 
-function FilterBar({ theme, items = [], search = "Search..." }) {
+function FilterBar({ theme, items = [], search = "Search...", value = "", onSearchChange }) {
+  const searchable = typeof onSearchChange === "function";
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      <label style={{ position: "relative", flex: "1 1 220px", maxWidth: 300 }}>
-        <Search size={15} style={{ position: "absolute", left: 12, top: 10, color: theme.muted }} />
-        <input
-          placeholder={search}
-          aria-label={search}
+      {searchable && (
+        <label style={{ position: "relative", flex: "1 1 220px", maxWidth: 300 }}>
+          <Search size={15} style={{ position: "absolute", left: 12, top: 10, color: theme.muted }} />
+          <input
+            value={value}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder={search}
+            aria-label={search}
+            style={{
+              width: "100%",
+              height: 36,
+              border: `1px solid ${theme.borderSoft || theme.border}`,
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.02)",
+              color: theme.text,
+              padding: "0 12px 0 35px",
+              outlineOffset: 2,
+            }}
+          />
+        </label>
+      )}
+      {items.map((item) => (
+        <span
+          key={item}
           style={{
-            width: "100%",
-            height: 36,
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: 32,
+            padding: "0 10px",
             border: `1px solid ${theme.borderSoft || theme.border}`,
             borderRadius: 6,
-            background: "rgba(255,255,255,0.02)",
-            color: theme.text,
-            padding: "0 12px 0 35px",
-            outlineOffset: 2,
+            color: theme.muted,
+            background: "rgba(255,255,255,0.018)",
+            fontSize: 11,
           }}
-        />
-      </label>
-      {items.map((item) => (
-        <ActionButton key={item} theme={theme} disabled title="Filter controls are visual in this premium pass" style={{ minWidth: 116, justifyContent: "space-between" }}>
+        >
           {item}
-        </ActionButton>
+        </span>
       ))}
-      <ActionButton theme={theme} disabled title="Advanced filters are visual in this premium pass">
-        <Filter size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />
-        Filters
-      </ActionButton>
     </div>
   );
 }
 
 function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyField = "symbol", style = {}, rowMinHeight = 42, headerMinHeight = 36, cellPadding = "0 14px", columnGap = 12, emptyMessage = "No records available" }) {
   return (
-    <div style={{ minWidth: 0, overflow: "auto", ...style }}>
+    <div role="table" aria-rowcount={rows.length + 1} aria-colcount={columns.length} style={{ minWidth: 0, overflow: "auto", ...style }}>
       <div
         role="row"
         style={{
@@ -380,7 +419,7 @@ function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyFie
         }}
       >
         {columns.map((column) => (
-          <div key={column.key} style={{ textAlign: column.align || "left" }}>
+          <div key={column.key} role="columnheader" style={{ textAlign: column.align || "left" }}>
             {column.label}
           </div>
         ))}
@@ -397,7 +436,7 @@ function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyFie
         return (
           <div
             key={rowKey}
-            role={onSelect ? "button" : "row"}
+            role="row"
             tabIndex={onSelect ? 0 : undefined}
             data-premium-row="true"
             data-row-key={String(rowValue)}
@@ -432,6 +471,7 @@ function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyFie
             {columns.map((column) => (
               <div
                 key={column.key}
+                role="cell"
                 style={{
                   minWidth: 0,
                   textAlign: column.align || "left",
@@ -668,6 +708,7 @@ function makeJournalTrades(entries) {
   const real = (entries || []).map((entry) => {
     const pnl = num(entry.pnl ?? entry.netPnl ?? entry.resultAmount, 0);
     return {
+      id: entry.id,
       date: entry.createdAt ? new Date(entry.createdAt).toLocaleString() : entry.date || "Not recorded",
       symbol: entry.symbol || "Unspecified",
       setup: entry.setup || entry.tags || "Review",
@@ -680,6 +721,7 @@ function makeJournalTrades(entries) {
       r: entry.rMultiple || entry.r || "Not recorded",
       hold: entry.holdTime || "Not recorded",
       outcome: entry.result || entry.outcome || "Review",
+      tag: entry.tags || entry.setup || "Review",
       notes: entry.notes || entry.review || "No notes",
     };
   });
@@ -782,7 +824,9 @@ export default function PremiumWorkspace({
   toggleFullscreen,
   openReplayJournal,
   journalDraft,
+  setJournalDraft,
   addJournalEntry,
+  removeJournalEntry,
   exportJournalCsv,
   exportTradeSummaryCsv,
   entitlements = DEFAULT_ENTITLEMENTS,
@@ -967,6 +1011,14 @@ export default function PremiumWorkspace({
     };
     setReplayBookmarks((current) => {
       const next = [bookmark, ...current.filter((item) => item.symbol !== bookmark.symbol || item.index !== bookmark.index)].slice(0, 12);
+      saveSetting("sb_replay_bookmarks", next);
+      return next;
+    });
+  };
+
+  const removeReplayBookmark = (bookmarkId) => {
+    setReplayBookmarks((current) => {
+      const next = current.filter((item) => item.id !== bookmarkId);
       saveSetting("sb_replay_bookmarks", next);
       return next;
     });
@@ -1634,7 +1686,7 @@ export default function PremiumWorkspace({
             </PremiumCard>
             <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "1fr 390px", gap: 10 }}>{bottomDock}{quickOrder}</div>
           </div>
-          {selectedRail(<><PremiumCard theme={theme} title="Selected Alert"><div style={{ padding: 14, display: "grid", gap: 9 }}>{selectedAlert ? <><b>{selectedAlert.symbol} {selectedAlert.type}</b><span>{selectedAlert.condition}</span><StatusPill theme={theme} tone={selectedAlert.status === "Triggered" ? "bad" : selectedAlert.status === "Paused" ? "warn" : "good"}>{selectedAlert.status}</StatusPill><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme} onClick={() => toggleAlert?.(selectedAlert.id)}>{selectedAlert.status === "Active" ? "Pause" : "Resume"}</ActionButton><ActionButton theme={theme} danger onClick={() => { removeAlert?.(selectedAlert.id); setSelectedAlertSymbol(null); }}>Delete</ActionButton></div><ActionButton theme={theme} disabled={!Number(alertDraftPrice)} onClick={() => { const next = Number(alertDraftPrice); if (next > 0) { updateAlert?.(selectedAlert.id, { trigger: next, direction: alertDraftDirection, active: true, triggeredAt: null }); setAlertDraftPrice(""); } }}>Update & Reactivate</ActionButton></> : <span style={{ color: theme.muted }}>Create an alert to manage it here.</span>}</div></PremiumCard><PremiumCard theme={theme} title="Alert Activity"><div style={{ padding: 14, display: "grid", gap: 8 }}>{selectedAlert?.history?.length ? selectedAlert.history.map((event) => <div key={event.id} style={{ borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingBottom: 8 }}><div style={{ color: theme.text }}>{selectedAlert.symbol} triggered {event.direction} {money(event.trigger)}</div><div style={{ color: theme.muted, fontSize: 11, marginTop: 3 }}>{new Date(event.occurredAt).toLocaleString()} at {money(event.price)}</div></div>) : <span style={{ color: theme.muted }}>No trigger activity yet. Alerts evaluate only while the terminal is open.</span>}</div></PremiumCard></>)}
+          {selectedRail(<><PremiumCard theme={theme} title="Selected Alert"><div style={{ padding: 14, display: "grid", gap: 9 }}>{selectedAlert ? <><b>{selectedAlert.symbol} {selectedAlert.type}</b><span>{selectedAlert.condition}</span><StatusPill theme={theme} tone={selectedAlert.status === "Triggered" ? "bad" : selectedAlert.status === "Paused" ? "warn" : "good"}>{selectedAlert.status}</StatusPill><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme} onClick={() => toggleAlert?.(selectedAlert.id)}>{selectedAlert.status === "Active" ? "Pause" : "Resume"}</ActionButton><ActionButton theme={theme} danger onClick={() => { removeAlert?.(selectedAlert.id); setSelectedAlertSymbol(null); }}>Delete</ActionButton></div><ActionButton theme={theme} disabled={!Number(alertDraftPrice)} title={!Number(alertDraftPrice) ? "Enter a positive trigger price before updating the alert" : "Update the trigger and reactivate this alert"} onClick={() => { const next = Number(alertDraftPrice); if (next > 0) { updateAlert?.(selectedAlert.id, { trigger: next, direction: alertDraftDirection, active: true, triggeredAt: null }); setAlertDraftPrice(""); } }}>Update & Reactivate</ActionButton></> : <span style={{ color: theme.muted }}>Create an alert to manage it here.</span>}</div></PremiumCard><PremiumCard theme={theme} title="Alert Activity"><div style={{ padding: 14, display: "grid", gap: 8 }}>{selectedAlert?.history?.length ? selectedAlert.history.map((event) => <div key={event.id} style={{ borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingBottom: 8 }}><div style={{ color: theme.text }}>{selectedAlert.symbol} triggered {event.direction} {money(event.trigger)}</div><div style={{ color: theme.muted, fontSize: 11, marginTop: 3 }}>{new Date(event.occurredAt).toLocaleString()} at {money(event.price)}</div></div>) : <span style={{ color: theme.muted }}>No trigger activity yet. Alerts evaluate only while the terminal is open.</span>}</div></PremiumCard></>)}
         </div>
       </div>
     );
@@ -1812,8 +1864,8 @@ export default function PremiumWorkspace({
           <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
             <div style={{ display: "flex", gap: 8 }}>
-              <ActionButton theme={theme} onClick={() => setOrderMessage?.("Journal filters reset locally for this view.")}>Reset</ActionButton>
-              <ActionButton theme={theme} active onClick={addJournalEntry}>+ Add Trade</ActionButton>
+              <ActionButton theme={theme} onClick={() => setJournalDraft?.((current) => ({ ...current, symbol: selectedStock, setup: "", review: "", result: "Review", grade: "B" }))}>Clear Draft</ActionButton>
+              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Trade</ActionButton>
               <ActionButton theme={theme} onClick={exportJournalCsv}>Export CSV</ActionButton>
             </div>
           </div>
@@ -1823,29 +1875,40 @@ export default function PremiumWorkspace({
               <FilterBar theme={theme} items={["All recorded dates", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />
             </div>
           </PremiumCard>
-          {journalDraft?.setup && (
-            <PremiumCard theme={theme} title="Prepared Journal Draft">
-              <div style={{ padding: 14, display: "grid", gridTemplateColumns: "120px 150px 90px 1fr", gap: 12, alignItems: "center" }}>
-                <div>
-                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Symbol</div>
-                  <div style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 900 }}>{journalDraft.symbol || selectedStock}</div>
-                </div>
-                <div>
-                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Setup</div>
-                  <div style={{ color: theme.text, fontWeight: 850 }}>{journalDraft.setup}</div>
-                </div>
-                <div>
-                  <div style={{ color: theme.muted, fontSize: 10, textTransform: "uppercase", fontWeight: 850 }}>Grade</div>
-                  <StatusPill theme={theme} tone={journalDraft.grade === "A" || journalDraft.grade === "B" ? "good" : "warn"}>
-                    {journalDraft.grade || "Review"}
-                  </StatusPill>
-                </div>
-                <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.45, minWidth: 0 }}>
-                  {journalDraft.review || journalDraft.plan || "Draft prepared for review before saving."}
-                </div>
+          <PremiumCard theme={theme} title="Prepared Journal Draft">
+              <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "120px 180px 100px 130px minmax(220px, 1fr)", gap: 12, alignItems: "end" }}>
+                {[
+                  ["Symbol", "symbol", journalDraft.symbol || selectedStock],
+                  ["Setup", "setup", journalDraft.setup],
+                ].map(([label, key, value]) => (
+                  <label key={key} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                    {label}
+                    <input
+                      aria-label={`Journal ${label.toLowerCase()}`}
+                      value={value}
+                      onChange={(event) => setJournalDraft?.((current) => ({ ...current, [key]: key === "symbol" ? event.target.value.toUpperCase() : event.target.value }))}
+                      style={{ height: 34, minWidth: 0, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 9px", fontFamily: key === "symbol" ? terminalMonoFont : terminalSansFont }}
+                    />
+                  </label>
+                ))}
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                  Grade
+                  <select aria-label="Journal grade" value={journalDraft.grade || "B"} onChange={(event) => setJournalDraft?.((current) => ({ ...current, grade: event.target.value }))} style={{ height: 34, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 8px" }}>
+                    {["A", "B", "C", "D"].map((grade) => <option key={grade}>{grade}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                  Outcome
+                  <select aria-label="Journal outcome" value={journalDraft.result || "Review"} onChange={(event) => setJournalDraft?.((current) => ({ ...current, result: event.target.value }))} style={{ height: 34, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 8px" }}>
+                    {["Review", "Win", "Loss", "Breakeven"].map((result) => <option key={result}>{result}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                  Review
+                  <input aria-label="Journal review" value={journalDraft.review || ""} placeholder="What happened and what will you improve?" onChange={(event) => setJournalDraft?.((current) => ({ ...current, review: event.target.value }))} style={{ height: 34, minWidth: 0, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 9px" }} />
+                </label>
               </div>
             </PremiumCard>
-          )}
             <PremiumCard theme={theme}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))" }}>
                 {[
@@ -1905,7 +1968,7 @@ export default function PremiumWorkspace({
                 </div>
               </PremiumCard>
             </div>
-            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active onClick={addJournalEntry}>+ Add Trade</ActionButton>}>
+            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[
@@ -1923,6 +1986,7 @@ export default function PremiumWorkspace({
                   { key: "outcome", label: "Outcome", width: "80px", color: (row) => row.outcome === "Loss" ? theme.red : theme.green },
                   { key: "tag", label: "Notes", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.outcome === "Loss" ? "warn" : "neutral"}>{row.tag || row.setup}</StatusPill> },
                   { key: "notes", label: "Review", width: "1fr" },
+                  { key: "actions", label: "", width: "54px", align: "center", render: (row) => <button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
                 ]}
                 rows={journalRows}
               />
@@ -2113,14 +2177,24 @@ export default function PremiumWorkspace({
                   <div style={{ minHeight: 86, border: `1px dashed ${theme.borderSoft || theme.border}`, borderRadius: 8, padding: 8, color: theme.muted, fontSize: 12, lineHeight: 1.5, display: "grid", gap: 4, alignContent: "start" }}>
                     {replayBookmarks.length
                       ? replayBookmarks.slice(0, 5).map((bookmark) => (
-                          <button
-                            key={bookmark.id}
-                            type="button"
-                            onClick={() => setReplayIndex?.(bookmark.index)}
-                            style={{ border: 0, background: "transparent", color: theme.text, padding: "4px 3px", textAlign: "left", cursor: "pointer", fontFamily: terminalMonoFont }}
-                          >
-                            {bookmark.label}
-                          </button>
+                          <div key={bookmark.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 28px", gap: 4, alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => setReplayIndex?.(bookmark.index)}
+                              style={{ minWidth: 0, border: 0, background: "transparent", color: theme.text, padding: "4px 3px", textAlign: "left", cursor: "pointer", fontFamily: terminalMonoFont, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            >
+                              {bookmark.label}
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Delete replay bookmark ${bookmark.label}`}
+                              title="Delete bookmark"
+                              onClick={() => removeReplayBookmark(bookmark.id)}
+                              style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
                         ))
                       : "No bookmarks saved for this replay session."}
                   </div>
@@ -2224,6 +2298,7 @@ export default function PremiumWorkspace({
               <PremiumCard theme={theme} title="Replay Notes">
                 <div style={{ padding: 14, display: "grid", gap: 10 }}>
                   <textarea
+                    aria-label="Replay session notes"
                     placeholder="Add notes for this replay session..."
                     maxLength={1000}
                     value={replayNotes}
@@ -2278,8 +2353,10 @@ export default function PremiumWorkspace({
       ["replay", "Replay"],
       ["settings", "Settings"],
     ];
-    const settingSelect = (value, options, onChange, disabled = false) => (
+    const settingSelect = (label, value, options, onChange, disabled = false) => (
       <select
+        aria-label={label}
+        title={disabled ? `${label} is not available in the current public terminal` : undefined}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange?.(event.target.value)}
@@ -2384,11 +2461,11 @@ export default function PremiumWorkspace({
               </div>
             </PremiumCard>}
             {group("Workspace Preferences", [
-              ["Theme", settingSelect(themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
+              ["Theme", settingSelect("Theme", themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
               ["Compact mode", settingToggle(compactMode, (value) => updatePremiumPreference("compactMode", value), false, "Toggle compact mode")],
-              ["Default landing tab", settingSelect(defaultLandingTab, landingOptions, (value) => { updatePremiumPreference("defaultLandingTab", value); saveSetting("sb_default_landing_tab", value); setOrderMessage?.(`Default landing tab saved: ${landingOptions.find(([id]) => id === value)?.[1] || value}.`); })],
-              ["Time zone", settingSelect(timeZone, [["America/Vancouver", "Pacific (PT)"], ["America/New_York", "Eastern (ET)"], ["Europe/London", "London"], ["UTC", "UTC"]], (value) => setTimeZone?.(value))],
-              ["Currency display", settingSelect("USD", ["USD"], null, true)],
+              ["Default landing tab", settingSelect("Default landing tab", defaultLandingTab, landingOptions, (value) => { updatePremiumPreference("defaultLandingTab", value); saveSetting("sb_default_landing_tab", value); setOrderMessage?.(`Default landing tab saved: ${landingOptions.find(([id]) => id === value)?.[1] || value}.`); })],
+              ["Time zone", settingSelect("Time zone", timeZone, [["America/Vancouver", "Pacific (PT)"], ["America/New_York", "Eastern (ET)"], ["Europe/London", "London"], ["UTC", "UTC"]], (value) => setTimeZone?.(value))],
+              ["Currency display", settingSelect("Currency display", "USD", ["USD"], null, true)],
             ])}
             {group("Trading Preferences", [
               ["Default order type", disabledSetting("Review-only until broker execution is enabled")],
@@ -2398,11 +2475,11 @@ export default function PremiumWorkspace({
               ["Risk warnings enabled", settingToggle(riskWarnings, (value) => updatePremiumPreference("riskWarnings", value), false, "Toggle risk warnings")],
             ], "Trading")}
             {group("Chart & Scanner Defaults", [
-              ["Default chart timeframe", settingSelect(timeframe || "15m", ["1m", "5m", "15m", "1H", "1D"], (value) => setTimeframe?.(value))],
+              ["Default chart timeframe", settingSelect("Default chart timeframe", timeframe || "15m", ["1m", "5m", "15m", "1H", "1D"], (value) => setTimeframe?.(value))],
               ["Show volume", settingToggle(Boolean(chartIndicators?.volume), (value) => setChartIndicators?.((current) => ({ ...current, volume: value })), false, "Toggle chart volume")],
               ["Scanner auto refresh", settingToggle(scannerAutoRefresh, (value) => { updatePremiumPreference("scannerAutoRefresh", value); setOrderMessage?.(`Scanner auto refresh ${value ? "enabled" : "paused"} locally.`); }, false, "Toggle scanner auto refresh")],
               ["Default universe", disabledSetting("US stocks only in this MVP")],
-              ["Relative volume threshold", settingSelect(relativeVolumeThreshold, ["1.25", "1.50", "2.00", "3.00"], (value) => updatePremiumPreference("relativeVolumeThreshold", value))],
+              ["Relative volume threshold", settingSelect("Relative volume threshold", relativeVolumeThreshold, ["1.25", "1.50", "2.00", "3.00"], (value) => updatePremiumPreference("relativeVolumeThreshold", value))],
             ], "Trading")}
             {settingsTab === "Layout" && <PremiumCard theme={theme} title="Layout Presets"><div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>{[
               ["Trader", "1", "2"],

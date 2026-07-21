@@ -16,3 +16,16 @@ export function isValidWorkspacePayload(payload) {
     && getWorkspacePayloadSize(payload) <= MAX_WORKSPACE_BYTES
   );
 }
+
+export function serializeWatchlistForWorkspace(rows) {
+  if (!Array.isArray(rows)) return [];
+
+  const symbols = new Set();
+  return rows.reduce((result, row) => {
+    const symbol = String(row?.symbol || "").trim().toUpperCase();
+    if (!symbol || symbols.has(symbol)) return result;
+    symbols.add(symbol);
+    result.push({ symbol });
+    return result;
+  }, []);
+}

@@ -1,0 +1,15 @@
+export const premiumWorkspaceViews = [
+  { id: "dashboard", label: "Dashboard", group: "Main" },
+  { id: "scanner", label: "Scanner", group: "Main" },
+  { id: "chart-analysis", label: "Charts", group: "Main" },
+  { id: "watchlist", label: "Watchlist", group: "Main" },
+  { id: "news", label: "News", group: "Main" },
+  { id: "alerts", label: "Alerts", group: "Main" },
+  { id: "orders", label: "Orders", group: "Advanced" },
+  { id: "positions", label: "Positions", group: "Advanced" },
+  { id: "risk", label: "Risk", group: "Advanced" },
+  { id: "performance", label: "Performance", group: "Advanced" },
+  { id: "replay", label: "Replay", group: "Advanced" },
+  { id: "journal", label: "Journal", group: "Advanced" },
+  { id: "settings", label: "Settings", group: "Advanced" },
+];

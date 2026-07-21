@@ -1,7 +1,4 @@
-function parseNumber(value) {
-  const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : null;
-}
+import { parseNullableMarketNumber } from "../utils/marketNumbers";
 
 function Sparkline({ points = [], color, compact = false }) {
   const values = points.length >= 2 ? points : [];
@@ -55,9 +52,11 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
       }}
     >
       {rows.map((stock, index) => {
-        const parsedPrice = parseNumber(stock.price ?? stock.last);
+        const parsedPrice = parseNullableMarketNumber(stock.price ?? stock.last);
         const price = parsedPrice !== null && parsedPrice > 0 ? parsedPrice : null;
-        const move = price === null ? null : parseNumber(stock.changePercent ?? stock.change ?? stock.percentChange);
+        const move = price === null
+          ? null
+          : parseNullableMarketNumber(stock.changePercent ?? stock.change ?? stock.percentChange);
         const isUp = move !== null && move >= 0;
         const color = move === null ? theme.muted : isUp ? theme.green : theme.red;
 

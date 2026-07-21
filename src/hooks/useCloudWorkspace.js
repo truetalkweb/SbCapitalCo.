@@ -8,6 +8,10 @@ import {
 import {
   isValidWorkspacePayload,
 } from "../services/workspacePayloadPolicy";
+import {
+  getSafeAuthReturnPath,
+  isSafeInternalReturnPath,
+} from "../services/authNavigationPolicy";
 
 const authRedirectOrigin = String(import.meta.env.VITE_AUTH_REDIRECT_URL || "").trim();
 const WORKSPACE_SCHEMA_VERSION = 1;
@@ -16,11 +20,7 @@ const INTENDED_DESTINATION_KEY = "sb_auth_intended_destination";
 
 function getCurrentDestination() {
   if (typeof window === "undefined") return "/";
-  const url = new URL(window.location.href);
-  ["access_token", "error", "error_code", "error_description", "refresh_token", "type"].forEach(
-    (key) => url.searchParams.delete(key),
-  );
-  return `${url.pathname}${url.search}${url.hash && !url.hash.includes("access_token") ? url.hash : ""}` || "/";
+  return getSafeAuthReturnPath(window.location.href);
 }
 
 function rememberIntendedDestination() {
@@ -32,7 +32,7 @@ function restoreIntendedDestination() {
   if (typeof window === "undefined") return;
   const destination = window.sessionStorage.getItem(INTENDED_DESTINATION_KEY);
   window.sessionStorage.removeItem(INTENDED_DESTINATION_KEY);
-  if (!destination?.startsWith("/") || destination.startsWith("//")) return;
+  if (!isSafeInternalReturnPath(destination)) return;
   window.history.replaceState({}, "", destination);
 }
 

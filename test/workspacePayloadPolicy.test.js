@@ -5,6 +5,7 @@ import {
   MAX_WORKSPACE_BYTES,
   getWorkspacePayloadSize,
   isValidWorkspacePayload,
+  serializeWatchlistForWorkspace,
 } from "../src/services/workspacePayloadPolicy.js";
 
 test("workspace payloads must be JSON objects", () => {
@@ -27,4 +28,19 @@ test("oversized and unserializable workspace payloads are rejected", () => {
   const cyclic = {};
   cyclic.self = cyclic;
   assert.equal(isValidWorkspacePayload(cyclic), false);
+});
+
+test("cloud watchlist serialization ignores transient quote changes", () => {
+  const first = serializeWatchlistForWorkspace([
+    { symbol: "aapl", price: 210.14, change: "+1.2%" },
+    { symbol: "NVDA", price: 178.2, source: "Questrade" },
+  ]);
+  const next = serializeWatchlistForWorkspace([
+    { symbol: "AAPL", price: 211.05, change: "+1.6%" },
+    { symbol: "nvda", price: 179.8, source: "FMP" },
+    { symbol: "AAPL", price: 211.05 },
+  ]);
+
+  assert.deepEqual(first, [{ symbol: "AAPL" }, { symbol: "NVDA" }]);
+  assert.deepEqual(next, first);
 });

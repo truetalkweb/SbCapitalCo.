@@ -26,6 +26,7 @@ import ChartPanel from "./components/ChartPanel";
 import MarketNewsPanel from "./components/MarketNewsPanel";
 import PublicOnboarding from "./components/PublicOnboarding";
 import AuthGate from "./components/AuthGate";
+import IssueReportDialog from "./components/IssueReportDialog";
 import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
 import PremiumWorkspace from "./components/premium/PremiumWorkspace";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
@@ -250,6 +251,7 @@ export default function App() {
   const [publicOnboardingOpen, setPublicOnboardingOpen] = useState(() =>
     !BROKER_TOOLS_ENABLED && !loadSetting("sb_public_onboarding_dismissed", false)
   );
+  const [issueReportOpen, setIssueReportOpen] = useState(false);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -3897,6 +3899,7 @@ export default function App() {
         exportTradeSummaryCsv={exportTradeSummaryCsv}
         entitlements={effectiveEntitlements}
         entitlementsStatus={effectiveEntitlementsStatus}
+        onOpenIssueReport={() => setIssueReportOpen(true)}
       />
     );
   }
@@ -5057,6 +5060,15 @@ export default function App() {
           isOpen={publicOnboardingOpen}
           onClose={closePublicOnboarding}
           onDontShowAgain={dismissPublicOnboarding}
+        />
+      )}
+
+      {issueReportOpen && (
+        <IssueReportDialog
+          brokerApiUrl={BROKER_API_URL}
+          onClose={() => setIssueReportOpen(false)}
+          theme={theme}
+          workspace={activeWorkspace}
         />
       )}
 

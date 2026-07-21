@@ -430,3 +430,111 @@ h3 {
     flex-basis: 350px !important;
   }
 }
+/* Runtime recovery and support reporting deliberately sit outside workspace layout rules. */
+.runtime-error-fallback,
+.issue-report-backdrop {
+  font-family: "Roboto", Arial, sans-serif;
+}
+
+.runtime-error-fallback {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: #e8edf5;
+  background: #05090f;
+}
+
+.runtime-error-fallback section {
+  width: min(440px, 100%);
+  border: 1px solid #243144;
+  background: #0b121c;
+  padding: 28px;
+  border-radius: 8px;
+}
+
+.runtime-error-fallback h1 { margin: 8px 0; font-size: 22px; }
+.runtime-error-fallback p { color: #9aa8ba; line-height: 1.55; }
+.runtime-error-kicker { color: #19d3c5; font-weight: 700; }
+.runtime-error-fallback button,
+.issue-report-submit,
+.issue-report-success button {
+  min-height: 36px;
+  border: 1px solid #1e86e8;
+  border-radius: 5px;
+  color: #fff;
+  background: #1476d4;
+  padding: 0 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.issue-report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 12, 0.76);
+  backdrop-filter: blur(5px);
+}
+
+.issue-report-dialog {
+  width: min(520px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.42);
+}
+
+.issue-report-dialog header {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(128, 148, 175, 0.2);
+}
+
+.issue-report-dialog header > div { display: flex; align-items: center; gap: 9px; }
+.issue-report-dialog h2 { margin: 0; font-size: 16px; }
+.issue-report-dialog header button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.issue-report-dialog form,
+.issue-report-success { display: grid; gap: 14px; padding: 18px; }
+.issue-report-dialog label { display: grid; gap: 7px; font-size: 12px; font-weight: 700; }
+.issue-report-dialog select,
+.issue-report-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #2b3a4e;
+  border-radius: 5px;
+  color: inherit;
+  background: rgba(4, 10, 18, 0.42);
+  padding: 10px;
+  font: inherit;
+}
+.issue-report-dialog textarea { min-height: 128px; resize: vertical; line-height: 1.45; }
+.issue-report-dialog .issue-report-consent { grid-template-columns: auto 1fr; align-items: center; font-weight: 500; }
+.issue-report-dialog p { margin: 0; color: #91a0b3; font-size: 11px; line-height: 1.5; }
+.issue-report-message { color: #ffb84d; font-size: 12px; }
+.issue-report-submit { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.issue-report-submit:disabled { opacity: 0.55; cursor: wait; }
+.issue-report-success span { color: #91a0b3; }
+
+@media (max-width: 600px) {
+  .issue-report-backdrop { padding: 8px; align-items: end; }
+  .issue-report-dialog { max-height: calc(100vh - 16px); }
+}

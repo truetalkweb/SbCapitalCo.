@@ -11,6 +11,7 @@ import {
   Star,
   X,
 } from "lucide-react";
+import AdminMonitoringPanel from "../AdminMonitoringPanel";
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { CHART_INDICATOR_OPTIONS } from "../../indicators/chartIndicators";
@@ -831,6 +832,7 @@ export default function PremiumWorkspace({
   exportTradeSummaryCsv,
   entitlements = DEFAULT_ENTITLEMENTS,
   entitlementsStatus = "idle",
+  onOpenIssueReport,
 }) {
   const isNarrowWorkspace = viewportWidth <= 900;
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock);
@@ -2506,6 +2508,17 @@ export default function PremiumWorkspace({
                     <span style={{ color: theme.green }}>*</span> {x}
                   </div>
                 ))}
+              </div>
+            </PremiumCard>}
+            {settingsTab === "General" && <PremiumCard theme={theme} title="Support & Diagnostics">
+              <div style={{ padding: 14, display: "grid", gap: 10 }}>
+                <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
+                  Send a privacy-safe issue report with optional redacted runtime diagnostics. Credentials, tokens, order details, and broker account data are excluded.
+                </div>
+                <div>
+                  <ActionButton theme={theme} active onClick={onOpenIssueReport}>Report Issue</ActionButton>
+                </div>
+                {accountPlan === "admin" && <AdminMonitoringPanel brokerApiUrl={brokerApiUrl} theme={theme} />}
               </div>
             </PremiumCard>}
           </div>

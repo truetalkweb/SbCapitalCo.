@@ -1621,7 +1621,16 @@ export default function PremiumWorkspace({
                         rel="noreferrer"
                         aria-label={`Open article: ${row.headline}`}
                         onClick={(event) => event.stopPropagation()}
-                        style={{ color: "inherit", textDecoration: "none", outlineOffset: 3 }}
+                        style={{
+                          display: "block",
+                          maxWidth: "100%",
+                          overflow: "hidden",
+                          color: "inherit",
+                          textDecoration: "none",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          outlineOffset: 3,
+                        }}
                       >
                         {row.headline}<span style={{ color: theme.blue, fontSize: 10, marginLeft: 5 }}>OPEN</span>
                       </a>

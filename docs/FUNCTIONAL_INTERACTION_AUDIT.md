@@ -1,7 +1,6 @@
 # SB Terminal Functional Interaction Audit
 
-Status: complete for public-beta review. Deployment remains intentionally blocked
-until explicit user approval.
+Status: release candidate verified for public-beta deployment.
 
 ## Classification
 
@@ -87,6 +86,10 @@ until explicit user approval.
 - Live, cached, provider-limited, fallback, and unavailable states are labeled.
 - Missing market values remain unavailable rather than displaying false zeroes.
 - Provider diagnostics and raw errors are sanitized from public responses.
+- Backend News health now derives source, row count, cache age, degradation, and
+  fallback state from the newest real cache payload. Healthy Yahoo Finance rows
+  no longer become falsely degraded merely because an FMP or Finnhub key is
+  absent.
 - Positions, Risk, and Performance show truthful empty states without connected
   portfolio data.
 - Provider-limited scanner/news data remains an honest external limitation.
@@ -94,13 +97,18 @@ until explicit user approval.
 ## Responsive And Accessibility Results
 
 - Authenticated browser QA found no document-level horizontal overflow or
-  out-of-viewport controls at 1920x1080, 1600x900, or 1366x768.
+  out-of-viewport controls at 1920x1080, 1600x900, 1366x768, or the narrow
+  responsive viewport.
 - All 13 navigation destinations resolved uniquely.
 - Scanner tabs activate by keyboard.
 - Tab groups expose selected state, icon controls have labels/titles, and disabled
   actions explain their requirement where useful.
+- News article links remain inside their table cells, ellipsize at constrained
+  widths, and use safe new-tab attributes when an article URL exists.
 - The 3-chart layout rendered TSLA 1D, TSLA 5m, and SPY 1D.
 - The 4-chart layout rendered TSLA 1D, TSLA 5m, SPY 1D, and QQQ 5m.
+- The 4-chart layout rendered 28 chart canvases without creating workspace-level
+  vertical overflow.
 - The original 1-chart layout was restored after QA.
 
 ## Automated Verification
@@ -108,11 +116,13 @@ until explicit user approval.
 Final run:
 
 - `npx eslint src test`: passed
-- `npm test`: 26/26 frontend tests passed
+- `npm test`: 29/29 frontend tests passed
 - `npm run build`: passed
-- Main application bundle: 322.83 kB minified, 89.08 kB gzip
-- Backend `npm test`: 10/10 passed
+- `npm audit --audit-level=low`: 0 frontend vulnerabilities
+- Main application bundle: 333.98 kB minified, 92.31 kB gzip
+- Backend `npm test`: 15/15 passed
 - Backend `node --check server.js`: passed
+- Backend `npm audit --audit-level=low`: 0 vulnerabilities
 - Frontend and backend `git diff --check`: passed
 
 Production browser logs contained only browser-extension message-channel closure
@@ -125,6 +135,8 @@ remain expected and are represented as degraded states rather than fatal errors.
 - PDF performance export; CSV remains available and its serialization is tested.
 - Currency switching, two-factor configuration, device management, and
   unsupported security administration.
+- Supabase leaked-password protection on the current Free project; Supabase
+  exposes that control on paid plans.
 - Live broker execution.
 - Portfolio-derived Risk and Performance calculations without connected,
   authenticated account history.
@@ -143,12 +155,12 @@ remain expected and are represented as degraded states rather than fatal errors.
 - `src/utils/csvExport.js`
 - `src/utils/marketNumbers.js`
 - Focused tests under `test/`
+- Backend News health normalization and its focused tests
+- Safe dependency lockfile updates in both repositories
 - This audit document
 
 ## Recommendation
 
-The worktree is suitable for a controlled public-beta deployment after user
-review. Deploy the frontend only after explicit approval. The backend has no
-changes in this audit and does not require redeployment. After deployment, run
-one production smoke pass against the new frontend build before inviting public
-beta users.
+The release candidate is suitable for a controlled public beta after the
+backend and frontend commits are deployed and the final production smoke pass
+confirms authentication, health endpoints, charts, and Admin Monitoring.

@@ -6,6 +6,7 @@ import {
   inferAssetType,
   isCurrentRequest,
   normalizeSymbol,
+  resolveSelectionSource,
 } from "../src/utils/symbolContext.js";
 
 test("normalizeSymbol canonicalizes supported symbols and rejects unsafe input", () => {
@@ -34,4 +35,23 @@ test("asset type and request identity remain deterministic", () => {
   assert.equal(inferAssetType("EUR/USD"), "forex");
   assert.equal(isCurrentRequest(" nvda ", "NVDA"), true);
   assert.equal(isCurrentRequest("TSLA", "NVDA"), false);
+});
+
+test("generic same-symbol refreshes preserve explicit selection provenance", () => {
+  const previous = createSymbolContext("COIN", {
+    selectionSource: "dashboard-scanner",
+  });
+
+  assert.equal(
+    resolveSelectionSource(previous, "COIN", "terminal"),
+    "dashboard-scanner"
+  );
+  assert.equal(
+    resolveSelectionSource(previous, "AAPL", "terminal"),
+    "terminal"
+  );
+  assert.equal(
+    resolveSelectionSource(previous, "COIN", "watchlist-row"),
+    "watchlist-row"
+  );
 });

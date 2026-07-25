@@ -32,3 +32,20 @@ export function createSymbolContext(symbol, metadata = {}, previous = null) {
 export function isCurrentRequest(requestSymbol, currentSymbol) {
   return normalizeSymbol(requestSymbol) === normalizeSymbol(currentSymbol);
 }
+
+export function resolveSelectionSource(
+  previous,
+  nextSymbol,
+  selectionSource = "terminal"
+) {
+  const normalizedSymbol = normalizeSymbol(nextSymbol);
+  if (
+    normalizedSymbol &&
+    previous?.symbol === normalizedSymbol &&
+    selectionSource === "terminal"
+  ) {
+    return previous.selectionSource || selectionSource;
+  }
+
+  return selectionSource;
+}

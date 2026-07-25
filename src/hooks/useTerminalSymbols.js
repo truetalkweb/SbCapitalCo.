@@ -15,7 +15,11 @@ import {
 } from "../utils/marketUtils";
 import { normalizeScannerRow, rankScannerRows } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
-import { createSymbolContext, normalizeSymbol } from "../utils/symbolContext";
+import {
+  createSymbolContext,
+  normalizeSymbol,
+  resolveSelectionSource,
+} from "../utils/symbolContext";
 
 const marketSnapshotSymbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
 
@@ -310,17 +314,13 @@ export function useTerminalSymbols({
 
       setSelectedStock(cleanSymbol);
       setSelectedSymbolContext((previous) => {
-        if (
-          previous?.symbol === cleanSymbol &&
-          !stock &&
-          selectionSource === "terminal"
-        ) {
-          return previous;
-        }
-
         return createSymbolContext(cleanSymbol, {
           ...(stock || {}),
-          selectionSource,
+          selectionSource: resolveSelectionSource(
+            previous,
+            cleanSymbol,
+            selectionSource
+          ),
         }, previous);
       });
       if (stock) setSelectedScannerStock(stock);

@@ -9,8 +9,15 @@ const emptyScannerGroups = {
   active: [],
   momentum: [],
   relativeVolume: [],
+  unusualVolume: [],
+  newsMovers: [],
+  newHighs: [],
+  newLows: [],
+  premarket: [],
   aiMovers: [],
   smallCaps: [],
+  verifiedMovers: [],
+  contextMovers: [],
 };
 
 const defaultScannerMeta = {
@@ -24,6 +31,7 @@ const defaultScannerMeta = {
   counts: null,
   warnings: [],
   lastWarning: null,
+  contractVersion: null,
 };
 
 const scannerUnavailableMeta = {
@@ -61,6 +69,8 @@ function buildScannerMeta(data) {
     backendTime: data.backendTime || null,
     confidenceLabel,
     lastWarning: data.lastWarning || data.warning || data.primaryScannerError || null,
+    contractVersion: data.contractVersion || null,
+    marketSession: data.marketSession || null,
   };
 }
 
@@ -100,8 +110,15 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
         active: data.active || [],
         momentum: data.momentum || [],
         relativeVolume: data.relativeVolume || [],
+        unusualVolume: data.unusualVolume || [],
+        newsMovers: data.newsMovers || [],
+        newHighs: data.newHighs || [],
+        newLows: data.newLows || [],
+        premarket: data.premarket || [],
         aiMovers: data.aiMovers || [],
         smallCaps: data.smallCaps || [],
+        verifiedMovers: data.verifiedMovers || [],
+        contextMovers: data.contextMovers || [],
       }, nextMeta);
 
       setScannerGroups(normalizedGroups);
@@ -149,8 +166,15 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
     fmpActive: scannerGroups.active,
     fmpMomentum: scannerGroups.momentum,
     fmpRelativeVolume: scannerGroups.relativeVolume,
+    fmpUnusualVolume: scannerGroups.unusualVolume,
+    fmpNewsMovers: scannerGroups.newsMovers,
+    fmpNewHighs: scannerGroups.newHighs,
+    fmpNewLows: scannerGroups.newLows,
+    fmpPremarket: scannerGroups.premarket,
     fmpAiMovers: scannerGroups.aiMovers,
     fmpSmallCaps: scannerGroups.smallCaps,
+    verifiedScannerMovers: scannerGroups.verifiedMovers,
+    contextScannerMovers: scannerGroups.contextMovers,
     scannerLoading,
     scannerMeta,
     selectedScannerStock,

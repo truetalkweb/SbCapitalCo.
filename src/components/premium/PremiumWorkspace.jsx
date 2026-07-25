@@ -656,12 +656,20 @@ function buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock
       float: stock.float ?? bySymbol.get(symbol)?.float ?? null,
       sector: stock.sector || bySymbol.get(symbol)?.sector || "Not reported",
       setup: stock.catalyst || stock.setup || bySymbol.get(symbol)?.setup || "No confirmed catalyst",
-      score: stock.score10 || stock.score || bySymbol.get(symbol)?.score || 0,
+      score: stock.scannerScore ?? stock.score ?? stock.score10 ?? bySymbol.get(symbol)?.score ?? null,
       risk: stock.risk || stock.riskLabel || bySymbol.get(symbol)?.risk || "Context",
       gapPercent: stock.gapPercent,
       catalyst: stock.catalyst,
       whyMoving: stock.whyMoving,
-      dataMode: stock.fallback ? "fallback" : stock.degraded ? "degraded" : "provider",
+      dataMode: stock.isSynthetic
+        ? "synthetic"
+        : stock.isFallback || stock.fallback
+          ? "fallback"
+          : stock.isCached
+            ? "cached"
+            : stock.degraded
+              ? "degraded"
+              : "provider",
     });
   });
   const requestedSymbol = String(selectedStock || selectedStockData?.symbol || "AAPL").toUpperCase();
@@ -1037,7 +1045,25 @@ export default function PremiumWorkspace({
   };
   const activePresetConfig = scannerPresets.find((preset) => preset.id === activeScannerPreset);
   const scannerMinimumRvol = Number(scannerFilters.minRvol || relativeVolumeThreshold || activePresetConfig?.minRvol || 0);
-  const scannerUniverseRows = scannerStocks?.length ? buildStocks([], scannerStocks, selectedStockData, selectedStock) : stocks;
+  const scannerRowsByTab = {
+    Gainers: scannerGroups.gainers,
+    Losers: scannerGroups.losers,
+    Active: scannerGroups.active,
+    Momentum: scannerGroups.momentum,
+    "High RVOL": scannerGroups.unusualVolume?.length
+      ? scannerGroups.unusualVolume
+      : scannerGroups.relativeVolume,
+    "News Movers": scannerGroups.newsMovers,
+    "New Highs": scannerGroups.newHighs,
+    "New Lows": scannerGroups.newLows,
+    Premarket: scannerGroups.premarket,
+  };
+  const activeScannerRows = scannerRowsByTab[scannerTab] || scannerGroups.gainers || scannerStocks;
+  const scannerUniverseRows = activeScannerRows?.length
+    ? buildStocks([], activeScannerRows, selectedStockData, selectedStock)
+    : scannerStocks?.length
+      ? buildStocks([], scannerStocks, selectedStockData, selectedStock)
+      : stocks;
   const scannerDisplayRows = scannerUniverseRows.filter((row) => {
     if (row.dataMode === "unavailable") return false;
     const search = String(scannerFilters.search || "").trim().toUpperCase();
@@ -1207,10 +1233,10 @@ export default function PremiumWorkspace({
           { key: "symbol", label: "Symbol", width: "1.5fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.muted} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}<span style={{ display: "block", color: theme.muted, fontFamily: terminalSansFont, fontSize: 10, fontWeight: 500 }}>{row.name}</span></> },
           { key: "price", label: "Price", width: "90px", align: "right", mono: true, render: (row) => num(row.price).toFixed(2) },
           { key: "change", label: "Chg%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) },
-          { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, row.gapPercent ?? moveOf(row)), render: (row) => pct(row.gapPercent ?? moveOf(row)) },
-          { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true, render: (row) => row.rvolLabel || row.rvol || formatMultiple(row.relativeVolume) },
+          { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: (row) => hasNumericValue(row.gapPercent) ? toneColor(theme, row.gapPercent) : theme.muted, render: (row) => hasNumericValue(row.gapPercent) ? pct(row.gapPercent) : "Unavailable" },
+          { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true, render: (row) => hasNumericValue(row.relativeVolume) ? formatMultiple(row.relativeVolume) : "Unavailable" },
           { key: "volume", label: "Volume", width: "95px", align: "right", mono: true, render: (row) => row.volumeLabel || (typeof row.volume === "string" ? row.volume : formatCompactNumber(row.volume, 1)) },
-          { key: "float", label: "Float", width: "90px", align: "right", mono: true, render: (row) => row.floatLabel || row.float || (row.floatShares ? formatCompactNumber(row.floatShares, 2) : "Context") },
+          { key: "float", label: "Float", width: "90px", align: "right", mono: true, render: (row) => row.floatLabel || (row.floatShares ? formatCompactNumber(row.floatShares, 2) : "Unavailable") },
           { key: "setup", label: "Catalyst", width: "130px", render: (row) => row.catalyst || row.setup },
           { key: "score", label: "Score", width: "70px", align: "center", render: (row) => <StatusPill theme={theme} tone={row.score >= 70 ? "good" : "warn"}>{row.score}</StatusPill> },
           { key: "risk", label: "Risk", width: "70px", align: "right", color: (row) => row.risk === "Low" ? theme.green : theme.amber },
@@ -1487,7 +1513,7 @@ export default function PremiumWorkspace({
           <PremiumCard theme={theme}>
             <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
               <SectionTitle theme={theme} title="Scanner" subtitle="Find high-quality trading opportunities" />
-              <PremiumTabs theme={theme} tabs={["Gainers", "Losers", "Active", "Momentum", "High RVOL", "News Movers", "New Highs", "New Lows"]} active={scannerTab} onChange={setScannerTab} />
+              <PremiumTabs theme={theme} tabs={["Gainers", "Losers", "Active", "Momentum", "High RVOL", "News Movers", "New Highs", "New Lows", "Premarket"]} active={scannerTab} onChange={setScannerTab} />
               <div style={{ marginTop: 18, display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
                 <select aria-label="Scanner preset" value={activeScannerPreset} onChange={(event) => {
                   const id = event.target.value;
@@ -1538,14 +1564,50 @@ export default function PremiumWorkspace({
               </div>
             </div>
             {scannerTable(scannerDisplayRows.slice(0, 30))}
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "14px 20px", color: theme.muted, fontSize: 12 }}>
-              <span>Results: {scannerDisplayRows.length}</span><span>Auto Refresh <StatusPill theme={theme} tone={scannerAutoRefresh ? "good" : "warn"}>{scannerAutoRefresh ? "On" : "Paused"}</StatusPill></span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "14px 20px", color: theme.muted, fontSize: 12 }}>
+              <span>
+                Results: {scannerDisplayRows.length}
+                {" · "}
+                {scannerMeta.contractVersion || "legacy contract"}
+                {" · "}
+                {scannerMeta.cached ? "cached" : scannerMeta.degraded ? "limited context" : "provider data"}
+              </span>
+              <button
+                type="button"
+                aria-pressed={scannerAutoRefresh}
+                onClick={() => updatePremiumPreference("scannerAutoRefresh", !scannerAutoRefresh)}
+                style={{ border: 0, background: "transparent", color: theme.muted, cursor: "pointer", padding: 0 }}
+              >
+                Auto Refresh <StatusPill theme={theme} tone={scannerAutoRefresh ? "good" : "warn"}>{scannerAutoRefresh ? "On" : "Paused"}</StatusPill>
+              </button>
             </div>
           </PremiumCard>
           {selectedRail(
             <>
-              <PremiumCard theme={theme} title="Why Moving"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{selected.whyMoving || selected.catalyst || "No confirmed catalyst context is available."}</div></PremiumCard>
-              <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Relative volume", selected.rvol || "Unavailable"], ["Volume", selected.volume || "Unavailable"], ["Score", selected.score || "Unavailable"], ["Source", selected.source || "Provider context"]].map(([label, value]) => <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{label}</span><b>{value}</b></div>)}</div></PremiumCard>
+              <PremiumCard theme={theme} title="Why Ranked"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{selected.whyRanked || selected.whyMoving || selected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
+              <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[
+                ["Trust", selected.verified ? "Verified provider" : selected.isSynthetic ? "Synthetic context" : "Calculated context"],
+                ["Freshness", selected.freshness || "Unavailable"],
+                ["Relative volume", hasNumericValue(selected.relativeVolume) ? formatMultiple(selected.relativeVolume) : "Unavailable"],
+                ["Volume", selected.volumeLabel || (hasNumericValue(selected.volume) ? formatCompactNumber(selected.volume, 1) : "Unavailable")],
+                ["Score", hasNumericValue(selected.scannerScore ?? selected.score) ? selected.scannerScore ?? selected.score : "Unavailable"],
+                ["Source", selected.source || "Scanner Engine"],
+              ].map(([label, value]) => <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{label}</span><b style={{ textAlign: "right" }}>{value}</b></div>)}</div></PremiumCard>
+              {selected.scoreBreakdown && (
+                <PremiumCard theme={theme} title="Score Breakdown">
+                  <div style={{ padding: 14, display: "grid", gap: 9 }}>
+                    {Object.entries(selected.scoreBreakdown).map(([label, value]) => (
+                      <div key={label} style={{ display: "grid", gridTemplateColumns: "96px minmax(0, 1fr) 34px", alignItems: "center", gap: 8 }}>
+                        <span style={{ color: theme.muted, fontSize: 11, textTransform: "capitalize" }}>{label.replace(/([A-Z])/g, " $1")}</span>
+                        <span style={{ height: 5, borderRadius: 3, background: theme.panel2, overflow: "hidden" }}>
+                          <span style={{ display: "block", width: `${Math.max(0, Math.min(100, Number(value) || 0))}%`, height: "100%", background: theme.blue }} />
+                        </span>
+                        <b style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 10, textAlign: "right" }}>{Math.round(Number(value) || 0)}</b>
+                      </div>
+                    ))}
+                  </div>
+                </PremiumCard>
+              )}
               <PremiumCard theme={theme}><div style={{ padding: 16, color: theme.amber, fontWeight: 900 }}><Shield size={18} style={{ verticalAlign: "-4px", marginRight: 8 }} />RISK: {selected.risk || "Context only"} <ChevronRight size={16} style={{ float: "right" }} /></div></PremiumCard>
             </>
           )}

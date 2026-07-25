@@ -1,4 +1,4 @@
-import { newsFallbackRows, scannerFallbackRows } from "../mocks/scannerNewsMockData";
+import { newsFallbackRows, scannerFallbackRows } from "../mocks/scannerNewsMockData.js";
 
 const BAD_TEXT = /^(unknown|n\/a|null|undefined|-|--|\$100\+|placeholder)$/i;
 const PROVIDER_LIMITED_RE = /429|rate|quota|limit|limited|restricted|subscription|plan/i;
@@ -96,12 +96,6 @@ export function cleanConfidenceLabel(meta = {}) {
   return meta.degraded ? "Fallback Context" : "Live";
 }
 
-function fallbackMove(symbol) {
-  const seed = symbol.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const value = ((seed % 260) / 100) + 0.45;
-  return seed % 4 === 0 ? -value : value;
-}
-
 function catalystText(row, symbol, changePercent, rvol, gapPercent) {
   const supplied = text(row.catalyst || row.news || row.reason || row.headline || row.whyMoving || row.description);
 
@@ -110,7 +104,7 @@ function catalystText(row, symbol, changePercent, rvol, gapPercent) {
   if (Math.abs(gapPercent) >= 1.5) return `${symbol} is active after a notable session gap with confirmed participation.`;
   if (rvol >= 1.8) return `${symbol} is drawing above-average volume versus its normal tape.`;
 
-  return `${symbol} has a valid scanner signal with price movement, volume, and context confirmed.`;
+  return `${symbol} is ranked from available scanner context; verify the move against live market data.`;
 }
 
 function riskOf({ changePercent, relativeVolume, price, floatValue }) {
@@ -142,39 +136,41 @@ function scoreRow({ changePercent, gapPercent, relativeVolume, volume, catalyst,
 export function normalizeScannerRow(row, meta = {}) {
   const symbol = symbolOf(row?.symbol || row?.ticker);
   if (!symbol) return null;
-  const fallbackMode = Boolean(row.fallback || meta.fallback);
+  const fallbackMode = Boolean(row.isFallback || row.fallback || meta.fallback);
+  const syntheticMode = Boolean(row.isSynthetic || row.synthetic);
 
   const price = numericOrNull(row.price ?? row.currentPrice ?? row.last ?? row.close);
   if (price === null || price <= 0) return null;
 
-  let changePercent = numericOrNull(row.changePercent ?? row.changesPercentage ?? row.percentChange ?? row.change);
-  if (changePercent === null && fallbackMode) changePercent = fallbackMove(symbol);
-
-  let gapPercent = numericOrNull(row.gapPercent ?? row.gap ?? row.openGap);
-  if (gapPercent === null && fallbackMode && changePercent !== null) gapPercent = changePercent * 0.42;
+  const changePercent = numericOrNull(row.changePercent ?? row.changesPercentage ?? row.percentChange ?? row.change);
+  const gapPercent = numericOrNull(row.gapPercent ?? row.gap ?? row.openGap);
 
   const volume = numericOrNull(row.volume ?? row.vol ?? row.dayVolume);
   if (volume === null || volume <= 0) return null;
 
   let relativeVolume = numericOrNull(row.relativeVolume ?? row.rvol ?? row.volumeRatio ?? row.volumePercentOfAvg);
   if (relativeVolume > 25) relativeVolume /= 100;
-  if ((relativeVolume === null || relativeVolume <= 0.1) && fallbackMode) relativeVolume = Math.max(1.1, Math.min(7.5, volume / 12_000_000));
 
-  let floatValue = numericOrNull(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat);
-  if (floatValue === null && fallbackMode) floatValue = volume * 6.5;
-  const timestamp = normalizeTimestamp(row.timestamp || row.updatedAt || row.lastUpdated || meta.updatedAt);
+  const floatValue = numericOrNull(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat);
+  const timestamp = normalizeTimestamp(
+    row.providerTimestamp || row.timestamp || row.updatedAt || row.lastUpdated || meta.updatedAt
+  );
   const catalyst = catalystText(row, symbol, changePercent || 0, relativeVolume || 0, gapPercent || 0);
   const risk = text(row.risk || row.riskLabel, "") || riskOf({ changePercent: changePercent || 0, relativeVolume: relativeVolume || 0, price, floatValue: floatValue || 0 });
   const scannerScore = numeric(row.score ?? row.scannerScore, 0);
-  const score = scannerScore > 0 ? Math.round(Math.min(99, scannerScore)) : scoreRow({ changePercent: changePercent || 0, gapPercent: gapPercent || 0, relativeVolume: relativeVolume || 0, volume, catalyst, timestamp, risk });
-  const freshness = row.freshness || freshnessOf(timestamp, meta);
-  const source = cleanConfidenceLabel({
+  const score = scannerScore > 0
+    ? Number(Math.min(99, scannerScore).toFixed(1))
+    : scoreRow({ changePercent: changePercent || 0, gapPercent: gapPercent || 0, relativeVolume: relativeVolume || 0, volume, catalyst, timestamp, risk });
+  const freshness = text(row.freshness, "") || freshnessOf(timestamp, meta);
+  const dataStatus = cleanConfidenceLabel({
     ...meta,
     source: row.source || meta.source,
     provider: row.provider || meta.provider,
     fallback: row.fallback || meta.fallback,
     degraded: row.degraded || meta.degraded,
   });
+  const trustTier = numericOrNull(row.trustTier) ?? (row.verified ? 3 : syntheticMode ? 1 : 2);
+  const source = text(row.source || meta.source, "Scanner Engine");
 
   return {
     ...row,
@@ -202,11 +198,27 @@ export function normalizeScannerRow(row, meta = {}) {
     risk,
     riskLabel: risk,
     source,
+    sourceType: text(row.sourceType, syntheticMode ? "synthetic-context" : fallbackMode ? "calculated-context" : "provider-data"),
+    dataStatus,
     freshness,
     timestamp,
+    providerTimestamp: normalizeTimestamp(row.providerTimestamp),
+    receivedTimestamp: normalizeTimestamp(row.receivedTimestamp || meta.updatedAt),
+    cacheAgeMs: numericOrNull(row.cacheAgeMs ?? meta.cacheAgeMs),
+    marketSession: text(row.marketSession || meta.marketSession, ""),
+    confidence: text(row.confidence, trustTier === 3 ? "High" : trustTier === 2 ? "Medium" : "Limited"),
+    verified: Boolean(row.verified),
+    trustTier,
+    isCached: Boolean(row.isCached || meta.cached),
+    isFallback: fallbackMode,
+    isSynthetic: syntheticMode,
+    warnings: Array.isArray(row.warnings) ? row.warnings : [],
+    scoreBreakdown: row.scoreBreakdown || null,
+    scoreWeights: row.scoreWeights || null,
+    whyRanked: text(row.whyRanked, row.whyMoving || catalyst),
     fallback: fallbackMode,
     degraded: Boolean(row.degraded || meta.degraded),
-    rankScore: score + Math.abs(changePercent || 0) * 2 + Math.min(relativeVolume || 0, 8) * 4 + Math.abs(gapPercent || 0) * 1.4,
+    rankScore: score,
   };
 }
 
@@ -221,11 +233,13 @@ export function rankScannerRows(rows = []) {
       if (!Number.isFinite(Number(row.price)) || Number(row.price) <= 0) return false;
       if (!Number.isFinite(Number(row.volume)) || Number(row.volume) < 1_000) return false;
       if (!Number.isFinite(Number(row.changePercent)) || Math.abs(Number(row.changePercent)) < 0.05) return false;
-      if (!Number.isFinite(Number(row.relativeVolume)) || Number(row.relativeVolume) < 0.7) return false;
-      if (!text(row.catalyst || row.whyMoving)) return false;
       return true;
     })
-    .sort((a, b) => Number(b.rankScore || b.score || 0) - Number(a.rankScore || a.score || 0));
+    .sort((a, b) => {
+      const trustDifference = Number(b.trustTier || 0) - Number(a.trustTier || 0);
+      if (trustDifference) return trustDifference;
+      return Number(b.rankScore || b.score || 0) - Number(a.rankScore || a.score || 0);
+    });
 }
 
 export function normalizeScannerGroups(groups = {}, meta = {}) {
@@ -238,24 +252,49 @@ export function normalizeScannerGroups(groups = {}, meta = {}) {
     active: normalizeList(groups.active, meta),
     momentum: normalizeList(groups.momentum, meta),
     relativeVolume: normalizeList(groups.relativeVolume, meta),
+    unusualVolume: normalizeList(groups.unusualVolume, meta),
+    newsMovers: normalizeList(groups.newsMovers, meta),
+    newHighs: normalizeList(groups.newHighs, meta),
+    newLows: normalizeList(groups.newLows, meta),
+    premarket: normalizeList(groups.premarket, meta),
     aiMovers: normalizeList(groups.aiMovers, meta),
     smallCaps: normalizeList(groups.smallCaps, meta),
+    verifiedMovers: normalizeList(groups.verifiedMovers, meta),
+    contextMovers: normalizeList(groups.contextMovers, meta),
   };
   const hasRows = Object.values(normalized).some((rows) => rows.length);
 
   if (hasRows) return normalized;
 
-  const fallbackMeta = { ...meta, fallback: true, degraded: true, source: "Fallback Context" };
-  const fallbackRows = normalizeList(scannerFallbackRows, fallbackMeta);
+  const fallbackMeta = { ...meta, fallback: true, degraded: true, source: "Local Scanner Context" };
+  const fallbackRows = normalizeList(
+    scannerFallbackRows.map((row) => ({
+      ...row,
+      synthetic: true,
+      fallback: true,
+      source: "Local Scanner Context",
+      sourceType: "synthetic-context",
+      confidence: "Limited",
+      trustTier: 1,
+    })),
+    fallbackMeta
+  );
 
   return {
     gainers: fallbackRows.filter((row) => row.changePercent > 0),
     losers: fallbackRows.filter((row) => row.changePercent < 0),
     active: fallbackRows,
     momentum: fallbackRows.filter((row) => row.changePercent > 0),
-    relativeVolume: [...fallbackRows].sort((a, b) => b.relativeVolume - a.relativeVolume),
+    relativeVolume: [...fallbackRows].sort((a, b) => Number(b.relativeVolume || 0) - Number(a.relativeVolume || 0)),
+    unusualVolume: fallbackRows.filter((row) => Number(row.relativeVolume || 0) >= 1.5),
+    newsMovers: [],
+    newHighs: [],
+    newLows: [],
+    premarket: [],
     aiMovers: fallbackRows.filter((row) => row.catalyst),
     smallCaps: fallbackRows,
+    verifiedMovers: [],
+    contextMovers: fallbackRows,
   };
 }
 

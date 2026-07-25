@@ -543,6 +543,7 @@ export default function App() {
     selectMainSymbol,
     selectedStock,
     selectedStockData,
+    selectedSymbolContext,
     setSearchSymbol,
     setSecondarySymbol,
     symbolSuggestions,
@@ -3986,6 +3987,7 @@ export default function App() {
         advancedMode={advancedMode}
         setAdvancedMode={setAdvancedMode}
         selectedSymbol={selectedStock}
+        selectedSymbolContext={selectedSymbolContext}
         onSymbolCommit={selectMainSymbol}
         onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
         premiumShell={usePremiumShell}

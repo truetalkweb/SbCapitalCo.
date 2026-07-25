@@ -120,3 +120,48 @@ export function getHealthLabelStatus(label) {
 
   return "info";
 }
+
+export function normalizeProviderStatus(input = {}, {
+  source = "Unknown provider",
+  marketSession = null,
+  now = Date.now(),
+  staleAfterMs = 120_000,
+} = {}) {
+  const providerTimestamp = input.providerTimestamp || input.updatedAt || input.lastSuccessAt || null;
+  const receivedTimestamp = input.receivedTimestamp || input.backendTime || null;
+  const timestampMs = providerTimestamp ? new Date(providerTimestamp).getTime() : NaN;
+  const explicitCacheAge = Number(input.cacheAgeMs);
+  const cacheAgeMs = Number.isFinite(explicitCacheAge)
+    ? Math.max(0, explicitCacheAge)
+    : Number.isFinite(timestampMs)
+      ? Math.max(0, now - timestampMs)
+      : null;
+  const unavailable = Boolean(input.unavailable) || String(input.label || "").toUpperCase().includes("UNAVAILABLE");
+  const providerLimited = Boolean(input.providerLimited) || String(input.label || "").toUpperCase().includes("LIMITED");
+  const delayed = Boolean(input.delayed) || String(input.label || "").toUpperCase().includes("DELAYED");
+  const cached = Boolean(input.cached) || cacheAgeMs !== null && cacheAgeMs > 0;
+  const stale = Boolean(input.stale) || cacheAgeMs !== null && cacheAgeMs > staleAfterMs;
+  const state = unavailable
+    ? "Unavailable"
+    : providerLimited
+      ? "Provider Limited"
+      : stale
+        ? "Stale"
+        : delayed
+          ? "Delayed"
+          : cached
+            ? "Cached"
+            : "Live";
+
+  return {
+    source: input.source || source,
+    state,
+    providerTimestamp,
+    receivedTimestamp,
+    cacheAgeMs,
+    marketSession: input.marketSession || marketSession,
+    warning: input.userMessage || input.warning || null,
+    lastSuccessAt: input.lastSuccessAt || providerTimestamp,
+    available: !unavailable,
+  };
+}

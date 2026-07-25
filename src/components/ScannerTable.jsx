@@ -102,7 +102,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
           <button
             key={`${stock.symbol}-${index}`}
             data-smallcap-symbol={stock.symbol}
-            onClick={() => onPick?.(stock.symbol, stock)}
+            onClick={() => onPick?.(stock.symbol, stock, "scanner-row")}
             onMouseEnter={(event) => {
               event.currentTarget.style.background = rowHoverBackground;
             }}

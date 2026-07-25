@@ -15,14 +15,9 @@ import {
 } from "../utils/marketUtils";
 import { normalizeScannerRow, rankScannerRows } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
+import { createSymbolContext, normalizeSymbol } from "../utils/symbolContext";
 
 const marketSnapshotSymbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
-
-function normalizeTerminalSymbol(symbol) {
-  const clean = String(symbol || "").trim().toUpperCase();
-
-  return /^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(clean) ? clean : "";
-}
 
 export function useTerminalSymbols({
   activeWorkspace,
@@ -41,7 +36,12 @@ export function useTerminalSymbols({
   updateContextLiveQuote,
 }) {
   const [selectedStock, setSelectedStock] = useState(() =>
-    loadSetting("sb_selected_stock", "NVDA")
+    normalizeSymbol(loadSetting("sb_selected_stock", "NVDA")) || "NVDA"
+  );
+  const [selectedSymbolContext, setSelectedSymbolContext] = useState(() =>
+    createSymbolContext(loadSetting("sb_selected_stock", "NVDA"), {
+      selectionSource: "workspace-restore",
+    })
   );
   const [secondarySymbol, setSecondarySymbol] = useState(() =>
     loadSetting("sb_secondary_symbol", "TSLA")
@@ -50,11 +50,15 @@ export function useTerminalSymbols({
   const [liveStocks, setLiveStocks] = useState(() =>
     loadSetting("sb_watchlist", defaultStocks)
   );
+  const hydratedLiveStocks = useMemo(
+    () => liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes)),
+    [liveQuotes, liveStocks]
+  );
 
   const allSymbols = useMemo(
     () => [
       ...Object.values(liveQuotes),
-      ...liveStocks.map((stock) => applyLiveQuote(stock, liveQuotes)),
+      ...hydratedLiveStocks,
       ...fmpGainers.map((stock) => applyLiveQuote(stock, liveQuotes)),
       ...fmpLosers.map((stock) => applyLiveQuote(stock, liveQuotes)),
       ...fmpActive.map((stock) => applyLiveQuote(stock, liveQuotes)),
@@ -74,7 +78,7 @@ export function useTerminalSymbols({
       fmpRelativeVolume,
       liveQuotes,
       liveSmallCapMovers,
-      liveStocks,
+      hydratedLiveStocks,
     ]
   );
 
@@ -244,15 +248,14 @@ export function useTerminalSymbols({
 
   const addSymbolToWatchlist = useCallback(
     (symbol) => {
-      const cleanSymbol = normalizeTerminalSymbol(symbol);
+      const cleanSymbol = normalizeSymbol(symbol);
       if (!cleanSymbol) return;
 
       const exists = liveStocks.some((stock) => stock.symbol === cleanSymbol);
+      const liveQuote = liveQuotes[cleanSymbol];
+      const knownStock = allSymbols.find((stock) => stock.symbol === cleanSymbol);
 
       if (!exists) {
-        const liveQuote = liveQuotes[cleanSymbol];
-        const knownStock = allSymbols.find((stock) => stock.symbol === cleanSymbol);
-
         setLiveStocks((prev) => [
           ...prev,
           {
@@ -267,6 +270,10 @@ export function useTerminalSymbols({
       }
 
       setSelectedStock(cleanSymbol);
+      setSelectedSymbolContext(createSymbolContext(cleanSymbol, {
+        ...(knownStock || liveQuote || {}),
+        selectionSource: "watchlist-add",
+      }));
       if (syncCharts) setSecondarySymbol(cleanSymbol);
       setSearchSymbol("");
     },
@@ -297,11 +304,15 @@ export function useTerminalSymbols({
   );
 
   const selectMainSymbol = useCallback(
-    (symbol, stock = null) => {
-      const cleanSymbol = normalizeTerminalSymbol(symbol);
+    (symbol, stock = null, selectionSource = "terminal") => {
+      const cleanSymbol = normalizeSymbol(symbol);
       if (!cleanSymbol) return;
 
       setSelectedStock(cleanSymbol);
+      setSelectedSymbolContext((previous) => createSymbolContext(cleanSymbol, {
+        ...(stock || {}),
+        selectionSource,
+      }, previous));
       if (stock) setSelectedScannerStock(stock);
       if (syncCharts) setSecondarySymbol(cleanSymbol);
     },
@@ -343,13 +354,25 @@ export function useTerminalSymbols({
   const applySymbolWorkspace = useCallback((data) => {
     if (!data) return;
 
-    if (data.selectedStock) setSelectedStock(data.selectedStock);
+    if (data.selectedStock) {
+      const cleanSymbol = normalizeSymbol(data.selectedStock);
+      if (cleanSymbol) {
+        setSelectedStock(cleanSymbol);
+        setSelectedSymbolContext(createSymbolContext(cleanSymbol, {
+          ...(data.selectedSymbolContext || {}),
+          selectionSource: "workspace-restore",
+        }));
+      }
+    }
     if (data.secondarySymbol) setSecondarySymbol(data.secondarySymbol);
     if (Array.isArray(data.liveStocks)) setLiveStocks(data.liveStocks);
   }, []);
 
   const resetTerminalSymbols = useCallback(() => {
     setSelectedStock("NVDA");
+    setSelectedSymbolContext(createSymbolContext("NVDA", {
+      selectionSource: "workspace-reset",
+    }));
     setSecondarySymbol("TSLA");
     setSearchSymbol("");
     setLiveStocks(defaultStocks);
@@ -368,7 +391,7 @@ export function useTerminalSymbols({
     allSymbols,
     applySymbolWorkspace,
     displaySymbols,
-    liveStocks,
+    liveStocks: hydratedLiveStocks,
     removeWatchlistSymbol,
     resetTerminalSymbols,
     scannerStocks,
@@ -378,6 +401,7 @@ export function useTerminalSymbols({
     selectMainSymbol,
     selectedStock,
     selectedStockData,
+    selectedSymbolContext,
     setLiveStocks,
     setSearchSymbol,
     setSecondarySymbol,

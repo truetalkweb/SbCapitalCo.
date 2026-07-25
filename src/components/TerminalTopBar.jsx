@@ -138,6 +138,7 @@ export default function TerminalTopBar({
   advancedMode = false,
   setAdvancedMode,
   selectedSymbol,
+  selectedSymbolContext,
   onSymbolCommit,
   onOpenHelp,
   premiumShell = false,
@@ -279,13 +280,15 @@ export default function TerminalTopBar({
       return false;
     }
 
-    onSymbolCommit?.(cleanSymbol);
+    onSymbolCommit?.(cleanSymbol, null, "global-search");
     return true;
   }
 
   return (
     <div
       className="terminal-top-bar"
+      data-selected-symbol={selectedSymbolContext?.symbol || selectedSymbol || ""}
+      data-selection-source={selectedSymbolContext?.selectionSource || "terminal"}
       style={{
         minHeight: compact ? "66px" : premiumShell ? "64px" : "78px",
         background: chromeBackground,

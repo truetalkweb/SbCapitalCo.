@@ -132,6 +132,7 @@ export default function MarketIntelligenceTerminal({
   const [lastUpdated, setLastUpdated] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const detailRequestRef = useRef(0);
+  const detailAbortRef = useRef(null);
   const compactLayout = viewportWidth < 760;
   const phoneLayout = viewportWidth < 520;
   const moverGridColumns = compactLayout
@@ -278,11 +279,16 @@ export default function MarketIntelligenceTerminal({
       if (!cleanSymbol) return;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
+      detailAbortRef.current?.abort();
+      const controller = new AbortController();
+      detailAbortRef.current = controller;
 
       setDetailLoading(true);
 
       try {
-        const response = await authenticatedFetch(`${brokerApiUrl}/api/ticker/${encodeURIComponent(cleanSymbol)}?includeAi=true`);
+        const response = await authenticatedFetch(`${brokerApiUrl}/api/ticker/${encodeURIComponent(cleanSymbol)}?includeAi=true`, {
+          signal: controller.signal,
+        });
         if (!response.ok) throw new Error("Ticker detail unavailable");
         const detail = await response.json();
 
@@ -290,7 +296,8 @@ export default function MarketIntelligenceTerminal({
 
         setTickerDetail(detail);
         setTickerIntelligence(detail.normalized?.intelligence || detail.catalystIntelligence || detail.aiSummary || null);
-      } catch {
+      } catch (error) {
+        if (error?.name === "AbortError") return;
         if (requestId !== detailRequestRef.current) return;
 
         setTickerDetail(null);
@@ -326,7 +333,10 @@ export default function MarketIntelligenceTerminal({
       loadTickerDetail(selectedTicker);
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      detailAbortRef.current?.abort();
+    };
   }, [loadTickerDetail, selectedTicker]);
 
   useEffect(() => {

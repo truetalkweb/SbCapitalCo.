@@ -65,7 +65,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
   const [newsMeta, setNewsMeta] = useState(DEFAULT_NEWS_META);
 
   const fetchNews = useCallback(
-    async ({ cancelled = () => false } = {}) => {
+    async ({ cancelled = () => false, signal } = {}) => {
       setNewsLoading(true);
 
       try {
@@ -76,7 +76,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
         const marketNewsUrl = `${brokerApiUrl}/api/news?limit=${limit}`;
         const fetchNewsPayload = async (url, label) => {
           try {
-            const response = await fetchWithTimeout(url, 5000);
+            const response = await fetchWithTimeout(url, 5000, { signal });
 
             if (!response.ok) throw new Error(`${label} HTTP ${response.status}`);
 
@@ -173,15 +173,17 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
   useEffect(() => {
     let isCancelled = false;
     let initialLoad = null;
+    const controller = new AbortController();
 
     if (selectedStock && brokerApiUrl) {
       initialLoad = window.setTimeout(() => {
-        fetchNews({ cancelled: () => isCancelled });
+        fetchNews({ cancelled: () => isCancelled, signal: controller.signal });
       }, 0);
     }
 
     return () => {
       isCancelled = true;
+      controller.abort();
       if (initialLoad) window.clearTimeout(initialLoad);
     };
   }, [brokerApiUrl, fetchNews, selectedStock]);

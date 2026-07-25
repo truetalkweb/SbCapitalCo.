@@ -118,7 +118,7 @@ export default function TickerTape({ theme, stocks = [], onPick }) {
             <div
               key={`${stock.symbol}-${index}`}
               data-ticker-symbol={stock.symbol}
-              onClick={() => onPick?.(stock.symbol)}
+              onClick={() => onPick?.(stock.symbol, stock, "market-tape")}
               style={{
                 cursor: "pointer",
                 display: "inline-grid",

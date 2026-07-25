@@ -1217,7 +1217,7 @@ export default function PremiumWorkspace({
         ]}
         rows={rows}
         selectedKey={selectedKey}
-        onSelect={(row) => selectMainSymbol?.(row.symbol)}
+        onSelect={(row) => selectMainSymbol?.(row.symbol, row, "dashboard-watchlist")}
         {...tableProps}
       />
     );
@@ -1250,7 +1250,7 @@ export default function PremiumWorkspace({
         ]}
         rows={rows}
         selectedKey={selectedKey}
-        onSelect={(row) => selectMainSymbol?.(row.symbol)}
+        onSelect={(row) => selectMainSymbol?.(row.symbol, row, "dashboard-scanner")}
         style={{ height: "calc(100% - 51px)", overflowX: "hidden" }}
         rowMinHeight={34}
         headerMinHeight={28}
@@ -1428,7 +1428,7 @@ export default function PremiumWorkspace({
                   ]}
                   rows={dashboard.watchlistRows.slice(0, 7)}
                   selectedKey={selected.symbol}
-                  onSelect={(row) => selectMainSymbol?.(row.symbol)}
+                  onSelect={(row) => selectMainSymbol?.(row.symbol, row, "scanner-row")}
                   rowMinHeight={30}
                   headerMinHeight={28}
                   cellPadding="0 9px"
@@ -1581,7 +1581,7 @@ export default function PremiumWorkspace({
                 ]}
                 rows={dashboard.watchlistRows.slice(0, 20)}
                 selectedKey={selected.symbol}
-                onSelect={(row) => selectMainSymbol?.(row.symbol)}
+                onSelect={(row) => selectMainSymbol?.(row.symbol, row, "watchlist-row")}
               />
             </PremiumCard>
             <PremiumCard theme={theme} title="Watchlist Notes & Activity">
@@ -1646,7 +1646,7 @@ export default function PremiumWorkspace({
                 keyField="id"
                 onSelect={(row) => {
                   setSelectedNewsId(row.id);
-                  if (row.symbol) selectMainSymbol?.(row.symbol);
+                  if (row.symbol) selectMainSymbol?.(row.symbol, row, "news-row");
                   if (row.url) window.open(row.url, "_blank", "noopener,noreferrer");
                 }}
               />
@@ -1693,7 +1693,7 @@ export default function PremiumWorkspace({
                 )} />
                 <PremiumTabs theme={theme} tabs={["Active Alerts", "Paused", "Triggered", "All Alerts"]} active={alertView} onChange={setAlertView} />
               </div>
-              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.amber} fill={theme.amber} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}</> }, { key: "type", label: "Alert Type", width: "130px" }, { key: "condition", label: "Condition", width: "1.4fr" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => num(row.last) ? num(row.last).toFixed(2) : "Unavailable" }, { key: "target", label: "Target", width: "90px", align: "right", mono: true }, { key: "status", label: "Status", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.status === "Triggered" ? "bad" : row.status === "Paused" ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "created", label: "Created", width: "150px", render: (row) => row.created && row.created !== "Not recorded" ? new Date(row.created).toLocaleString() : row.created }]} rows={alertRows.filter((row) => alertView === "All Alerts" || (alertView === "Active Alerts" ? row.status === "Active" : row.status === alertView))} selectedKey={selectedAlert?.id} keyField="id" emptyMessage={`No ${alertView.toLowerCase()} available.`} onSelect={(row) => { setSelectedAlertSymbol(row.id); selectMainSymbol?.(row.symbol); }} />
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.amber} fill={theme.amber} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}</> }, { key: "type", label: "Alert Type", width: "130px" }, { key: "condition", label: "Condition", width: "1.4fr" }, { key: "last", label: "Last Price", width: "100px", align: "right", mono: true, render: (row) => num(row.last) ? num(row.last).toFixed(2) : "Unavailable" }, { key: "target", label: "Target", width: "90px", align: "right", mono: true }, { key: "status", label: "Status", width: "100px", render: (row) => <StatusPill theme={theme} tone={row.status === "Triggered" ? "bad" : row.status === "Paused" ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "created", label: "Created", width: "150px", render: (row) => row.created && row.created !== "Not recorded" ? new Date(row.created).toLocaleString() : row.created }]} rows={alertRows.filter((row) => alertView === "All Alerts" || (alertView === "Active Alerts" ? row.status === "Active" : row.status === alertView))} selectedKey={selectedAlert?.id} keyField="id" emptyMessage={`No ${alertView.toLowerCase()} available.`} onSelect={(row) => { setSelectedAlertSymbol(row.id); selectMainSymbol?.(row.symbol, row, "alert-row"); }} />
             </PremiumCard>
             <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "1fr 390px", gap: 10 }}>{bottomDock}{quickOrder}</div>
           </div>

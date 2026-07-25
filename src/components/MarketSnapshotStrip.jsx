@@ -64,7 +64,7 @@ export default function MarketSnapshotStrip({ theme, stocks = [], onPick, compac
           <button
             key={stock.symbol}
             type="button"
-            onClick={() => onPick?.(stock.symbol)}
+            onClick={() => onPick?.(stock.symbol, stock, "market-snapshot")}
             style={{
               minWidth: 0,
               display: "grid",

@@ -2,12 +2,20 @@ import { createNormalizedNewsFallback } from "./scannerNewsAdapters";
 
 export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromExternal = () => controller.abort(externalSignal?.reason);
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    if (externalSignal?.aborted) {
+      controller.abort(externalSignal.reason);
+    } else {
+      externalSignal?.addEventListener("abort", abortFromExternal, { once: true });
+    }
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     window.clearTimeout(timeoutId);
+    externalSignal?.removeEventListener("abort", abortFromExternal);
   }
 }
 

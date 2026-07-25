@@ -2605,7 +2605,9 @@ export default function PremiumWorkspace({
           newsMeta={newsMeta}
           selected={dashboard.selected}
           watchlist={dashboard.watchlistRows}
-          onSelect={selectMainSymbol}
+          onSelect={(symbol, row) =>
+            selectMainSymbol?.(symbol, row || null, "dashboard-intelligence")
+          }
           onOpenChart={(symbol) => {
             selectMainSymbol?.(symbol);
             setActiveWorkspace?.("charts");

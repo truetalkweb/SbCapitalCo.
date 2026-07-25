@@ -1286,9 +1286,9 @@ export default function PremiumWorkspace({
     );
   }
 
-  function selectedRail(extra = null) {
+  function selectedRail(extra = null, selectedOverride = selected) {
     return (
-      <DetailRail theme={theme} selected={selected} actions={selectedActions}>
+      <DetailRail theme={theme} selected={selectedOverride} actions={selectedActions}>
         {extra}
       </DetailRail>
     );
@@ -1507,6 +1507,10 @@ export default function PremiumWorkspace({
   }
 
   if (activeWorkspace === "scanner") {
+    const scannerSelected =
+      scannerUniverseRows.find((row) => row.symbol === selectedStock) ||
+      scannerDisplayRows[0] ||
+      selected;
     return (
       <div style={page}>
         <div style={mainTwoCol}>
@@ -1584,19 +1588,19 @@ export default function PremiumWorkspace({
           </PremiumCard>
           {selectedRail(
             <>
-              <PremiumCard theme={theme} title="Why Ranked"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{selected.whyRanked || selected.whyMoving || selected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
+              <PremiumCard theme={theme} title="Why Ranked"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{scannerSelected.whyRanked || scannerSelected.whyMoving || scannerSelected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
               <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[
-                ["Trust", selected.verified ? "Verified provider" : selected.isSynthetic ? "Synthetic context" : "Calculated context"],
-                ["Freshness", selected.freshness || "Unavailable"],
-                ["Relative volume", hasNumericValue(selected.relativeVolume) ? formatMultiple(selected.relativeVolume) : "Unavailable"],
-                ["Volume", selected.volumeLabel || (hasNumericValue(selected.volume) ? formatCompactNumber(selected.volume, 1) : "Unavailable")],
-                ["Score", hasNumericValue(selected.scannerScore ?? selected.score) ? selected.scannerScore ?? selected.score : "Unavailable"],
-                ["Source", selected.source || "Scanner Engine"],
+                ["Trust", scannerSelected.verified ? "Verified provider" : scannerSelected.isSynthetic ? "Synthetic context" : "Calculated context"],
+                ["Freshness", scannerSelected.freshness || "Unavailable"],
+                ["Relative volume", hasNumericValue(scannerSelected.relativeVolume) ? formatMultiple(scannerSelected.relativeVolume) : "Unavailable"],
+                ["Volume", scannerSelected.volumeLabel || (hasNumericValue(scannerSelected.volume) ? formatCompactNumber(scannerSelected.volume, 1) : "Unavailable")],
+                ["Score", hasNumericValue(scannerSelected.scannerScore ?? scannerSelected.score) ? scannerSelected.scannerScore ?? scannerSelected.score : "Unavailable"],
+                ["Source", scannerSelected.source || "Scanner Engine"],
               ].map(([label, value]) => <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{label}</span><b style={{ textAlign: "right" }}>{value}</b></div>)}</div></PremiumCard>
-              {selected.scoreBreakdown && (
+              {scannerSelected.scoreBreakdown && (
                 <PremiumCard theme={theme} title="Score Breakdown">
                   <div style={{ padding: 14, display: "grid", gap: 9 }}>
-                    {Object.entries(selected.scoreBreakdown).map(([label, value]) => (
+                    {Object.entries(scannerSelected.scoreBreakdown).map(([label, value]) => (
                       <div key={label} style={{ display: "grid", gridTemplateColumns: "96px minmax(0, 1fr) 34px", alignItems: "center", gap: 8 }}>
                         <span style={{ color: theme.muted, fontSize: 11, textTransform: "capitalize" }}>{label.replace(/([A-Z])/g, " $1")}</span>
                         <span style={{ height: 5, borderRadius: 3, background: theme.panel2, overflow: "hidden" }}>
@@ -1608,8 +1612,9 @@ export default function PremiumWorkspace({
                   </div>
                 </PremiumCard>
               )}
-              <PremiumCard theme={theme}><div style={{ padding: 16, color: theme.amber, fontWeight: 900 }}><Shield size={18} style={{ verticalAlign: "-4px", marginRight: 8 }} />RISK: {selected.risk || "Context only"} <ChevronRight size={16} style={{ float: "right" }} /></div></PremiumCard>
-            </>
+              <PremiumCard theme={theme}><div style={{ padding: 16, color: theme.amber, fontWeight: 900 }}><Shield size={18} style={{ verticalAlign: "-4px", marginRight: 8 }} />RISK: {scannerSelected.risk || "Context only"} <ChevronRight size={16} style={{ float: "right" }} /></div></PremiumCard>
+            </>,
+            scannerSelected
           )}
         </div>
       </div>

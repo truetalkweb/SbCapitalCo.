@@ -309,10 +309,20 @@ export function useTerminalSymbols({
       if (!cleanSymbol) return;
 
       setSelectedStock(cleanSymbol);
-      setSelectedSymbolContext((previous) => createSymbolContext(cleanSymbol, {
-        ...(stock || {}),
-        selectionSource,
-      }, previous));
+      setSelectedSymbolContext((previous) => {
+        if (
+          previous?.symbol === cleanSymbol &&
+          !stock &&
+          selectionSource === "terminal"
+        ) {
+          return previous;
+        }
+
+        return createSymbolContext(cleanSymbol, {
+          ...(stock || {}),
+          selectionSource,
+        }, previous);
+      });
       if (stock) setSelectedScannerStock(stock);
       if (syncCharts) setSecondarySymbol(cleanSymbol);
     },

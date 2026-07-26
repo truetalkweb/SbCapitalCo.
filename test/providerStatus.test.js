@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeProviderStatus } from "../src/utils/healthStatus.js";
+import { getQuestradeHealth, normalizeProviderStatus } from "../src/utils/healthStatus.js";
+import { buildTerminalSourceLabels } from "../src/utils/marketUtils.js";
 
 test("healthy fallback remains available while a provider is limited", () => {
   const status = normalizeProviderStatus({
@@ -36,4 +37,39 @@ test("unavailable data fails closed", () => {
   assert.equal(status.state, "Unavailable");
   assert.equal(status.available, false);
   assert.equal(status.cacheAgeMs, null);
+});
+
+test("configured Questrade source without successful data remains pending", () => {
+  const platformHealth = {
+    marketData: {
+      source: "Questrade",
+      lastSuccessAt: null,
+      delayed: null,
+    },
+  };
+
+  assert.equal(getQuestradeHealth({ platformHealth }).label, "QTRD PENDING");
+  assert.equal(getQuestradeHealth({ brokerConnected: true, platformHealth }).label, "QTRD PENDING");
+  assert.equal(buildTerminalSourceLabels({ platformHealth }).marketDataStatusLabel, "QTRD PENDING");
+});
+
+test("Questrade source becomes live only with a usable quote or confirmed success", () => {
+  const unusableQuotes = {
+    NVDA: { source: "QTRD", price: null },
+  };
+  const usableQuotes = {
+    NVDA: { source: "QTRD", price: 210.69 },
+  };
+  const confirmedHealth = {
+    marketData: {
+      source: "Questrade",
+      httpStatus: 200,
+      lastSuccessAt: "2026-07-25T20:00:00.000Z",
+    },
+  };
+
+  assert.equal(getQuestradeHealth({ liveQuotes: unusableQuotes }).label, "QTRD PENDING");
+  assert.equal(buildTerminalSourceLabels({ liveQuotes: unusableQuotes }).marketDataStatusLabel, "QTRD PENDING");
+  assert.equal(getQuestradeHealth({ liveQuotes: usableQuotes }).label, "QTRD LIVE");
+  assert.equal(buildTerminalSourceLabels({ platformHealth: confirmedHealth }).marketDataStatusLabel, "QTRD LIVE");
 });

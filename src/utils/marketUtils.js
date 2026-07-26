@@ -1,4 +1,4 @@
-import { createNormalizedNewsFallback } from "./scannerNewsAdapters";
+import { createNormalizedNewsFallback } from "./scannerNewsAdapters.js";
 
 export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
   const controller = new AbortController();
@@ -356,16 +356,23 @@ export function buildTerminalSourceLabels({
 }) {
   const quoteMetaRows = Object.values(liveQuotes || {});
   const hasQuestradeQuote =
-    quoteMetaRows.some((quote) => String(quote?.source || "").includes("QTRD")) ||
-    platformHealth?.marketData?.source === "Questrade";
+    quoteMetaRows.some((quote) =>
+      /QTRD|QUESTRADE/i.test(String(quote?.source || "")) &&
+      Number.isFinite(Number(quote?.price)) &&
+      Number(quote.price) > 0
+    );
+  const hasConfirmedProviderSuccess = Boolean(
+    platformHealth?.marketData?.httpStatus === 200 &&
+    platformHealth?.marketData?.lastSuccessAt
+  );
   const quoteIsDelayed =
     quoteMetaRows.some((quote) => quote?.delayed) ||
     platformHealth?.marketData?.delayed === true;
 
   return {
-    marketDataStatusLabel: quoteIsDelayed
+    marketDataStatusLabel: quoteIsDelayed && (hasQuestradeQuote || hasConfirmedProviderSuccess)
       ? "QTRD DELAYED"
-      : hasQuestradeQuote || platformHealth?.marketData?.httpStatus === 200
+      : hasQuestradeQuote || hasConfirmedProviderSuccess
         ? "QTRD LIVE"
         : "QTRD PENDING",
     mainChartSourceLabel: formatChartSourceStatus(mainChartStatus),

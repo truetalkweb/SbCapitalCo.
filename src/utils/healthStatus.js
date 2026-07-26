@@ -28,7 +28,6 @@ export function getCleanProviderMessage(message, fallback = "Provider limited by
 }
 
 export function getQuestradeHealth({
-  brokerConnected = false,
   brokerDetails = null,
   brokerError = "",
   platformHealth = null,
@@ -46,6 +45,7 @@ export function getQuestradeHealth({
     ...(Array.isArray(platformHealth?.broker?.warnings) ? platformHealth.broker.warnings : []),
   ].filter(Boolean);
   const rawMessage = warnings[0] || "";
+  const quoteRows = Object.values(liveQuotes || {});
   const tokenPersisted = Boolean(
     tokenStore.firestore ||
     tokenStore.envRefreshToken ||
@@ -56,19 +56,23 @@ export function getQuestradeHealth({
   const platformReportsLive = Boolean(
     deepQuestrade?.live ||
       deepMarketData?.live ||
-      platformHealth?.marketData?.httpStatus === 200 ||
-      String(platformHealth?.marketData?.source || "").toUpperCase().includes("QUESTRADE")
+      (
+        platformHealth?.marketData?.httpStatus === 200 &&
+        platformHealth?.marketData?.lastSuccessAt
+      )
   );
-  const hasQuestradeQuote = Object.values(liveQuotes || {}).some((quote) =>
-    /QTRD|QUESTRADE/i.test(String(quote?.source || ""))
+  const hasQuestradeQuote = quoteRows.some((quote) =>
+    /QTRD|QUESTRADE/i.test(String(quote?.source || "")) &&
+    Number.isFinite(Number(quote?.price)) &&
+    Number(quote.price) > 0
   );
   const delayed = platformHealth?.marketData?.delayed === true ||
     deepMarketData?.providerLabel === "DELAYED" ||
     deepQuestrade?.providerLabel === "DELAYED" ||
-    Object.values(liveQuotes || {}).some((quote) => quote?.delayed);
+    quoteRows.some((quote) => quote?.delayed);
   const timeout = /timeout|ECONNABORTED/i.test(rawMessage);
 
-  if (brokerConnected || hasQuestradeQuote || platformReportsLive) {
+  if (hasQuestradeQuote || platformReportsLive) {
     return {
       label: delayed ? "QTRD DELAYED" : "QTRD LIVE",
       status: delayed ? "warn" : "ok",

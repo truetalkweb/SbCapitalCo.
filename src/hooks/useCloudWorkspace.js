@@ -12,6 +12,8 @@ import {
   getSafeAuthReturnPath,
   isSafeInternalReturnPath,
 } from "../services/authNavigationPolicy";
+import { authenticatedFetch } from "../services/authenticatedRequest";
+import { BROKER_API_URL } from "../config/terminalConfig";
 
 const authRedirectOrigin = String(import.meta.env.VITE_AUTH_REDIRECT_URL || "").trim();
 const WORKSPACE_SCHEMA_VERSION = 1;
@@ -107,6 +109,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   const [authPassword, setAuthPassword] = useState("");
   const [authMode, setAuthMode] = useState("login");
   const [authMessage, setAuthMessage] = useState(getInitialAuthMessage);
+  const [accountDeleteStatus, setAccountDeleteStatus] = useState("idle");
   const [cloudStatus, setCloudStatus] = useState("Authentication required");
   const cloudWorkspaceReadyRef = useRef(false);
   const activeUserIdRef = useRef(null);
@@ -374,6 +377,47 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     }
   }, []);
 
+  const handleDeleteAccount = useCallback(async (confirmation) => {
+    if (!supabase || !user?.id || confirmation !== "DELETE") {
+      setAccountDeleteStatus("confirmation-required");
+      return false;
+    }
+
+    setAccountDeleteStatus("deleting");
+    try {
+      const response = await authenticatedFetch(`${BROKER_API_URL}/api/account`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.deleted !== true) {
+        throw new Error(payload.error || "Account deletion failed.");
+      }
+
+      try {
+        window.localStorage.removeItem(fallbackKey(user.id));
+      } catch {
+        // Account deletion succeeded remotely; local storage cleanup is best effort.
+      }
+      resetWorkspaceRef.current?.();
+      clearStoredSupabaseSession();
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      activeUserIdRef.current = null;
+      remoteRevisionRef.current = 0;
+      cloudWorkspaceReadyRef.current = false;
+      setUser(null);
+      setWorkspaceReady(false);
+      setCloudStatus("Account deleted");
+      setAuthMessage("Your account and cloud workspace were permanently deleted.");
+      setAccountDeleteStatus("deleted");
+      return true;
+    } catch {
+      setAccountDeleteStatus("failed");
+      return false;
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!supabase) {
       return undefined;
@@ -466,6 +510,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   }, [saveWorkspaceToCloud, user, workspacePayload]);
 
   return {
+    accountDeleteStatus,
     authBusy,
     authEmail,
     authMessage,
@@ -474,6 +519,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     authReady,
     cloudStatus,
     handleAuthSubmit,
+    handleDeleteAccount,
     handleLogout,
     handlePasswordReset,
     handlePasswordUpdate,

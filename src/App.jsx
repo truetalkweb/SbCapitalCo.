@@ -143,6 +143,7 @@ export default function App() {
   const requestedMobileDockTab = useMemo(() => getRequestedMobileDockTab(), []);
   const requestedPreset = requestedPresetId ? layoutPresets[requestedPresetId] : null;
   const {
+    accountDeleteStatus,
     liveQuotes,
     wsStatus,
     updateLiveQuote: updateContextLiveQuote,
@@ -866,6 +867,7 @@ export default function App() {
     authReady,
     cloudStatus,
     handleAuthSubmit,
+    handleDeleteAccount,
     handleLogout,
     handlePasswordReset,
     handlePasswordUpdate,
@@ -3884,6 +3886,8 @@ export default function App() {
         saveWorkspaceToCloud={saveWorkspaceToCloud}
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
         requestPasswordReset={handlePasswordReset}
+        deleteAccount={handleDeleteAccount}
+        accountDeleteStatus={accountDeleteStatus}
         resetWorkspace={resetWorkspace}
         brokerConnected={brokerConnected}
         journalEntries={journalEntries}

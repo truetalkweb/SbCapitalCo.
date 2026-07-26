@@ -810,6 +810,8 @@ export default function PremiumWorkspace({
   saveWorkspaceToCloud,
   loadWorkspaceFromCloud,
   requestPasswordReset,
+  deleteAccount,
+  accountDeleteStatus = "idle",
   resetWorkspace,
   brokerConnected,
   journalEntries,
@@ -956,6 +958,7 @@ export default function PremiumWorkspace({
   const [replayActionStatus, setReplayActionStatus] = useState("");
   const [settingsTab, setSettingsTab] = useState("General");
   const [passwordResetStatus, setPasswordResetStatus] = useState("idle");
+  const [accountDeleteConfirmation, setAccountDeleteConfirmation] = useState("");
   const replayChartRef = useRef(null);
 
   const captureReplayScreenshot = () => {
@@ -2569,7 +2572,36 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gap: 10 }}>
             {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Connection management", disabledSetting("Managed by the private backend; credentials are never exposed here")], ["Refresh guidance", <span key="a">Use the terminal Retry control to refresh provider health.</span>]], "Data & Connections")}
             {group("Notification Settings", [["Price alert activity", settingToggle(notificationPreferences.priceAlerts, (value) => updateNotificationPreference("priceAlerts", value), false, "Toggle price alert activity")], ["News catalyst highlights", settingToggle(notificationPreferences.newsCatalysts, (value) => updateNotificationPreference("newsCatalysts", value), false, "Toggle news catalyst highlights")], ["Sound alerts", settingToggle(notificationPreferences.soundAlerts, (value) => updateNotificationPreference("soundAlerts", value), false, "Toggle sound alerts")], ["Delivery scope", disabledSetting("In-app while the terminal is open; no email or push delivery")]], "Notifications")}
-            {group("Security", [["Authentication", <StatusPill key="auth" theme={theme} tone="good">Supabase session</StatusPill>], ["Two-factor authentication", disabledSetting("Configure in Supabase Auth when required")], ["Device management", comingLaterButton("Unavailable", "Device management is not available in this MVP")], ["Password", <div key="password" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><ActionButton theme={theme} onClick={sendPasswordReset} disabled={passwordResetStatus === "sending"}>{passwordResetStatus === "sending" ? "Sending..." : "Send reset email"}</ActionButton>{passwordResetStatus === "sent" && <span role="status" style={{ color: theme.green, fontSize: 11 }}>Reset email sent</span>}{passwordResetStatus === "failed" && <span role="status" style={{ color: theme.amber, fontSize: 11 }}>Reset email could not be sent</span>}</div>]], "Security")}
+            {group("Security", [
+              ["Authentication", <StatusPill key="auth" theme={theme} tone="good">Supabase session</StatusPill>],
+              ["Two-factor authentication", disabledSetting("Configure in Supabase Auth when required")],
+              ["Device management", comingLaterButton("Unavailable", "Device management is not available in this MVP")],
+              ["Password", <div key="password" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><ActionButton theme={theme} onClick={sendPasswordReset} disabled={passwordResetStatus === "sending"}>{passwordResetStatus === "sending" ? "Sending..." : "Send reset email"}</ActionButton>{passwordResetStatus === "sent" && <span role="status" style={{ color: theme.green, fontSize: 11 }}>Reset email sent</span>}{passwordResetStatus === "failed" && <span role="status" style={{ color: theme.amber, fontSize: 11 }}>Reset email could not be sent</span>}</div>],
+              ["Delete account", (
+                <div key="delete-account" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ color: theme.muted, fontSize: 10 }}>Type DELETE to permanently remove your account and cloud workspace.</span>
+                    <input
+                      aria-label="Account deletion confirmation"
+                      autoComplete="off"
+                      value={accountDeleteConfirmation}
+                      onChange={(event) => setAccountDeleteConfirmation(event.target.value)}
+                      placeholder="DELETE"
+                      style={{ width: 180, height: 32, boxSizing: "border-box", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 9px" }}
+                    />
+                  </label>
+                  <ActionButton
+                    theme={theme}
+                    danger
+                    disabled={accountDeleteConfirmation !== "DELETE" || accountDeleteStatus === "deleting"}
+                    onClick={() => deleteAccount?.(accountDeleteConfirmation)}
+                  >
+                    {accountDeleteStatus === "deleting" ? "Deleting..." : "Delete Account"}
+                  </ActionButton>
+                  {accountDeleteStatus === "failed" && <span role="status" style={{ color: theme.red, fontSize: 11 }}>Deletion failed. Retry or contact support.</span>}
+                </div>
+              )],
+            ], "Security")}
             {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", user ? "Use Save to update cloud workspace" : "Local browser storage only"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]], "Data & Connections")}
             {settingsTab === "General" && <PremiumCard theme={theme} title="Current Preferences">
               <div style={{ padding: 14, display: "grid", gap: 10 }}>

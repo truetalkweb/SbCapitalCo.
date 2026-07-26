@@ -83,6 +83,7 @@ ALLOW_LOCAL_CORS=false
 API_RATE_LIMIT=3000
 AI_RATE_LIMIT=20
 ADMIN_API_RATE_LIMIT=60
+ACCOUNT_LIFECYCLE_RATE_LIMIT=5
 PUBLIC_PRODUCT_MODE=true
 ENABLE_PUBLIC_BROKER_ROUTES=false
 LIVE_TRADING_ENABLED=false
@@ -97,11 +98,21 @@ secrets.
 - Free: Dashboard, Scanner, Charts, Watchlist, News, Alerts, Settings, Orders, and
   Positions. Orders and Positions are review-only without supported broker access.
 - Pro: Free plus AI summaries, Replay, and Journal.
-- Premium: Pro plus Risk, Performance, and broker diagnostics/data.
-- Admin: all capabilities plus the protected entitlement-management API.
+- Premium: Pro plus Risk and Performance.
+- Admin: all capabilities plus the protected entitlement-management API and the
+  owner's private broker diagnostics/data.
 
 `past_due` and `cancelled` rows fail closed to Free capabilities. Every protected
-backend route checks both plan rank and server-issued capability.
+backend route checks both plan rank and server-issued capability. Private broker
+routes additionally require the Admin owner plan, preventing public paid accounts
+from reaching the platform owner's Questrade session.
+
+Authenticated users can permanently delete their account from Settings > Security.
+The backend requires an exact `DELETE` confirmation, applies a strict lifecycle
+rate limit, removes the external watchlist when available, and deletes the
+Supabase Auth user. Database-owned workspace and entitlement rows are removed by
+their foreign-key cascades. Existing access tokens can remain valid until expiry,
+so the frontend also clears and signs out the local session immediately.
 
 ## Release Verification
 

@@ -3918,6 +3918,7 @@ export default function App() {
         exportTradeSummaryCsv={exportTradeSummaryCsv}
         entitlements={effectiveEntitlements}
         entitlementsStatus={effectiveEntitlementsStatus}
+        onOpenHelp={openPublicOnboarding}
         onOpenIssueReport={() => setIssueReportOpen(true)}
       />
     );
@@ -5080,6 +5081,7 @@ export default function App() {
           isOpen={publicOnboardingOpen}
           onClose={closePublicOnboarding}
           onDontShowAgain={dismissPublicOnboarding}
+          onReportIssue={() => setIssueReportOpen(true)}
         />
       )}
 

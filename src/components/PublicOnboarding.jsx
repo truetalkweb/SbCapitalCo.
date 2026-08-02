@@ -1,5 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { terminalMonoFont, terminalSansFont } from "../config/terminalConfig";
+import {
+  PUBLIC_INFORMATION_EFFECTIVE_DATE,
+  PUBLIC_INFORMATION_SECTIONS,
+} from "../config/publicInformation";
 
 const steps = [
   {
@@ -27,36 +31,65 @@ const dataSources = [
   ["Provider limited", "API plan limits, rate limits, or cached fallback data may reduce freshness or coverage."],
 ];
 
-const onboardingTabs = [
-  { id: "quick", label: "Quick Start" },
-  { id: "sources", label: "Data Sources" },
-];
+function InformationPanel({ children, id, theme, title }) {
+  return (
+    <section role="tabpanel" id={`public-panel-${id}`} aria-labelledby={`public-tab-${id}`} style={{ display: "grid", gap: 10, color: theme.muted, fontSize: 11.5, lineHeight: 1.55 }}>
+      <h2 style={{ margin: 0, color: theme.text, fontSize: 14 }}>{title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export default function PublicOnboarding({
   theme,
   isOpen,
   onClose,
   onDontShowAgain,
+  onReportIssue,
 }) {
   const [activeView, setActiveView] = useState("quick");
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(null);
 
   function moveTab(direction) {
-    const activeIndex = onboardingTabs.findIndex((tab) => tab.id === activeView);
-    const nextIndex = (activeIndex + direction + onboardingTabs.length) % onboardingTabs.length;
-    setActiveView(onboardingTabs[nextIndex].id);
+    const activeIndex = PUBLIC_INFORMATION_SECTIONS.findIndex((tab) => tab.id === activeView);
+    const nextIndex = (activeIndex + direction + PUBLIC_INFORMATION_SECTIONS.length) % PUBLIC_INFORMATION_SECTIONS.length;
+    setActiveView(PUBLIC_INFORMATION_SECTIONS[nextIndex].id);
   }
 
   useEffect(() => {
     if (!isOpen) return undefined;
 
+    returnFocusRef.current = document.activeElement;
+    window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector('[role="tab"][aria-selected="true"]')?.focus();
+    });
+
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         onClose?.();
+        return;
+      }
+      if (event.key === "Tab" && dialogRef.current) {
+        const controls = [...dialogRef.current.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+        if (!controls.length) return;
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      returnFocusRef.current?.focus?.();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -84,6 +117,7 @@ export default function PublicOnboarding({
       }}
     >
       <div
+        ref={dialogRef}
         className="public-onboarding-panel"
         style={{
           width: "clamp(320px, 36vw, 620px)",
@@ -167,7 +201,7 @@ export default function PublicOnboarding({
             aria-label="Onboarding sections"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(82px, 1fr))",
               gap: "4px",
               padding: "3px",
               border: `1px solid ${theme.borderSoft || theme.border}`,
@@ -175,7 +209,7 @@ export default function PublicOnboarding({
               background: stepBg,
             }}
           >
-            {onboardingTabs.map((tab) => {
+            {PUBLIC_INFORMATION_SECTIONS.map((tab) => {
               const selected = activeView === tab.id;
               return (
               <button
@@ -332,6 +366,48 @@ export default function PublicOnboarding({
             Data can be delayed, cached, incomplete, or limited by provider plans. Scanner and news context are informational only.
           </div>
           </div>
+          )}
+
+          {activeView === "risk" && (
+            <InformationPanel id="risk" theme={theme} title="Risk and market-data disclosure">
+              <p>SbCapitalCo Terminal is an informational research and review workspace. It does not provide investment, legal, tax, or personalized financial advice, and it does not guarantee any outcome.</p>
+              <p>Quotes, charts, scanner ranks, news, catalysts, AI summaries, and derived metrics may be delayed, cached, incomplete, inaccurate, or unavailable. Provider labels and freshness indicators are decision context, not a warranty of accuracy.</p>
+              <p>Paper, replay, review-only orders, risk scores, and simulated results do not reproduce live fills, slippage, fees, liquidity, halts, or market impact. Verify material information with your broker and primary sources before acting.</p>
+              <p>Trading can result in substantial or total loss. You remain responsible for position sizing, suitability, regulatory obligations, and every order submitted outside this terminal.</p>
+            </InformationPanel>
+          )}
+
+          {activeView === "privacy" && (
+            <InformationPanel id="privacy" theme={theme} title="Privacy notice">
+              <p>Effective {PUBLIC_INFORMATION_EFFECTIVE_DATE}. The private beta uses Supabase for authentication and per-user workspace storage. Workspace data can include watchlists, layouts, alerts, paper/replay activity, journal entries, settings, and scanner presets.</p>
+              <p>Authenticated issue reports include your user identifier, report text, workspace name, page path, browser type, viewport, and optional redacted diagnostics. Passwords, access tokens, broker credentials, account numbers, and order payloads are excluded from diagnostics.</p>
+              <p>Service providers may process technical data needed to host the frontend, backend, authentication, market data, news, and AI features. Data is retained while the beta account or operational record is needed; account deletion removes the Supabase account and cascading workspace records, subject to limited security and operational logs.</p>
+              <p>Do not place secrets, broker credentials, or sensitive personal information in notes or issue descriptions. Use Security settings to reset your password or permanently delete your account.</p>
+            </InformationPanel>
+          )}
+
+          {activeView === "terms" && (
+            <InformationPanel id="terms" theme={theme} title="Private beta terms of use">
+              <p>Effective {PUBLIC_INFORMATION_EFFECTIVE_DATE}. Access is provided to evaluate an unfinished private-beta product. Features, providers, limits, and availability may change or be withdrawn without notice.</p>
+              <p>You may use the terminal only lawfully and may not probe, bypass, scrape, resell, disrupt, or attempt unauthorized access to accounts, entitlements, providers, or infrastructure. Keep credentials private and report suspected compromise promptly.</p>
+              <p>No paid checkout or public live-broker execution is enabled in this beta. Any visible order controls are paper, simulated, or review-only unless the product explicitly states otherwise.</p>
+              <p>The service is provided as available without guarantees of uninterrupted operation, market-data accuracy, fitness for a trading purpose, or preservation of unsaved work. Stop using the beta if these terms or risks are unacceptable.</p>
+            </InformationPanel>
+          )}
+
+          {activeView === "support" && (
+            <InformationPanel id="support" theme={theme} title="Support and responsible reporting">
+              <p>For layout, functionality, accessibility, performance, data, or account issues, use the in-app report form. Include what you expected, what happened, and the active workspace; never include passwords, API keys, tokens, or broker credentials.</p>
+              <p>Provider-limited, cached, delayed, or fallback labels describe data quality and are not necessarily incidents. Report persistent mismatches with the ticker, approximate time, and visible source label.</p>
+              <button
+                className="public-focus-control"
+                type="button"
+                onClick={() => { onClose?.(); onReportIssue?.(); }}
+                style={{ height: 34, border: 0, borderRadius: 7, background: `linear-gradient(180deg, ${theme.blue}, #1765c6)`, color: "#fff", cursor: "pointer", fontWeight: 900 }}
+              >
+                Report an issue
+              </button>
+            </InformationPanel>
           )}
 
           <div className="public-onboarding-actions" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>

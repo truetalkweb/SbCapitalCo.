@@ -842,6 +842,7 @@ export default function PremiumWorkspace({
   exportTradeSummaryCsv,
   entitlements = DEFAULT_ENTITLEMENTS,
   entitlementsStatus = "idle",
+  onOpenHelp,
   onOpenIssueReport,
 }) {
   const isNarrowWorkspace = viewportWidth <= 900;
@@ -2492,8 +2493,8 @@ export default function PremiumWorkspace({
         <div style={{ fontSize: 11, marginTop: 5, lineHeight: 1.35 }}>
           {plan === "free" && "Core market terminal access."}
           {plan === "pro" && "AI summaries, replay, and journal."}
-          {plan === "premium" && "Risk, performance, and supported broker data."}
-          {plan === "admin" && "Internal entitlement administration."}
+          {plan === "premium" && "Risk and performance analytics."}
+          {plan === "admin" && "Owner-only administration and private diagnostics."}
         </div>
       </div>
     );
@@ -2623,7 +2624,8 @@ export default function PremiumWorkspace({
                 <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
                   Send a privacy-safe issue report with optional redacted runtime diagnostics. Credentials, tokens, order details, and broker account data are excluded.
                 </div>
-                <div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <ActionButton theme={theme} onClick={onOpenHelp}>Help, Terms & Privacy</ActionButton>
                   <ActionButton theme={theme} active onClick={onOpenIssueReport}>Report Issue</ActionButton>
                 </div>
                 {accountPlan === "admin" && <AdminMonitoringPanel brokerApiUrl={brokerApiUrl} theme={theme} />}

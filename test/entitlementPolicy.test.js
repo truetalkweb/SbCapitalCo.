@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { premiumWorkspaceViews } from "../src/config/premiumNavigation.js";
 import {
   DEFAULT_ENTITLEMENTS,
   canUseFeature,
@@ -40,8 +41,44 @@ test("workspace aliases resolve to their protected capabilities", () => {
   const premium = { plan: "premium" };
 
   assert.equal(canUseWorkspace(pro, "broker"), false);
-  assert.equal(canUseWorkspace(premium, "broker"), true);
+  assert.equal(canUseWorkspace(premium, "broker"), false);
   assert.equal(canUseWorkspace(pro, "portfolio"), true);
+});
+
+test("every public workspace follows the complete plan matrix", () => {
+  const expectedByPlan = {
+    free: ["dashboard", "scanner", "chart-analysis", "watchlist", "news", "alerts", "orders", "positions", "settings"],
+    pro: ["dashboard", "scanner", "chart-analysis", "watchlist", "news", "alerts", "orders", "positions", "replay", "journal", "settings"],
+    premium: ["dashboard", "scanner", "chart-analysis", "watchlist", "news", "alerts", "orders", "positions", "risk", "performance", "replay", "journal", "settings"],
+    admin: ["dashboard", "scanner", "chart-analysis", "watchlist", "news", "alerts", "orders", "positions", "risk", "performance", "replay", "journal", "settings"],
+  };
+  const workspaces = premiumWorkspaceViews.map(({ id }) => id);
+
+  for (const [plan, allowed] of Object.entries(expectedByPlan)) {
+    for (const workspace of workspaces) {
+      assert.equal(canUseWorkspace({ plan }, workspace), allowed.includes(workspace), `${plan}:${workspace}`);
+    }
+  }
+
+  assert.equal(canUseWorkspace({ plan: "premium" }, "broker"), false);
+  assert.equal(canUseWorkspace({ plan: "admin" }, "broker"), true);
+});
+
+test("inactive paid entitlement payload fails closed when server capabilities are Free", () => {
+  const inactive = {
+    plan: "free",
+    assignedPlan: "premium",
+    status: "past_due",
+    capabilities: DEFAULT_ENTITLEMENTS.capabilities,
+  };
+
+  for (const workspace of premiumWorkspaceViews.map(({ id }) => id)) {
+    assert.equal(
+      canUseWorkspace(inactive, workspace),
+      ["dashboard", "scanner", "chart-analysis", "watchlist", "news", "alerts", "orders", "positions", "settings"].includes(workspace),
+      workspace,
+    );
+  }
 });
 
 test("Admin receives the complete frontend workspace surface", () => {

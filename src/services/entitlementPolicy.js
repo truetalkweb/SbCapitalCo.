@@ -27,7 +27,7 @@ export const FEATURE_MIN_PLAN = {
   positions: "free",
   risk: "premium",
   performance: "premium",
-  brokerDiagnostics: "premium",
+  brokerDiagnostics: "admin",
 };
 
 export const WORKSPACE_FEATURES = {

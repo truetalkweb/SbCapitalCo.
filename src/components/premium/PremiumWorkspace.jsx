@@ -30,6 +30,13 @@ import {
 } from "../../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../../utils/storage";
 import {
+  filterMoverRows,
+  filterNewsRows,
+  filterOrderRows,
+  filterWatchlistRows,
+  selectVisibleRow,
+} from "../../utils/premiumWorkspaceViews";
+import {
   DEFAULT_ENTITLEMENTS,
   PLAN_LABELS,
   WORKSPACE_FEATURES,
@@ -917,6 +924,14 @@ export default function PremiumWorkspace({
   const [alertDraftPrice, setAlertDraftPrice] = useState("");
   const [alertDraftDirection, setAlertDraftDirection] = useState("above");
   const [alertView, setAlertView] = useState("Active Alerts");
+  const [watchlistView, setWatchlistView] = useState("Main Watchlist");
+  const [watchlistSearch, setWatchlistSearch] = useState("");
+  const [newsView, setNewsView] = useState("Top News");
+  const [newsSearch, setNewsSearch] = useState("");
+  const [orderView, setOrderView] = useState("All Orders");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [bottomDockView, setBottomDockView] = useState("positions");
+  const [dashboardMoverView, setDashboardMoverView] = useState("Top Movers");
   const defaultLandingTab = premiumPreferences.defaultLandingTab || activeWorkspace || "dashboard";
   const compactMode = Boolean(premiumPreferences.compactMode);
   const scannerAutoRefresh = premiumPreferences.scannerAutoRefresh !== false;
@@ -1111,10 +1126,13 @@ export default function PremiumWorkspace({
     saveSetting("sb_relative_volume_threshold", "0");
     updatePremiumPreference("scannerFilters", next);
   };
-  const selectedStory = headlines.find((item) => item.id === selectedNewsId) || headlines.find((item) => item.symbol === selected.symbol) || headlines[0];
   const selectedAlert = alertRows.find((row) => row.id === selectedAlertSymbol) || alertRows.find((row) => row.symbol === selected.symbol) || alertRows[0];
-  const selectedOrder = orderRows.find((row) => row.id === selectedOrderId) || orderRows.find((row) => row.symbol === selected.symbol) || orderRows[0];
   const selectedPosition = positionRows.find((row) => row.symbol === selectedPositionSymbol) || positionRows.find((row) => row.symbol === selected.symbol) || positionRows[0];
+  const watchlistRows = filterWatchlistRows(dashboard.watchlistRows, watchlistView, watchlistSearch);
+  const newsRows = filterNewsRows(headlines, newsView, newsSearch, dashboard.watchlistRows.map((row) => row.symbol));
+  const visibleOrderRows = filterOrderRows(orderRows, orderView, orderSearch);
+  const selectedStory = selectVisibleRow(newsRows, selectedNewsId, selected.symbol);
+  const selectedOrder = selectVisibleRow(visibleOrderRows, selectedOrderId, selected.symbol);
 
   function prepareReviewAction(label, symbol = selected.symbol) {
     setPremiumDockTab?.("orders");
@@ -1156,21 +1174,58 @@ export default function PremiumWorkspace({
     gap: 10,
     minHeight: 0,
   };
+  const bottomDockTabs = [
+    { id: "positions", label: `Positions (${positionRows.length})` },
+    { id: "orders", label: `Orders (${orderRows.length})` },
+    { id: "alerts", label: `Alerts (${alertRows.length})` },
+  ];
+  const bottomDockConfig = bottomDockView === "orders"
+    ? {
+        rows: orderRows.slice(0, 2),
+        empty: "No authenticated orders",
+        keyField: "id",
+        columns: [
+          { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
+          { key: "side", label: "Side", width: "80px", color: (row) => row.side === "BUY" ? theme.green : theme.red },
+          { key: "qty", label: "Qty", width: "80px", align: "right", mono: true },
+          { key: "price", label: "Price", width: "110px", align: "right", mono: true },
+          { key: "status", label: "Status", width: "130px" },
+        ],
+      }
+    : bottomDockView === "alerts"
+      ? {
+          rows: alertRows.slice(0, 2),
+          empty: "No saved alerts",
+          keyField: "id",
+          columns: [
+            { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
+            { key: "type", label: "Type", width: "130px" },
+            { key: "target", label: "Target", width: "100px", align: "right", mono: true },
+            { key: "status", label: "Status", width: "110px" },
+          ],
+        }
+      : {
+          rows: positionRows.slice(0, 1),
+          empty: "No connected account positions",
+          keyField: "symbol",
+          columns: [
+            { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
+            { key: "side", label: "Side", width: "80px", color: () => theme.green, mono: true },
+            { key: "qty", label: "Qty", width: "80px", align: "right", mono: true },
+            { key: "avg", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => row.avg.toFixed(2) },
+            { key: "last", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => row.last.toFixed(2) },
+            { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => (row.last - row.avg) * row.qty >= 0 ? theme.green : theme.red, render: (row) => money((row.last - row.avg) * row.qty) },
+          ],
+        };
   const bottomDock = (
     <PremiumCard theme={theme} style={{ height: 142, overflow: "hidden" }}>
-      <PremiumTabs theme={theme} tabs={[`Positions (${positionRows.length})`, `Orders (${orderRows.length})`, `Alerts (${alertRows.length})`, "Executions", "Messages"]} active={`Positions (${positionRows.length})`} />
+      <PremiumTabs theme={theme} tabs={bottomDockTabs} active={bottomDockView} onChange={setBottomDockView} />
       <PremiumTable
         theme={theme}
-        columns={[
-          { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
-          { key: "side", label: "Side", width: "80px", color: () => theme.green, mono: true },
-          { key: "qty", label: "Qty", width: "80px", align: "right", mono: true },
-          { key: "avg", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => row.avg.toFixed(2) },
-          { key: "last", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => row.last.toFixed(2) },
-          { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => (row.last - row.avg) * row.qty >= 0 ? theme.green : theme.red, render: (row) => money((row.last - row.avg) * row.qty) },
-        ]}
-        rows={positionRows.slice(0, 1)}
-        emptyMessage="No connected account positions"
+        columns={bottomDockConfig.columns}
+        rows={bottomDockConfig.rows}
+        keyField={bottomDockConfig.keyField}
+        emptyMessage={bottomDockConfig.empty}
         style={{ height: "calc(100% - 40px)" }}
         rowMinHeight={32}
         headerMinHeight={30}
@@ -1218,7 +1273,10 @@ export default function PremiumWorkspace({
   );
   const selectedActions = (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9, marginTop: 16 }}>
-      <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(selected.symbol)}>
+      <ActionButton theme={theme} active onClick={() => {
+        selectMainSymbol?.(selected.symbol);
+        setActiveWorkspace?.("charts");
+      }}>
         Open Chart
       </ActionButton>
       <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", selected.symbol)}>
@@ -1633,8 +1691,8 @@ export default function PremiumWorkspace({
             <PremiumCard theme={theme}>
               <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
                 <SectionTitle theme={theme} title="Watchlist" subtitle="Track symbols, monitor moves, and organize trade ideas." action={<ActionButton theme={theme} onClick={() => addSymbolToWatchlist?.(selected.symbol)}><Edit3 size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />Add Selected</ActionButton>} />
-                <PremiumTabs theme={theme} tabs={["Main Watchlist", "Momentum", "Swing Ideas", "ETFs", "Earnings", "+"]} active="Main Watchlist" />
-                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search symbol..." items={["All Sectors", "Price Any", "Change % Any"]} /></div>
+                <PremiumTabs theme={theme} tabs={["Main Watchlist", "Momentum", "ETFs", "Earnings"]} active={watchlistView} onChange={setWatchlistView} />
+                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search symbol..." value={watchlistSearch} onSearchChange={setWatchlistSearch} items={["All Sectors", "Price Any", "Change % Any"]} /></div>
               </div>
               <PremiumTable
                 theme={theme}
@@ -1650,8 +1708,9 @@ export default function PremiumWorkspace({
                   { key: "catalyst", label: "Context", width: "1fr", render: (row) => row.catalyst || "No confirmed catalyst" },
                   { key: "remove", label: "", width: "42px", align: "center", render: (row) => <button type="button" aria-label={`Remove ${row.symbol} from watchlist`} title={`Remove ${row.symbol}`} onClick={(event) => { event.stopPropagation(); removeWatchlistSymbol?.(row.symbol); }} style={{ width: 28, height: 28, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
                 ]}
-                rows={dashboard.watchlistRows.slice(0, 20)}
+                rows={watchlistRows.slice(0, 20)}
                 selectedKey={selected.symbol}
+                emptyMessage={`No ${watchlistView.toLowerCase()} symbols match the current search.`}
                 onSelect={(row) => selectMainSymbol?.(row.symbol, row, "watchlist-row")}
               />
             </PremiumCard>
@@ -1673,8 +1732,8 @@ export default function PremiumWorkspace({
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
                 <SectionTitle theme={theme} title="News" subtitle="Track market-moving headlines, catalysts, and company news." />
-                <PremiumTabs theme={theme} tabs={["Top News", "Market", "Stocks", "Earnings", "Macro", "Analyst", "Crypto", "Watchlist", "+"]} active="Top News" />
-                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." items={["Impact: All", "Source: All", "Sector: All", "Time: Today"]} /></div>
+                <PremiumTabs theme={theme} tabs={["Top News", "Market", "Stocks", "Earnings", "Macro", "Analyst", "Crypto", "Watchlist"]} active={newsView} onChange={setNewsView} />
+                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." value={newsSearch} onSearchChange={setNewsSearch} items={["Impact: All", "Source: All", "Sector: All", "Time: Today"]} /></div>
               </div>
               <PremiumTable
                 theme={theme}
@@ -1712,9 +1771,10 @@ export default function PremiumWorkspace({
                   { key: "impact", label: "Impact", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.impact === "High" ? "bad" : "warn"}>{row.impact}</StatusPill> },
                   { key: "sentiment", label: "Sentiment", width: "100px", color: (row) => row.sentiment === "Bearish" ? theme.red : theme.green },
                 ]}
-                rows={headlines}
+                rows={newsRows}
                 selectedKey={selectedStory?.id}
                 keyField="id"
+                emptyMessage={`No ${newsView.toLowerCase()} headlines match the current search.`}
                 onSelect={(row) => {
                   setSelectedNewsId(row.id);
                   if (row.symbol) selectMainSymbol?.(row.symbol, row, "news-row");
@@ -1731,7 +1791,10 @@ export default function PremiumWorkspace({
                 <div style={{ color: theme.muted, marginTop: 10 }}>{selectedStory ? `${selectedStory.source} / ${selectedStory.time}` : "Provider feed unavailable"}</div>
                 <div style={{ marginTop: 16, lineHeight: 1.55, color: theme.text }}>{selectedStory?.summary || "No provider summary is available for this headline."}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
-                  <ActionButton theme={theme} active onClick={() => selectMainSymbol?.(selectedStory?.symbol || selected.symbol)}>Open Chart</ActionButton>
+                  <ActionButton theme={theme} active onClick={() => {
+                    selectMainSymbol?.(selectedStory?.symbol || selected.symbol);
+                    setActiveWorkspace?.("charts");
+                  }}>Open Chart</ActionButton>
                   <ActionButton theme={theme} onClick={() => prepareReviewAction("News alert review", selectedStory?.symbol || selected.symbol)}>Alert Review</ActionButton>
                   <ActionButton theme={theme} good onClick={() => addSymbolToWatchlist?.(selectedStory?.symbol || selected.symbol)}>Watch Symbol</ActionButton>
                 </div>
@@ -1780,10 +1843,10 @@ export default function PremiumWorkspace({
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
-              <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><PremiumTabs theme={theme} tabs={["Orders", "All Orders", "Working", "Filled", "Cancelled", "Rejected"]} active="Orders" /><div style={{ marginTop: 14 }}><FilterBar theme={theme} search="All Symbols" items={["All dates"]} /></div></div>
-              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px", mono: true }, { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "BUY" ? theme.green : theme.red, strong: true }, { key: "type", label: "Type", width: "90px" }, { key: "qty", label: "Qty", width: "70px", align: "right", mono: true }, { key: "price", label: "Price", width: "100px", align: "right", mono: true }, { key: "status", label: "Status", width: "140px", render: (row) => <StatusPill theme={theme} tone={row.status === "REJECTED" ? "bad" : row.status.includes("WORK") ? "neutral" : row.status.includes("PART") ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "filled", label: "Filled", width: "80px", align: "right", mono: true }, { key: "remaining", label: "Remaining", width: "100px", align: "right", mono: true }, { key: "tif", label: "TIF", width: "70px" }, { key: "id", label: "Order ID", width: "110px", mono: true }]} rows={orderRows} selectedKey={selectedOrder?.id} keyField="id" onSelect={(row) => { setSelectedOrderId(row.id); selectMainSymbol?.(row.symbol, row, "order-row"); }} />
+              <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><PremiumTabs theme={theme} tabs={["All Orders", "Working", "Filled", "Cancelled", "Rejected"]} active={orderView} onChange={setOrderView} /><div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search symbol, side, or status..." value={orderSearch} onSearchChange={setOrderSearch} items={["All dates"]} /></div></div>
+              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px", mono: true }, { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "BUY" ? theme.green : theme.red, strong: true }, { key: "type", label: "Type", width: "90px" }, { key: "qty", label: "Qty", width: "70px", align: "right", mono: true }, { key: "price", label: "Price", width: "100px", align: "right", mono: true }, { key: "status", label: "Status", width: "140px", render: (row) => <StatusPill theme={theme} tone={row.status === "REJECTED" ? "bad" : row.status.includes("WORK") ? "neutral" : row.status.includes("PART") ? "warn" : "good"}>{row.status}</StatusPill> }, { key: "filled", label: "Filled", width: "80px", align: "right", mono: true }, { key: "remaining", label: "Remaining", width: "100px", align: "right", mono: true }, { key: "tif", label: "TIF", width: "70px" }, { key: "id", label: "Order ID", width: "110px", mono: true }]} rows={visibleOrderRows} selectedKey={selectedOrder?.id} keyField="id" emptyMessage={`No ${orderView.toLowerCase()} match the current search.`} onSelect={(row) => { setSelectedOrderId(row.id); selectMainSymbol?.(row.symbol, row, "order-row"); }} />
             </PremiumCard>
-            <PremiumCard theme={theme} title="Order Activity"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "event", label: "Event", width: "1fr" }, { key: "status", label: "Status", width: "140px", color: () => theme.green }]} rows={orderRows.slice(0, 5).map((row) => ({ time: row.time, event: `${row.symbol} ${row.side} ${row.qty} @ ${row.price}`, status: row.status }))} /></PremiumCard>
+            <PremiumCard theme={theme} title="Order Activity"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "event", label: "Event", width: "1fr" }, { key: "status", label: "Status", width: "140px", color: () => theme.green }]} rows={visibleOrderRows.slice(0, 5).map((row) => ({ time: row.time, event: `${row.symbol} ${row.side} ${row.qty} @ ${row.price}`, status: row.status }))} emptyMessage="No order activity matches this view." /></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Place New Order"><div style={{ padding: 16 }}>{quickOrder.props.children}</div></PremiumCard>
@@ -2742,10 +2805,10 @@ export default function PremiumWorkspace({
     ["News", dashboard.status?.hasNews ? `${dashboard.newsRows.length} headlines` : "Provider limited", dashboard.status?.hasNews ? "good" : "warn"],
     ["Account", dashboard.status?.hasAccountData ? "Connected" : "Review-only", dashboard.status?.hasAccountData ? "good" : "neutral"],
   ];
-  const topMoverRows = [...dashboard.scannerRows]
-    .filter((row) => nullableMoveOf(row) !== null)
-    .sort((a, b) => Math.abs(nullableMoveOf(b)) - Math.abs(nullableMoveOf(a)))
-    .slice(0, 6);
+  const topMoverRows = filterMoverRows(
+    dashboard.scannerRows.filter((row) => nullableMoveOf(row) !== null),
+    dashboardMoverView,
+  ).slice(0, 6);
   const dashboardNewsRows = dashboard.newsRows.length ? dashboard.newsRows : headlines.slice(0, 8);
   const advancingCount = stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) >= 0).length;
   const decliningCount = stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) < 0).length;
@@ -2791,7 +2854,7 @@ export default function PremiumWorkspace({
           <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) minmax(280px, 0.65fr)", minHeight: 0 }}>
             <div style={{ minWidth: 0, borderRight: isNarrowWorkspace ? "none" : `1px solid ${theme.borderSoft || theme.border}` }}>
               <div style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <PremiumTabs theme={theme} tabs={["Top Movers", "Gainers", "Losers", "Active", "Momentum"]} active="Top Movers" />
+                <PremiumTabs theme={theme} tabs={["Top Movers", "Gainers", "Losers", "Active", "Momentum"]} active={dashboardMoverView} onChange={setDashboardMoverView} />
                 <StatusPill theme={theme} tone={dashboard.status?.hasScannerRows ? "good" : "warn"}>
                   {dashboard.status?.hasScannerRows ? "Scanner live" : "Fallback context"}
                 </StatusPill>

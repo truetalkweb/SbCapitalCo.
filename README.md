@@ -1,16 +1,64 @@
-# React + Vite
+# SB Terminal Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite frontend for the SbCapitalCo market-intelligence terminal.
 
-Currently, two official plugins are available:
+## Local development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```powershell
+npm install
+npm run dev
+```
 
-## React Compiler
+The development server defaults to `http://127.0.0.1:5173`. Configure
+`VITE_BROKER_API_URL` to point at the Railway backend when testing real
+provider data.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Premium workspace architecture
 
-## Expanding the ESLint configuration
+- `src/components/premium/PremiumWorkspace.jsx` is the authenticated
+  workspace orchestrator. It normalizes shared data, enforces entitlements,
+  composes shared actions, and routes to focused pages.
+- `src/components/premium/pages/` contains the Charts, Scanner, Watchlist,
+  News, Alerts, Orders, Positions, Risk, Performance, Journal, Replay, and
+  Settings pages.
+- `DashboardMarketIntelligence.jsx` owns the Dashboard page.
+- `PremiumWorkspacePrimitives.jsx` contains the shared card, table, tab,
+  action, metric, status, and detail-rail primitives.
+- `premiumWorkspaceData.js` contains deterministic data adapters and
+  financial display helpers.
+- `src/hooks/usePremiumWorkspaceState.js` owns page-local UI state.
+- `src/hooks/usePremiumWorkspaceViews.js` keeps filtered rows and selected
+  detail records aligned.
+- `src/hooks/usePremiumScannerRows.js` owns scanner universe and filter
+  derivation.
+- `src/hooks/usePremiumWorkspaceActions.js` centralizes chart navigation and
+  review-only order/alert shortcuts.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+All public trading shortcuts remain review-only. Live execution must not be
+introduced through a workspace component.
+
+## Verification
+
+```powershell
+npm run lint
+npm test
+npm run build
+npm run test:e2e
+```
+
+Run the complete release gate with:
+
+```powershell
+npm run release:gate
+```
+
+The Playwright gate renders every public workspace, checks chart canvases,
+selection state, entitlement boundaries, responsive dashboard dimensions, and
+public/protected backend behavior. Responsive dashboard screenshots are written
+to `release-gate-artifacts/`.
+
+## Deployment
+
+Do not deploy directly from an unverified working tree. Run
+`npm run release:gate`, review the generated desktop screenshots, then deploy
+the frontend through the existing Vercel production workflow.

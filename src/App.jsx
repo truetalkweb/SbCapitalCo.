@@ -3855,6 +3855,7 @@ export default function App() {
         setQuantity={setQuantity}
         setOrderSide={setOrderSide}
         setOrderConfirmed={setOrderConfirmed}
+        orderMessage={orderMessage}
         setOrderMessage={setOrderMessage}
         setPremiumDockTab={setPremiumDockTab}
         selectMainSymbol={selectMainSymbol}

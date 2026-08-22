@@ -101,6 +101,13 @@ test("public trading shortcut remains review-only", async ({ page }) => {
   await expect(page.getByTestId("order-message")).toContainText("full order ticket");
 });
 
+test("orders page shows review-only action feedback", async ({ page }) => {
+  await page.goto(fixtureUrl("orders"));
+  await page.getByRole("button", { name: "Buy", exact: true }).click();
+  await expect(page.getByTestId("order-review-status")).toContainText("BUY review prepared");
+  await expect(page.getByTestId("order-review-status")).toContainText("review-only");
+});
+
 test("workspace access follows the Free, Premium, and Admin policy matrix", async ({ page }) => {
   const readAccess = async (plan) => {
     await page.goto(fixtureUrl("dashboard", `&plan=${plan}`));

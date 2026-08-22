@@ -84,6 +84,7 @@ export default function PremiumWorkspace({
   setQuantity,
   setOrderSide,
   setOrderConfirmed,
+  orderMessage,
   setOrderMessage,
   setPremiumDockTab,
   selectMainSymbol,
@@ -751,6 +752,7 @@ export default function PremiumWorkspace({
       <OrdersWorkspacePage
         {...{
           mainTwoCol,
+          orderMessage,
           orderSearch,
           orderView,
           page,

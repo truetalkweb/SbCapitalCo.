@@ -148,6 +148,7 @@ function Harness() {
         setQuantity={setQuantity}
         setOrderSide={() => {}}
         setOrderConfirmed={() => {}}
+        orderMessage={orderMessage}
         setOrderMessage={setOrderMessage}
         selectMainSymbol={(symbol) => setSelectedStock(symbol)}
         addSymbolToWatchlist={() => {}}

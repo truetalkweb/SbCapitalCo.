@@ -5,6 +5,7 @@ import { ActionButton, FilterBar, PremiumCard, PremiumTable, PremiumTabs, Status
 export default function OrdersWorkspacePage({
   mainTwoCol,
       orderSearch,
+      orderMessage,
       orderView,
       page,
       prepareReviewAction,
@@ -31,7 +32,7 @@ export default function OrdersWorkspacePage({
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Place New Order"><div style={{ padding: 16 }}>{quickOrder.props.children}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(num(selectedOrder?.price, selected.price) * num(selectedOrder?.qty, quantity))], ["Mode", "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(num(selectedOrder?.price, selected.price) * num(selectedOrder?.qty, quantity))], ["Mode", "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}{orderMessage ? <div role="status" data-testid="order-review-status" style={{ marginTop: 2, padding: "9px 10px", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.muted, fontSize: 11, lineHeight: 1.45 }}>{orderMessage}</div> : null}</div></PremiumCard>
             <PremiumCard theme={theme} title="Quick Actions">
               <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
                 <ActionButton theme={theme} danger title="Prepare a cancel-orders review" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, padding: "0 7px", whiteSpace: "nowrap", fontSize: 11 }} onClick={() => prepareReviewAction("Cancel orders review", selectedOrder?.symbol || selected.symbol)}><X size={13} />Cancel</ActionButton>
@@ -45,4 +46,3 @@ export default function OrdersWorkspacePage({
     );
   
 }
-

@@ -9,6 +9,16 @@ import {
   isValidWorkspacePayload,
 } from "../services/workspacePayloadPolicy";
 import {
+  getCloudSyncPresentation,
+  getWorkspaceConflictKey,
+  getWorkspaceFallbackKey,
+  getWorkspaceFingerprint,
+  loadWorkspaceFallback,
+  reconcileWorkspacePayloads,
+  saveWorkspaceConflict,
+  saveWorkspaceFallback,
+} from "../services/workspacePersistencePolicy";
+import {
   getSafeAuthReturnPath,
   isSafeInternalReturnPath,
 } from "../services/authNavigationPolicy";
@@ -61,30 +71,6 @@ function getAuthMessage(error, fallback) {
   return fallback;
 }
 
-function fallbackKey(userId) {
-  return `sb_workspace_fallback:${userId}`;
-}
-
-function loadLocalFallback(userId) {
-  try {
-    const payload = JSON.parse(window.localStorage.getItem(fallbackKey(userId)) || "null");
-    return isValidWorkspacePayload(payload) ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveLocalFallback(userId, payload) {
-  if (!isValidWorkspacePayload(payload)) return false;
-  try {
-    window.localStorage.setItem(fallbackKey(userId), JSON.stringify(payload));
-    return true;
-  } catch {
-    // Hardened browsers may disable local storage; cloud persistence still works.
-    return false;
-  }
-}
-
 async function withTimeout(promise, timeoutMs, message) {
   let timeoutId;
   try {
@@ -111,9 +97,12 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   const [authMessage, setAuthMessage] = useState(getInitialAuthMessage);
   const [accountDeleteStatus, setAccountDeleteStatus] = useState("idle");
   const [cloudStatus, setCloudStatus] = useState("Authentication required");
+  const [cloudSyncCode, setCloudSyncCode] = useState("auth_required");
   const cloudWorkspaceReadyRef = useRef(false);
   const activeUserIdRef = useRef(null);
   const remoteRevisionRef = useRef(0);
+  const baseWorkspaceRef = useRef({});
+  const lastPersistedFingerprintRef = useRef(null);
   const legacyWorkspaceSchemaRef = useRef(false);
   const saveQueueRef = useRef(Promise.resolve());
   const applyWorkspaceRef = useRef(applyWorkspace);
@@ -124,11 +113,16 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     resetWorkspaceRef.current = resetWorkspace;
   }, [applyWorkspace, resetWorkspace]);
 
+  const updateCloudStatus = useCallback((code, message) => {
+    setCloudSyncCode(code);
+    setCloudStatus(message || getCloudSyncPresentation(code).label);
+  }, []);
+
   const loadWorkspaceForUser = useCallback(async (currentUser, { quiet = false } = {}) => {
     if (!supabase || !currentUser?.id) return false;
     resetWorkspaceRef.current?.();
-    const localFallback = loadLocalFallback(currentUser.id);
-    if (localFallback) applyWorkspaceRef.current(localFallback);
+    const localFallback = loadWorkspaceFallback(window.localStorage, currentUser.id);
+    if (localFallback?.payload) applyWorkspaceRef.current(localFallback.payload);
     let { data, error } = await withTimeout(
       supabase
         .from(terminalWorkspaceTable)
@@ -155,15 +149,21 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     }
     if (data?.data) {
       remoteRevisionRef.current = Number(data.revision || 1);
+      baseWorkspaceRef.current = data.data;
+      lastPersistedFingerprintRef.current = getWorkspaceFingerprint(data.data);
       applyWorkspaceRef.current(data.data);
-      saveLocalFallback(currentUser.id, data.data);
-      if (!quiet) setCloudStatus("Workspace restored");
+      saveWorkspaceFallback(window.localStorage, currentUser.id, data.data, {
+        revision: remoteRevisionRef.current,
+      });
+      if (!quiet) updateCloudStatus("synced", "Workspace restored");
       return true;
     }
     remoteRevisionRef.current = 0;
-    if (!quiet) setCloudStatus("New workspace");
+    baseWorkspaceRef.current = {};
+    lastPersistedFingerprintRef.current = null;
+    if (!quiet) updateCloudStatus("new", localFallback ? "Local workspace ready to sync" : "New workspace");
     return false;
-  }, []);
+  }, [updateCloudStatus]);
 
   const handleAuthSubmit = useCallback(async (mode = authMode) => {
     setAuthMessage("");
@@ -242,14 +242,34 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     setAuthMessage("Password updated.");
   }, [authPassword]);
 
-  const persistWorkspaceToCloud = useCallback(async ({ quiet = false } = {}) => {
+  const persistWorkspaceToCloud = useCallback(async ({ quiet = false, payload, queuedBase } = {}) => {
     if (!supabase || !user?.id) {
-      setCloudStatus("Sign in to save");
+      updateCloudStatus("auth_required", "Sign in to save");
       return false;
     }
+    let payloadToSave = payload || workspacePayload;
     try {
-      if (!isValidWorkspacePayload(workspacePayload)) {
-        setCloudStatus("Workspace is too large to save");
+      if (
+        queuedBase
+        && getWorkspaceFingerprint(queuedBase) !== getWorkspaceFingerprint(baseWorkspaceRef.current)
+      ) {
+        const queuedReconciliation = reconcileWorkspacePayloads({
+          base: queuedBase,
+          local: payloadToSave,
+          remote: baseWorkspaceRef.current,
+        });
+        if (queuedReconciliation.conflictKeys.length) {
+          saveWorkspaceConflict(
+            window.localStorage,
+            user.id,
+            payloadToSave,
+            queuedReconciliation.conflictKeys,
+          );
+        }
+        payloadToSave = queuedReconciliation.merged;
+      }
+      if (!isValidWorkspacePayload(payloadToSave)) {
+        updateCloudStatus("error", "Workspace is too large to save");
         if (!quiet) pushActivity?.({
           type: "cloud",
           status: "blocked",
@@ -258,18 +278,30 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
         });
         return false;
       }
-      saveLocalFallback(user.id, workspacePayload);
+      const fingerprint = getWorkspaceFingerprint(payloadToSave);
+      saveWorkspaceFallback(window.localStorage, user.id, payloadToSave, {
+        revision: remoteRevisionRef.current,
+      });
       if (typeof navigator !== "undefined" && !navigator.onLine) {
-        setCloudStatus("Offline; changes saved on this device");
+        updateCloudStatus("offline", "Offline; changes saved on this device");
         return false;
       }
-      setCloudStatus("Saving...");
+      if (
+        remoteRevisionRef.current > 0
+        && fingerprint
+        && fingerprint === lastPersistedFingerprintRef.current
+      ) {
+        updateCloudStatus("synced", "Workspace up to date");
+        return true;
+      }
+
+      updateCloudStatus("saving", "Saving...");
       const now = new Date().toISOString();
 
       if (legacyWorkspaceSchemaRef.current) {
         const { error } = await supabase.from(terminalWorkspaceTable).upsert({
           user_id: user.id,
-          data: workspacePayload,
+          data: payloadToSave,
           updated_at: now,
         }, { onConflict: "user_id" });
         if (error) throw error;
@@ -278,7 +310,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
           .from(terminalWorkspaceTable)
           .insert({
             user_id: user.id,
-            data: workspacePayload,
+            data: payloadToSave,
             schema_version: WORKSPACE_SCHEMA_VERSION,
             revision: 1,
             client_updated_at: now,
@@ -286,9 +318,31 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
           .select("revision")
           .single();
         if (error?.code === "23505") {
-          await loadWorkspaceForUser(user);
-          setCloudStatus("Newer cloud workspace restored");
-          return false;
+          const { data: latest, error: latestError } = await supabase
+            .from(terminalWorkspaceTable)
+            .select("data, revision")
+            .eq("user_id", user.id)
+            .single();
+          if (latestError) throw latestError;
+          const { merged, conflictKeys } = reconcileWorkspacePayloads({
+            base: baseWorkspaceRef.current,
+            local: payloadToSave,
+            remote: latest.data,
+          });
+          if (conflictKeys.length) {
+            saveWorkspaceConflict(window.localStorage, user.id, payloadToSave, conflictKeys);
+          }
+          baseWorkspaceRef.current = latest.data;
+          remoteRevisionRef.current = Number(latest.revision || 1);
+          lastPersistedFingerprintRef.current = getWorkspaceFingerprint(latest.data);
+          applyWorkspaceRef.current(merged);
+          updateCloudStatus(
+            conflictKeys.length ? "conflict" : "synced",
+            conflictKeys.length
+              ? "Cloud conflict reconciled; local backup retained"
+              : "Newer cloud workspace restored",
+          );
+          return !conflictKeys.length;
         }
         if (error) throw error;
         remoteRevisionRef.current = Number(data?.revision || 1);
@@ -297,7 +351,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
         const { data, error } = await supabase
           .from(terminalWorkspaceTable)
           .update({
-            data: workspacePayload,
+            data: payloadToSave,
             schema_version: WORKSPACE_SCHEMA_VERSION,
             client_updated_at: now,
           })
@@ -307,16 +361,75 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
           .maybeSingle();
         if (error) throw error;
         if (!data) {
-          await loadWorkspaceForUser(user);
-          setCloudStatus("Newer cloud workspace restored");
-          return false;
+          const { data: latest, error: latestError } = await supabase
+            .from(terminalWorkspaceTable)
+            .select("data, revision")
+            .eq("user_id", user.id)
+            .single();
+          if (latestError) throw latestError;
+          if (!isValidWorkspacePayload(latest?.data)) {
+            throw new Error("Latest cloud workspace is invalid.");
+          }
+
+          const { merged, conflictKeys } = reconcileWorkspacePayloads({
+            base: baseWorkspaceRef.current,
+            local: payloadToSave,
+            remote: latest.data,
+          });
+          if (conflictKeys.length) {
+            saveWorkspaceConflict(window.localStorage, user.id, payloadToSave, conflictKeys);
+          }
+
+          const latestRevision = Number(latest.revision || expectedRevision + 1);
+          const mergedFingerprint = getWorkspaceFingerprint(merged);
+          const remoteFingerprint = getWorkspaceFingerprint(latest.data);
+          if (mergedFingerprint !== remoteFingerprint) {
+            const { data: mergedRow, error: mergeError } = await supabase
+              .from(terminalWorkspaceTable)
+              .update({
+                data: merged,
+                schema_version: WORKSPACE_SCHEMA_VERSION,
+                client_updated_at: new Date().toISOString(),
+              })
+              .eq("user_id", user.id)
+              .eq("revision", latestRevision)
+              .select("revision")
+              .maybeSingle();
+            if (mergeError) throw mergeError;
+            if (!mergedRow) {
+              updateCloudStatus("conflict", "Workspace changed again; local backup retained");
+              return false;
+            }
+            remoteRevisionRef.current = Number(mergedRow.revision || latestRevision + 1);
+          } else {
+            remoteRevisionRef.current = latestRevision;
+          }
+
+          baseWorkspaceRef.current = merged;
+          lastPersistedFingerprintRef.current = mergedFingerprint;
+          saveWorkspaceFallback(window.localStorage, user.id, merged, {
+            revision: remoteRevisionRef.current,
+          });
+          applyWorkspaceRef.current(merged);
+          updateCloudStatus(
+            conflictKeys.length ? "conflict" : "synced",
+            conflictKeys.length
+              ? "Cloud conflict reconciled; local backup retained"
+              : "Cloud changes merged",
+          );
+          return true;
         }
         remoteRevisionRef.current = Number(data.revision || expectedRevision + 1);
       }
-      setCloudStatus("Workspace saved");
+      baseWorkspaceRef.current = payloadToSave;
+      lastPersistedFingerprintRef.current = fingerprint;
+      saveWorkspaceFallback(window.localStorage, user.id, payloadToSave, {
+        revision: remoteRevisionRef.current,
+      });
+      updateCloudStatus("synced", "Workspace saved");
       return true;
     } catch {
-      setCloudStatus("Cloud save unavailable; local fallback retained");
+      updateCloudStatus("error", "Cloud save unavailable; local fallback retained");
       if (!quiet) pushActivity?.({
         type: "cloud",
         status: "failed",
@@ -325,20 +438,22 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       });
       return false;
     }
-  }, [loadWorkspaceForUser, pushActivity, user, workspacePayload]);
+  }, [pushActivity, updateCloudStatus, user, workspacePayload]);
 
   const saveWorkspaceToCloud = useCallback((options = {}) => {
-    const operation = () => persistWorkspaceToCloud(options);
+    const payload = workspacePayload;
+    const queuedBase = baseWorkspaceRef.current;
+    const operation = () => persistWorkspaceToCloud({ ...options, payload, queuedBase });
     saveQueueRef.current = saveQueueRef.current.then(operation, operation);
     return saveQueueRef.current;
-  }, [persistWorkspaceToCloud]);
+  }, [persistWorkspaceToCloud, workspacePayload]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const handleOffline = () => setCloudStatus("Offline; changes saved on this device");
+    const handleOffline = () => updateCloudStatus("offline", "Offline; changes saved on this device");
     const handleOnline = () => {
       if (!user?.id) return;
-      setCloudStatus("Back online; syncing...");
+      updateCloudStatus("saving", "Back online; syncing...");
       saveWorkspaceToCloud({ quiet: true });
     };
     window.addEventListener("offline", handleOffline);
@@ -347,35 +462,37 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [saveWorkspaceToCloud, user?.id]);
+  }, [saveWorkspaceToCloud, updateCloudStatus, user?.id]);
 
   const loadWorkspaceFromCloud = useCallback(async () => {
     if (!user) return false;
     try {
       return await loadWorkspaceForUser(user);
     } catch {
-      setCloudStatus("Cloud load unavailable; local fallback active");
+      updateCloudStatus("error", "Cloud load unavailable; local fallback active");
       return false;
     }
-  }, [loadWorkspaceForUser, user]);
+  }, [loadWorkspaceForUser, updateCloudStatus, user]);
 
   const handleLogout = useCallback(async () => {
     clearStoredSupabaseSession();
     activeUserIdRef.current = null;
     remoteRevisionRef.current = 0;
+    baseWorkspaceRef.current = {};
+    lastPersistedFingerprintRef.current = null;
     legacyWorkspaceSchemaRef.current = false;
     cloudWorkspaceReadyRef.current = false;
     setUser(null);
     setWorkspaceReady(false);
     setAuthMessage("");
-    setCloudStatus("Authentication required");
+    updateCloudStatus("auth_required", "Authentication required");
     if (supabase) {
       await Promise.race([
         supabase.auth.signOut({ scope: "local" }).catch(() => undefined),
         new Promise((resolve) => window.setTimeout(resolve, 1500)),
       ]);
     }
-  }, []);
+  }, [updateCloudStatus]);
 
   const handleDeleteAccount = useCallback(async (confirmation) => {
     if (!supabase || !user?.id || confirmation !== "DELETE") {
@@ -396,7 +513,8 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       }
 
       try {
-        window.localStorage.removeItem(fallbackKey(user.id));
+        window.localStorage.removeItem(getWorkspaceFallbackKey(user.id));
+        window.localStorage.removeItem(getWorkspaceConflictKey(user.id));
       } catch {
         // Account deletion succeeded remotely; local storage cleanup is best effort.
       }
@@ -405,10 +523,12 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
       activeUserIdRef.current = null;
       remoteRevisionRef.current = 0;
+      baseWorkspaceRef.current = {};
+      lastPersistedFingerprintRef.current = null;
       cloudWorkspaceReadyRef.current = false;
       setUser(null);
       setWorkspaceReady(false);
-      setCloudStatus("Account deleted");
+      updateCloudStatus("auth_required", "Account deleted");
       setAuthMessage("Your account and cloud workspace were permanently deleted.");
       setAccountDeleteStatus("deleted");
       return true;
@@ -416,7 +536,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       setAccountDeleteStatus("failed");
       return false;
     }
-  }, [user]);
+  }, [updateCloudStatus, user]);
 
   useEffect(() => {
     if (!supabase) {
@@ -474,21 +594,24 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
   useEffect(() => {
     if (!user?.id) {
       activeUserIdRef.current = null;
+      remoteRevisionRef.current = 0;
+      baseWorkspaceRef.current = {};
+      lastPersistedFingerprintRef.current = null;
       return;
     }
     if (activeUserIdRef.current === user.id) return;
     let cancelled = false;
     cloudWorkspaceReadyRef.current = false;
     activeUserIdRef.current = user.id;
-    setCloudStatus("Restoring workspace...");
+    updateCloudStatus("restoring", "Restoring workspace...");
     const restoreTimeoutId = window.setTimeout(() => {
       if (cancelled || cloudWorkspaceReadyRef.current) return;
       cloudWorkspaceReadyRef.current = true;
       setWorkspaceReady(true);
-      setCloudStatus("Cloud restore timed out; local fallback active");
+      updateCloudStatus("error", "Cloud restore timed out; local fallback active");
     }, 7000);
     loadWorkspaceForUser(user)
-      .catch(() => setCloudStatus("Cloud unavailable; local fallback active"))
+      .catch(() => updateCloudStatus("error", "Cloud unavailable; local fallback active"))
       .finally(() => {
         if (cancelled) return;
         window.clearTimeout(restoreTimeoutId);
@@ -499,7 +622,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       cancelled = true;
       window.clearTimeout(restoreTimeoutId);
     };
-  }, [loadWorkspaceForUser, user]);
+  }, [loadWorkspaceForUser, updateCloudStatus, user]);
 
   useEffect(() => {
     if (!user?.id || !cloudWorkspaceReadyRef.current) return undefined;
@@ -518,6 +641,8 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     authPassword,
     authReady,
     cloudStatus,
+    cloudSyncCode,
+    cloudSyncPresentation: getCloudSyncPresentation(cloudSyncCode),
     handleAuthSubmit,
     handleDeleteAccount,
     handleLogout,

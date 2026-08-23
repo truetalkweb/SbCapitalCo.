@@ -18,6 +18,8 @@ export default function SettingsWorkspacePage({
       isNarrowWorkspace,
       layoutMode,
       loadWorkspaceFromCloud,
+      cloudStatus,
+      cloudSyncPresentation,
       notificationPreferences,
       onOpenHelp,
       onOpenIssueReport,
@@ -240,7 +242,7 @@ export default function SettingsWorkspacePage({
                 </div>
               )],
             ], "Security")}
-            {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={user ? "good" : "warn"}>{user ? "Enabled" : "Local"}</StatusPill>], ["Last backup", user ? "Use Save to update cloud workspace" : "Local browser storage only"], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]], "Data & Connections")}
+            {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={cloudSyncPresentation?.tone || (user ? "good" : "warn")}>{cloudSyncPresentation?.label || (user ? "Synced" : "Local only")}</StatusPill>], ["Status", cloudStatus || (user ? "Cloud workspace ready" : "Local browser storage only")], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]], "Data & Connections")}
             {settingsTab === "General" && <PremiumCard theme={theme} title="Current Preferences">
               <div style={{ padding: 14, display: "grid", gap: 10 }}>
                 {[
@@ -274,4 +276,3 @@ export default function SettingsWorkspacePage({
     );
   
 }
-

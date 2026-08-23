@@ -70,7 +70,10 @@ import {
   fetchCurrentEntitlements,
 } from "./services/entitlements";
 import { getTradingActionMode } from "./services/tradingActionPolicy";
-import { serializeWatchlistForWorkspace } from "./services/workspacePayloadPolicy";
+import {
+  createWorkspacePayload,
+  serializeWatchlistForWorkspace,
+} from "./services/workspacePayloadPolicy";
 import { buildCsv } from "./utils/csvExport";
 import {
   getDefaultIndicatorState,
@@ -712,7 +715,7 @@ export default function App() {
   );
 
   const workspacePayload = useMemo(
-    () => ({
+    () => createWorkspacePayload({
       selectedStock,
       secondarySymbol,
       liveStocks: cloudWatchlist,
@@ -866,6 +869,7 @@ export default function App() {
     authPassword,
     authReady,
     cloudStatus,
+    cloudSyncPresentation,
     handleAuthSubmit,
     handleDeleteAccount,
     handleLogout,
@@ -3886,6 +3890,8 @@ export default function App() {
         handleLogout={handleLogout}
         saveWorkspaceToCloud={saveWorkspaceToCloud}
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
+        cloudStatus={cloudStatus}
+        cloudSyncPresentation={cloudSyncPresentation}
         requestPasswordReset={handlePasswordReset}
         deleteAccount={handleDeleteAccount}
         accountDeleteStatus={accountDeleteStatus}

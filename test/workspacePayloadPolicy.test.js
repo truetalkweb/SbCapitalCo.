@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   MAX_WORKSPACE_BYTES,
+  PERSISTED_WORKSPACE_FIELDS,
+  createWorkspacePayload,
   getWorkspacePayloadSize,
   isValidWorkspacePayload,
   serializeWatchlistForWorkspace,
@@ -43,4 +45,24 @@ test("cloud watchlist serialization ignores transient quote changes", () => {
 
   assert.deepEqual(first, [{ symbol: "AAPL" }, { symbol: "NVDA" }]);
   assert.deepEqual(next, first);
+});
+
+test("workspace contract includes every user-owned terminal capability", () => {
+  const values = Object.fromEntries(PERSISTED_WORKSPACE_FIELDS.map((field) => [field, `${field}-value`]));
+  const payload = createWorkspacePayload(values);
+
+  assert.deepEqual(Object.keys(payload), [...PERSISTED_WORKSPACE_FIELDS]);
+  [
+    "liveStocks",
+    "alerts",
+    "journalEntries",
+    "journalDraft",
+    "premiumPreferences",
+    "layoutMode",
+    "gridMode",
+    "scannerPresets",
+    "activeScannerPreset",
+    "replayBookmarks",
+    "replayNotes",
+  ].forEach((field) => assert.equal(payload[field], `${field}-value`));
 });

@@ -164,6 +164,10 @@ function Harness() {
         premiumPreferences={premiumPreferences}
         setPremiumPreferences={setPremiumPreferences}
         user={{ id: "release-user", email: "release@example.com" }}
+        cloudStatus="Workspace up to date"
+        cloudSyncPresentation={{ label: "Synced", tone: "good" }}
+        saveWorkspaceToCloud={() => Promise.resolve(true)}
+        loadWorkspaceFromCloud={() => Promise.resolve(true)}
         journalEntries={[]}
         replayTrades={[]}
         replayStats={{}}

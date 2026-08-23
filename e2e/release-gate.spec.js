@@ -108,6 +108,15 @@ test("orders page shows review-only action feedback", async ({ page }) => {
   await expect(page.getByTestId("order-review-status")).toContainText("review-only");
 });
 
+test("settings reports the actual cloud workspace state", async ({ page }) => {
+  await page.goto(fixtureUrl("settings"));
+  await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();
+  await expect(page.getByText("Synced", { exact: true })).toBeVisible();
+  await expect(page.getByText("Workspace up to date", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Load", exact: true })).toBeEnabled();
+});
+
 test("workspace access follows the Free, Premium, and Admin policy matrix", async ({ page }) => {
   const readAccess = async (plan) => {
     await page.goto(fixtureUrl("dashboard", `&plan=${plan}`));

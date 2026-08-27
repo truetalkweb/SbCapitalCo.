@@ -1,7 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
-import { loadSetting } from "../utils/storage";
+import { loadSetting } from "../utils/storage.js";
 
-export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [] }) {
+export function shouldTriggerPriceAlert(alert, price, enabled = true) {
+  if (!enabled || !alert?.active || !Number.isFinite(price)) return false;
+  return alert.direction === "below" ? price <= Number(alert.trigger) : price >= Number(alert.trigger);
+}
+
+function playTerminalAlertSound() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 740;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.16);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.17);
+    oscillator.addEventListener("ended", () => context.close().catch(() => {}), { once: true });
+  } catch {
+    // Sound is optional and can be blocked by browser autoplay policy.
+  }
+}
+
+export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [], alertActivityEnabled = true, soundAlertsEnabled = false }) {
   const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
   const [alertInput, setAlertInput] = useState("");
   const [alertDirection, setAlertDirection] = useState("above");
@@ -84,6 +111,8 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
   }, []);
 
   useEffect(() => {
+    if (!alertActivityEnabled) return undefined;
+
     const quoteMap = new Map(
       [...quotes, selectedStockData]
         .filter(Boolean)
@@ -96,56 +125,49 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
     const now = new Date().toISOString();
 
     const timeout = window.setTimeout(() => {
-      setAlerts((prev) => {
-        let changed = false;
-        const nextAlerts = prev.map((alert) => {
-          if (!alert.active) return alert;
-          const price = quoteMap.get(String(alert.symbol || "").toUpperCase());
-          if (!Number.isFinite(price)) return alert;
+      let changed = false;
+      let shouldPlaySound = false;
+      const nextAlerts = alerts.map((alert) => {
+        const price = quoteMap.get(String(alert.symbol || "").toUpperCase());
+        if (!shouldTriggerPriceAlert(alert, price, alertActivityEnabled)) return alert;
 
-          const triggered =
-            alert.direction === "above"
-              ? price >= alert.trigger
-              : price <= alert.trigger;
+        changed = true;
+        shouldPlaySound = shouldPlaySound || soundAlertsEnabled;
+        if (
+          alertNotifications &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          new Notification(`${alert.symbol} alert triggered`, {
+            body: `${alert.direction} $${Number(alert.trigger).toFixed(2)}`,
+          });
+        }
 
-          if (!triggered) return alert;
-
-          changed = true;
-          if (
-            alertNotifications &&
-            "Notification" in window &&
-            Notification.permission === "granted"
-          ) {
-            new Notification(`${alert.symbol} alert triggered`, {
-              body: `${alert.direction} $${Number(alert.trigger).toFixed(2)}`,
-            });
-          }
-
-          return {
-            ...alert,
-            active: false,
-            triggeredAt: now,
-            lastTriggerPrice: price,
-            history: [
-              {
-                id: crypto.randomUUID(),
-                type: "triggered",
-                price,
-                trigger: alert.trigger,
-                direction: alert.direction,
-                occurredAt: now,
-              },
-              ...(Array.isArray(alert.history) ? alert.history : []),
-            ].slice(0, 20),
-          };
-        });
-
-        return changed ? nextAlerts : prev;
+        return {
+          ...alert,
+          active: false,
+          triggeredAt: now,
+          lastTriggerPrice: price,
+          history: [
+            {
+              id: crypto.randomUUID(),
+              type: "triggered",
+              price,
+              trigger: alert.trigger,
+              direction: alert.direction,
+              occurredAt: now,
+            },
+            ...(Array.isArray(alert.history) ? alert.history : []),
+          ].slice(0, 20),
+        };
       });
+
+      if (changed) setAlerts(nextAlerts);
+      if (shouldPlaySound) playTerminalAlertSound();
     }, 0);
 
     return () => window.clearTimeout(timeout);
-  }, [alertNotifications, alerts, quotes, selectedStockData]);
+  }, [alertActivityEnabled, alertNotifications, alerts, quotes, selectedStockData, soundAlertsEnabled]);
 
   return {
     alertDirection,

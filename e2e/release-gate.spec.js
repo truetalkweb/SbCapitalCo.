@@ -136,6 +136,20 @@ test("trading preferences update real review defaults and shortcut state", async
   await expect(page.getByTestId("order-message")).toContainText("disabled");
 });
 
+test("notification preferences control alert monitoring and catalyst emphasis", async ({ page }) => {
+  await page.goto(fixtureUrl("alerts", "&alertsActive=0"));
+  await expect(page.getByText("Monitoring paused", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved rules remain intact", { exact: false })).toBeVisible();
+  await expect(page.getByText("Queued", { exact: true }).first()).toBeVisible();
+
+  await page.goto(fixtureUrl("news", "&newsHighlights=1"));
+  await expect(page.getByText("Catalyst highlights on", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Catalyst highlight").first()).toBeVisible();
+
+  const watchlistNews = page.getByRole("heading", { name: "Watchlist News", exact: true }).locator("xpath=ancestor::section[1]");
+  await expect(watchlistNews.locator('[data-symbol="NVDA"] [role="cell"]').first()).toContainText("NVDA");
+});
+
 test("settings exports and explicitly confirms portable workspace restore", async ({ page }) => {
   await page.goto(fixtureUrl("settings"));
   await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();

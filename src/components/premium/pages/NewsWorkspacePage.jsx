@@ -4,6 +4,7 @@ import { ActionButton, FilterBar, PremiumCard, PremiumTable, PremiumTabs, Sectio
 export default function NewsWorkspacePage({
   addSymbolToWatchlist,
       mainTwoCol,
+      newsCatalystHighlights,
       newsRows,
       newsSearch,
       newsView,
@@ -26,7 +27,7 @@ export default function NewsWorkspacePage({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
-                <SectionTitle theme={theme} title="News" subtitle="Track market-moving headlines, catalysts, and company news." />
+                <SectionTitle theme={theme} title="News" subtitle="Track market-moving headlines, catalysts, and company news." action={newsCatalystHighlights ? <StatusPill theme={theme} tone="good">Catalyst highlights on</StatusPill> : null} />
                 <PremiumTabs theme={theme} tabs={["Top News", "Market", "Stocks", "Earnings", "Macro", "Analyst", "Crypto", "Watchlist"]} active={newsView} onChange={setNewsView} />
                 <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." value={newsSearch} onSearchChange={setNewsSearch} items={["Impact: All", "Source: All", "Sector: All", "Time: Today"]} /></div>
               </div>
@@ -57,7 +58,7 @@ export default function NewsWorkspacePage({
                           outlineOffset: 3,
                         }}
                       >
-                        {row.headline}<span style={{ color: theme.blue, fontSize: 10, marginLeft: 5 }}>OPEN</span>
+                        {newsCatalystHighlights && row.impact === "High" && <Star aria-label="Catalyst highlight" size={12} color={theme.amber} fill={theme.amber} style={{ verticalAlign: "-1px", marginRight: 7 }} />}{row.headline}<span style={{ color: theme.blue, fontSize: 10, marginLeft: 5 }}>OPEN</span>
                       </a>
                     ) : row.headline,
                   },
@@ -80,7 +81,7 @@ export default function NewsWorkspacePage({
             <PremiumCard theme={theme} title="Watchlist News">{scannerTable(stocks.slice(0, 4))}</PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            <PremiumCard theme={theme} title="Selected Story" action={<Star size={18} color={theme.blue} fill={theme.blue} />}>
+            <PremiumCard theme={theme} title="Selected Story" action={<Star size={18} color={newsCatalystHighlights ? theme.blue : theme.muted} fill={newsCatalystHighlights ? theme.blue : "none"} />}>
               <div style={{ padding: 18 }}>
                 <h2 style={{ margin: 0, fontSize: 22 }}>{selectedStory?.headline || "No story selected"}</h2>
                 <div style={{ color: theme.muted, marginTop: 10 }}>{selectedStory ? `${selectedStory.source} / ${selectedStory.time}` : "Provider feed unavailable"}</div>
@@ -103,4 +104,3 @@ export default function NewsWorkspacePage({
     );
   
 }
-

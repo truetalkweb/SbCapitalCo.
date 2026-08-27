@@ -35,7 +35,7 @@ const stocks = [
 ];
 
 const news = [
-  { id: "n1", symbol: "NVDA", relatedTicker: "NVDA", headline: "Nvidia extends AI infrastructure partnership", source: "Market News", timestamp: "2026-08-05T16:00:00.000Z", summary: "Demand remains firm across accelerator infrastructure.", url: "https://example.com/nvda", category: "Stocks" },
+  { id: "n1", symbol: "NVDA", relatedTicker: "NVDA", headline: "Nvidia extends AI infrastructure partnership", source: "Market News", timestamp: "2026-08-05T16:00:00.000Z", summary: "Demand remains firm across accelerator infrastructure.", url: "https://example.com/nvda", category: "Stocks", impact: "High", sentiment: "Bullish" },
   { id: "n2", symbol: "AAPL", relatedTicker: "AAPL", headline: "Apple receives analyst upgrade before earnings", source: "Market News", timestamp: "2026-08-05T15:45:00.000Z", summary: "The analyst raised the price target on services demand.", url: "https://example.com/aapl", category: "Earnings" },
   { id: "n3", symbol: "SPY", relatedTicker: "SPY", headline: "Fed rate outlook moves broad indexes", source: "Market News", timestamp: "2026-08-05T15:30:00.000Z", summary: "Rates and economic data are driving the session.", url: "https://example.com/market", category: "Macro" },
 ];
@@ -108,7 +108,15 @@ function Harness() {
   const [scannerTab, setScannerTab] = useState("Gainers");
   const [timeframe, setTimeframe] = useState("1m");
   const [orderMessage, setOrderMessage] = useState("");
-  const [premiumPreferences, setPremiumPreferences] = useState({ compactMode: false, scannerAutoRefresh: true, notificationPreferences: {} });
+  const [premiumPreferences, setPremiumPreferences] = useState({
+    compactMode: false,
+    scannerAutoRefresh: true,
+    notificationPreferences: {
+      priceAlerts: params.get("alertsActive") !== "0",
+      newsCatalysts: params.get("newsHighlights") === "1",
+      soundAlerts: false,
+    },
+  });
   const selectedStockData = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
 
   return (

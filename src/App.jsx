@@ -618,6 +618,8 @@ export default function App() {
     selectedStock,
     selectedStockData,
     quotes: allSymbols,
+    alertActivityEnabled: premiumPreferences.notificationPreferences?.priceAlerts !== false,
+    soundAlertsEnabled: premiumPreferences.notificationPreferences?.soundAlerts === true,
   });
 
   const replayBuy = useCallback(() => {

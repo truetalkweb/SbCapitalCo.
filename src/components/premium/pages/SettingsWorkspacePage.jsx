@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import AdminMonitoringPanel from "../../AdminMonitoringPanel";
 import { terminalSansFont } from "../../../config/terminalConfig";
 import { PLAN_LABELS, normalizePlan } from "../../../services/entitlements";
@@ -14,10 +15,12 @@ export default function SettingsWorkspacePage({
       defaultLandingTab,
       deleteAccount,
       entitlements,
+      exportWorkspaceBackup,
       gridMode,
       isNarrowWorkspace,
       layoutMode,
       loadWorkspaceFromCloud,
+      importWorkspaceBackup,
       cloudStatus,
       cloudSyncPresentation,
       notificationPreferences,
@@ -49,6 +52,35 @@ export default function SettingsWorkspacePage({
       updatePremiumPreference,
       user
 }) {
+    const backupInputRef = useRef(null);
+    const [backupStatus, setBackupStatus] = useState("");
+    const [stagedBackup, setStagedBackup] = useState(null);
+
+    const clearStagedBackup = () => {
+      setStagedBackup(null);
+      if (backupInputRef.current) backupInputRef.current.value = "";
+    };
+
+    const handleBackupExport = () => {
+      try {
+        exportWorkspaceBackup?.();
+        setBackupStatus("Workspace backup downloaded.");
+      } catch (error) {
+        setBackupStatus(error?.message || "Workspace backup could not be exported.");
+      }
+    };
+
+    const handleBackupRestore = async () => {
+      if (!stagedBackup) return;
+      setBackupStatus("Restoring workspace backup...");
+      try {
+        const result = await importWorkspaceBackup?.(stagedBackup);
+        setBackupStatus(`${result?.fieldCount || "Validated"} workspace fields restored. Cloud sync will follow automatically.`);
+        clearStagedBackup();
+      } catch (error) {
+        setBackupStatus(error?.message || "Workspace backup could not be restored.");
+      }
+    };
     const selectStyle = {
       width: 170,
       height: 30,
@@ -154,12 +186,15 @@ export default function SettingsWorkspacePage({
         </div>
       </PremiumCard>
     ) : null;
+    const showPrimaryColumn = ["General", "Trading", "Layout"].includes(settingsTab);
+    const showSecondaryColumn = ["General", "Notifications", "Data & Connections", "Security"].includes(settingsTab);
+    const useSplitColumns = settingsTab === "General" && !isNarrowWorkspace;
     return (
       <div style={page}>
         <SectionTitle theme={theme} title="Settings" />
         <PremiumTabs theme={theme} tabs={["General", "Trading", "Layout", "Notifications", "Data & Connections", "Security"]} active={settingsTab} onChange={setSettingsTab} />
-        <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.05fr) minmax(360px, 0.9fr)", gap: 10, marginTop: 12 }}>
-          <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: useSplitColumns ? "minmax(0, 1.05fr) minmax(360px, 0.9fr)" : "minmax(0, 1fr)", gap: 10, marginTop: 12 }}>
+          {showPrimaryColumn && <div style={{ display: "grid", gap: 10 }}>
             {settingsTab === "General" && <PremiumCard theme={theme} title="Account & Plan">
               <div style={{ padding: 16, display: "grid", gap: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -208,8 +243,8 @@ export default function SettingsWorkspacePage({
               ["Minimal", "1", "2"],
               ["Risk", "2", "4"],
             ].map(([label, nextLayout, nextGrid]) => <button key={label} type="button" onClick={() => { setLayoutMode?.(nextLayout); setGridMode?.(nextGrid); setOrderMessage?.(`${label} layout applied.`); }} style={{ minHeight: 72, border: `1px solid ${layoutMode === nextLayout && gridMode === nextGrid ? theme.blue : theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, color: theme.text, textAlign: "left", padding: 12, cursor: "pointer" }}>{label}<div style={{ color: theme.muted, fontSize: 11, marginTop: 5 }}>{nextLayout === "1" ? "Single chart workspace" : `${nextGrid}-chart workspace`}</div></button>)}</div></PremiumCard>}
-          </div>
-          <div style={{ display: "grid", gap: 10 }}>
+          </div>}
+          {showSecondaryColumn && <div style={{ display: "grid", gap: 10 }}>
             {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Connection management", disabledSetting("Managed by the private backend; credentials are never exposed here")], ["Refresh guidance", <span key="a">Use the terminal Retry control to refresh provider health.</span>]], "Data & Connections")}
             {group("Notification Settings", [["Price alert activity", settingToggle(notificationPreferences.priceAlerts, (value) => updateNotificationPreference("priceAlerts", value), false, "Toggle price alert activity")], ["News catalyst highlights", settingToggle(notificationPreferences.newsCatalysts, (value) => updateNotificationPreference("newsCatalysts", value), false, "Toggle news catalyst highlights")], ["Sound alerts", settingToggle(notificationPreferences.soundAlerts, (value) => updateNotificationPreference("soundAlerts", value), false, "Toggle sound alerts")], ["Delivery scope", disabledSetting("In-app while the terminal is open; no email or push delivery")]], "Notifications")}
             {group("Security", [
@@ -242,7 +277,34 @@ export default function SettingsWorkspacePage({
                 </div>
               )],
             ], "Security")}
-            {group("Backup & Sync", [["Cloud sync", <StatusPill key="c" theme={theme} tone={cloudSyncPresentation?.tone || (user ? "good" : "warn")}>{cloudSyncPresentation?.label || (user ? "Synced" : "Local only")}</StatusPill>], ["Status", cloudStatus || (user ? "Cloud workspace ready" : "Local browser storage only")], ["Actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>]], "Data & Connections")}
+            {group("Backup & Sync", [
+              ["Cloud sync", <StatusPill key="c" theme={theme} tone={cloudSyncPresentation?.tone || (user ? "good" : "warn")}>{cloudSyncPresentation?.label || (user ? "Synced" : "Local only")}</StatusPill>],
+              ["Status", cloudStatus || (user ? "Cloud workspace ready" : "Local browser storage only")],
+              ["Cloud actions", <span key="sync"><ActionButton theme={theme} onClick={saveWorkspaceToCloud}>Save</ActionButton> <ActionButton theme={theme} onClick={loadWorkspaceFromCloud}>Load</ActionButton> <ActionButton theme={theme} onClick={resetWorkspace}>Reset</ActionButton></span>],
+              ["Portable backup", (
+                <div key="portable-backup" style={{ display: "grid", justifyItems: "end", gap: 7 }}>
+                  <input
+                    ref={backupInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    aria-label="Select workspace backup"
+                    onChange={(event) => {
+                      setStagedBackup(event.target.files?.[0] || null);
+                      setBackupStatus(event.target.files?.[0] ? "Backup selected. Confirm restore to replace the current workspace." : "");
+                    }}
+                    style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}
+                  />
+                  <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <ActionButton theme={theme} onClick={handleBackupExport}>Export Backup</ActionButton>
+                    <ActionButton theme={theme} onClick={() => backupInputRef.current?.click()}>Import Backup</ActionButton>
+                    {stagedBackup && <ActionButton theme={theme} active onClick={handleBackupRestore}>Restore Selected</ActionButton>}
+                    {stagedBackup && <ActionButton theme={theme} onClick={() => { clearStagedBackup(); setBackupStatus("Restore cancelled."); }}>Cancel</ActionButton>}
+                  </div>
+                  {stagedBackup && <span style={{ color: theme.text, fontSize: 11 }}>{stagedBackup.name}</span>}
+                  {backupStatus && <span role="status" style={{ color: backupStatus.includes("could not") || backupStatus.includes("invalid") || backupStatus.includes("not an") ? theme.amber : theme.muted, fontSize: 11, maxWidth: 460, lineHeight: 1.4 }}>{backupStatus}</span>}
+                </div>
+              )],
+            ], "Data & Connections")}
             {settingsTab === "General" && <PremiumCard theme={theme} title="Current Preferences">
               <div style={{ padding: 14, display: "grid", gap: 10 }}>
                 {[
@@ -270,7 +332,7 @@ export default function SettingsWorkspacePage({
                 {accountPlan === "admin" && <AdminMonitoringPanel brokerApiUrl={brokerApiUrl} theme={theme} />}
               </div>
             </PremiumCard>}
-          </div>
+          </div>}
         </div>
       </div>
     );

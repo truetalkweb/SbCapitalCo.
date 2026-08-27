@@ -74,6 +74,10 @@ import {
   createWorkspacePayload,
   serializeWatchlistForWorkspace,
 } from "./services/workspacePayloadPolicy";
+import {
+  parseWorkspaceBackup,
+  serializeWorkspaceBackup,
+} from "./services/workspaceBackupPolicy";
 import { buildCsv } from "./utils/csvExport";
 import {
   getDefaultIndicatorState,
@@ -1800,8 +1804,46 @@ export default function App() {
 
     link.download = filename;
     link.href = url;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function exportWorkspaceBackup() {
+    const serialized = serializeWorkspaceBackup(workspacePayload);
+    if (!serialized) throw new Error("The current workspace could not be prepared for export.");
+
+    downloadFile(
+      `sb-terminal-workspace-${new Date().toISOString().slice(0, 10)}.json`,
+      serialized,
+      "application/json;charset=utf-8"
+    );
+    pushActivity({
+      type: "workspace",
+      status: "success",
+      title: "Workspace Backup Exported",
+      detail: "A private local workspace backup was downloaded.",
+    });
+    return true;
+  }
+
+  async function importWorkspaceBackup(file) {
+    if (!file || typeof file.text !== "function") {
+      throw new Error("Select a valid JSON workspace backup.");
+    }
+
+    const parsed = parseWorkspaceBackup(await file.text());
+    if (!parsed.ok) throw new Error(parsed.error);
+
+    applyWorkspace(parsed.payload);
+    pushActivity({
+      type: "workspace",
+      status: "success",
+      title: "Workspace Backup Restored",
+      detail: `${parsed.fieldCount} workspace fields were restored and queued for sync.`,
+    });
+    return parsed;
   }
 
   function exportJournalCsv() {
@@ -3890,6 +3932,8 @@ export default function App() {
         handleLogout={handleLogout}
         saveWorkspaceToCloud={saveWorkspaceToCloud}
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
+        exportWorkspaceBackup={exportWorkspaceBackup}
+        importWorkspaceBackup={importWorkspaceBackup}
         cloudStatus={cloudStatus}
         cloudSyncPresentation={cloudSyncPresentation}
         requestPasswordReset={handlePasswordReset}

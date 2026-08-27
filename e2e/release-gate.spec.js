@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { Buffer } from "node:buffer";
 
 import { expect, test } from "@playwright/test";
 
@@ -115,6 +116,25 @@ test("settings reports the actual cloud workspace state", async ({ page }) => {
   await expect(page.getByText("Workspace up to date", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Load", exact: true })).toBeEnabled();
+  const backupWidth = await page.getByRole("heading", { name: "Backup & Sync", exact: true }).evaluate((heading) => heading.closest("section")?.getBoundingClientRect().width || 0);
+  expect(backupWidth).toBeGreaterThan(900);
+});
+
+test("settings exports and explicitly confirms portable workspace restore", async ({ page }) => {
+  await page.goto(fixtureUrl("settings"));
+  await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();
+
+  await page.getByRole("button", { name: "Export Backup", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Workspace backup exported");
+
+  await page.getByLabel("Select workspace backup").setInputFiles({
+    name: "sb-terminal-workspace.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify({ marker: "fixture" })),
+  });
+  await expect(page.getByText("Confirm restore to replace the current workspace", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Restore Selected", exact: true }).click();
+  await expect(page.getByText("3 workspace fields restored", { exact: false })).toBeVisible();
 });
 
 test("workspace access follows the Free, Premium, and Admin policy matrix", async ({ page }) => {

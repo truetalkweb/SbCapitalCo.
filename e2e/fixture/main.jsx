@@ -168,6 +168,8 @@ function Harness() {
         cloudSyncPresentation={{ label: "Synced", tone: "good" }}
         saveWorkspaceToCloud={() => Promise.resolve(true)}
         loadWorkspaceFromCloud={() => Promise.resolve(true)}
+        exportWorkspaceBackup={() => setOrderMessage("Workspace backup exported")}
+        importWorkspaceBackup={() => Promise.resolve({ fieldCount: 3 })}
         journalEntries={[]}
         replayTrades={[]}
         replayStats={{}}

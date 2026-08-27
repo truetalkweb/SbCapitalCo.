@@ -3,7 +3,9 @@ import { money, num } from "../premiumWorkspaceData";
 import { ActionButton, EmptyWorkspace, MetricTile, PremiumCard, PremiumTable, SectionTitle, SeriesSparkline } from "../PremiumWorkspacePrimitives";
 
 export default function PerformanceWorkspacePage({
+  exportDailyReport,
   exportTradeSummaryCsv,
+  exportWeeklyReport,
       isNarrowWorkspace,
       journalRows,
       page,
@@ -52,11 +54,16 @@ export default function PerformanceWorkspacePage({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Performance Summary"><div style={{ padding: 14, display: "grid", gap: 12 }}>{[["Recorded Net P&L", money(performanceValues.reduce((a, b) => a + b, 0))], ["Average Win", money(avgWin)], ["Average Loss", money(-avgLoss)], ["Profit Factor", profitFactor === null ? "Unavailable" : profitFactor.toFixed(2)], ["Account Return", "Unavailable"], ["Alpha", "Unavailable"], ["Sharpe Ratio", "Unavailable"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between" }}><span>{a}</span><b>{b}</b></div>)}</div></PremiumCard>
             <PremiumCard theme={theme} title="Risk Metrics"><div style={{ padding: 14, display: "grid", gap: 12 }}><div>Max drawdown {money(-maxDrawdown)}</div><div>Best trade {money(Math.max(0, ...performanceValues))}</div><div>Worst trade {money(Math.min(0, ...performanceValues))}</div></div></PremiumCard>
-            <PremiumCard theme={theme} title="Export Reports"><div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><ActionButton theme={theme} disabled title="PDF report export is not wired yet">PDF <Download size={14} /></ActionButton><ActionButton theme={theme} onClick={exportTradeSummaryCsv}>CSV <Download size={14} /></ActionButton></div></PremiumCard>
+            <PremiumCard theme={theme} title="Export Reports">
+              <div style={{ padding: 14, display: "grid", gap: 8 }}>
+                <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report <Download size={14} /></ActionButton>
+                <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review <Download size={14} /></ActionButton>
+                <ActionButton theme={theme} onClick={exportTradeSummaryCsv}>Trade Summary CSV <Download size={14} /></ActionButton>
+              </div>
+            </PremiumCard>
           </div>
         </div>
       </div>
     );
   
 }
-

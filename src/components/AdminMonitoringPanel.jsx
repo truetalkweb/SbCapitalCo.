@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Trash2 } from "lucide-react";
 import { authenticatedFetch } from "../services/authenticatedRequest";
+import { adminMonitoringErrorMessage, readAdminJsonResponse } from "../services/adminMonitoringPolicy";
 
 function titleCase(value) {
   return String(value || "unknown").replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -16,11 +17,13 @@ export default function AdminMonitoringPanel({ brokerApiUrl, theme }) {
         authenticatedFetch(`${brokerApiUrl}/api/admin/monitoring`),
         authenticatedFetch(`${brokerApiUrl}/api/admin/issues?limit=8`),
       ]);
-      if (!monitoringResponse.ok || !issuesResponse.ok) throw new Error("Monitoring data is temporarily unavailable.");
-      const [monitoring, issues] = await Promise.all([monitoringResponse.json(), issuesResponse.json()]);
+      const [monitoring, issues] = await Promise.all([
+        readAdminJsonResponse(monitoringResponse),
+        readAdminJsonResponse(issuesResponse),
+      ]);
       setState({ status: "ready", monitoring, reports: issues.reports || [], message: "" });
     } catch (error) {
-      setState({ status: "failed", monitoring: null, reports: [], message: error.message || "Monitoring data is temporarily unavailable." });
+      setState({ status: "failed", monitoring: null, reports: [], message: adminMonitoringErrorMessage(error) });
     }
   }, [brokerApiUrl]);
 
@@ -36,8 +39,8 @@ export default function AdminMonitoringPanel({ brokerApiUrl, theme }) {
         reports: current.reports.filter((report) => report.id !== reportId),
         message: "",
       }));
-    } catch (error) {
-      setState((current) => ({ ...current, message: error.message || "Issue report could not be removed." }));
+    } catch {
+      setState((current) => ({ ...current, message: "Issue report could not be removed." }));
     }
   };
 

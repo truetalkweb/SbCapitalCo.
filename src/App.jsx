@@ -3967,6 +3967,8 @@ export default function App() {
         removeJournalEntry={removeJournalEntry}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
+        exportDailyReport={exportDailyReport}
+        exportWeeklyReport={exportWeeklyReport}
         entitlements={effectiveEntitlements}
         entitlementsStatus={effectiveEntitlementsStatus}
         onOpenHelp={openPublicOnboarding}

@@ -170,6 +170,10 @@ function Harness() {
         loadWorkspaceFromCloud={() => Promise.resolve(true)}
         exportWorkspaceBackup={() => setOrderMessage("Workspace backup exported")}
         importWorkspaceBackup={() => Promise.resolve({ fieldCount: 3 })}
+        exportDailyReport={() => setOrderMessage("Daily report exported")}
+        exportWeeklyReport={() => setOrderMessage("Weekly report exported")}
+        exportTradeSummaryCsv={() => setOrderMessage("Trade summary exported")}
+        exportJournalCsv={() => setOrderMessage("Journal CSV exported")}
         journalEntries={[]}
         replayTrades={[]}
         replayStats={{}}

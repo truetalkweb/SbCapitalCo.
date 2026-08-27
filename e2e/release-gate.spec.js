@@ -137,6 +137,21 @@ test("settings exports and explicitly confirms portable workspace restore", asyn
   await expect(page.getByText("3 workspace fields restored", { exact: false })).toBeVisible();
 });
 
+test("performance and journal report controls are functional", async ({ page }) => {
+  await page.goto(fixtureUrl("performance"));
+  await page.getByRole("button", { name: "Daily Report", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Daily report exported");
+  await page.getByRole("button", { name: "Weekly Review", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Weekly report exported");
+  await page.getByRole("button", { name: "Trade Summary CSV", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Trade summary exported");
+
+  await page.goto(fixtureUrl("journal"));
+  await page.getByRole("button", { name: "Export CSV", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Journal CSV exported");
+  await expect(page.getByText("Recorded Net P&L", { exact: true })).toBeVisible();
+});
+
 test("workspace access follows the Free, Premium, and Admin policy matrix", async ({ page }) => {
   const readAccess = async (plan) => {
     await page.goto(fixtureUrl("dashboard", `&plan=${plan}`));

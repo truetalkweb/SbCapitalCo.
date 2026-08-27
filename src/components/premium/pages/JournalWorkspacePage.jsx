@@ -5,7 +5,9 @@ import { ActionButton, FilterBar, MetricTile, PremiumCard, PremiumTable, Premium
 
 export default function JournalWorkspacePage({
   addJournalEntry,
+      exportDailyReport,
       exportJournalCsv,
+      exportWeeklyReport,
       isNarrowWorkspace,
       journalDraft,
       journalNet,
@@ -32,10 +34,12 @@ export default function JournalWorkspacePage({
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
               <ActionButton theme={theme} onClick={() => setJournalDraft?.((current) => ({ ...current, symbol: selectedStock, setup: "", review: "", result: "Review", grade: "B" }))}>Clear Draft</ActionButton>
               <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Trade</ActionButton>
               <ActionButton theme={theme} onClick={exportJournalCsv}>Export CSV</ActionButton>
+              <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
+              <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
             </div>
           </div>
           <PremiumCard theme={theme}>
@@ -100,12 +104,12 @@ export default function JournalWorkspacePage({
               <PremiumCard theme={theme} title="Equity Curve">
                 <div style={{ padding: 16, height: 310 }}>
                   <div style={{ width: 170, marginBottom: 12 }}>
-                    <ActionButton theme={theme} disabled title="Journal equity metric switching is not wired in this pass">Net Liquidation</ActionButton>
+                    <StatusPill theme={theme} tone="neutral">Recorded Net P&amp;L</StatusPill>
                   </div>
                   <div style={{ height: 220, borderLeft: `1px solid ${theme.borderSoft || theme.border}`, borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingTop: 12 }}>
                     <SeriesSparkline theme={theme} values={journalPnls} height={190} />
                   </div>
-                  <div style={{ textAlign: "center", color: theme.muted, fontSize: 12, marginTop: 8 }}>Net Liquidation</div>
+                  <div style={{ textAlign: "center", color: theme.muted, fontSize: 12, marginTop: 8 }}>Cumulative recorded trade P&amp;L</div>
                 </div>
               </PremiumCard>
               <PremiumCard theme={theme} title="Trades By Outcome">
@@ -169,4 +173,3 @@ export default function JournalWorkspacePage({
     );
   
 }
-

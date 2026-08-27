@@ -148,6 +148,8 @@ export default function PremiumWorkspace({
   removeJournalEntry,
   exportJournalCsv,
   exportTradeSummaryCsv,
+  exportDailyReport,
+  exportWeeklyReport,
   entitlements = DEFAULT_ENTITLEMENTS,
   entitlementsStatus = "idle",
   onOpenHelp,
@@ -817,6 +819,8 @@ export default function PremiumWorkspace({
       <PerformanceWorkspacePage
         {...{
           exportTradeSummaryCsv,
+          exportDailyReport,
+          exportWeeklyReport,
           isNarrowWorkspace,
           journalRows,
           page,
@@ -834,7 +838,9 @@ export default function PremiumWorkspace({
       <JournalWorkspacePage
         {...{
           addJournalEntry,
+          exportDailyReport,
           exportJournalCsv,
+          exportWeeklyReport,
           isNarrowWorkspace,
           journalDraft,
           journalNet,

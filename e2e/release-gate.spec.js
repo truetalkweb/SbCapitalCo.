@@ -147,9 +147,34 @@ test("performance and journal report controls are functional", async ({ page }) 
   await expect(page.getByTestId("order-message")).toContainText("Trade summary exported");
 
   await page.goto(fixtureUrl("journal"));
-  await page.getByRole("button", { name: "Export CSV", exact: true }).click();
-  await expect(page.getByTestId("order-message")).toContainText("Journal CSV exported");
   await expect(page.getByText("Recorded Net P&L", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Exports", exact: true }).click();
+  await page.getByRole("button", { name: "Journal CSV", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Journal CSV exported");
+});
+
+test("positions, risk, and journal secondary tabs expose real views", async ({ page }) => {
+  const failures = guardRuntime(page);
+
+  await page.goto(fixtureUrl("positions"));
+  await page.getByRole("tab", { name: "Allocations", exact: true }).click();
+  await expect(page.getByRole("columnheader", { name: "Portfolio %", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Closed Positions", exact: true }).click();
+  await expect(page.getByText("No closed-position history", { exact: true })).toBeVisible();
+
+  await page.goto(fixtureUrl("risk"));
+  await page.getByRole("tab", { name: "Exposure", exact: true }).click();
+  await expect(page.getByRole("columnheader", { name: "Portfolio Weight", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Stress Test", exact: true }).click();
+  await expect(page.getByText("Stress model unavailable", { exact: true })).toBeVisible();
+
+  await page.goto(fixtureUrl("journal"));
+  await page.getByRole("tab", { name: "Exports", exact: true }).click();
+  await expect(page.getByText("Journal & Performance Exports", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Daily Report", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Daily report exported");
+
+  expect(failures).toEqual([]);
 });
 
 test("workspace access follows the Free, Premium, and Admin policy matrix", async ({ page }) => {

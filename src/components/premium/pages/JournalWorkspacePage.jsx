@@ -12,10 +12,12 @@ export default function JournalWorkspacePage({
       journalDraft,
       journalNet,
       journalRows,
+      journalView,
       page,
       removeJournalEntry,
       selectedStock,
       setJournalDraft,
+      setJournalView,
       theme
 }) {
     const wins = journalRows.filter((row) => row.outcome === "Win").length;
@@ -29,6 +31,9 @@ export default function JournalWorkspacePage({
     const journalAvgLoss = losses ? journalGrossLoss / losses : 0;
     const journalProfitFactor = journalGrossLoss ? (journalGrossProfit / journalGrossLoss).toFixed(2) : "Unavailable";
     const breakeven = journalRows.filter((row) => num(row.pnl) === 0).length;
+    const showDraft = journalView === "Overview" || journalView === "Trades";
+    const showStatistics = journalView === "Overview" || journalView === "Statistics";
+    const showTrades = journalView === "Overview" || journalView === "Trades";
     return (
       <div style={page}>
         <div style={{ display: "grid", gap: 10 }}>
@@ -37,18 +42,15 @@ export default function JournalWorkspacePage({
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
               <ActionButton theme={theme} onClick={() => setJournalDraft?.((current) => ({ ...current, symbol: selectedStock, setup: "", review: "", result: "Review", grade: "B" }))}>Clear Draft</ActionButton>
               <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Trade</ActionButton>
-              <ActionButton theme={theme} onClick={exportJournalCsv}>Export CSV</ActionButton>
-              <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
-              <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
             </div>
           </div>
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
-            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Setups", "Daily Log", "Notes", "Lessons", "Statistics", "Exports"]} active="Overview" />
-              <FilterBar theme={theme} items={["All recorded dates", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />
+            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
+              {journalView === "Trades" && <FilterBar theme={theme} items={["All recorded dates", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />}
             </div>
           </PremiumCard>
-          <PremiumCard theme={theme} title="Prepared Journal Draft">
+          {showDraft && <PremiumCard theme={theme} title="Prepared Journal Draft">
               <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "120px 180px 100px 130px minmax(220px, 1fr)", gap: 12, alignItems: "end" }}>
                 {[
                   ["Symbol", "symbol", journalDraft.symbol || selectedStock],
@@ -81,8 +83,8 @@ export default function JournalWorkspacePage({
                   <input aria-label="Journal review" value={journalDraft.review || ""} placeholder="What happened and what will you improve?" onChange={(event) => setJournalDraft?.((current) => ({ ...current, review: event.target.value }))} style={{ height: 34, minWidth: 0, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 9px" }} />
                 </label>
               </div>
-            </PremiumCard>
-            <PremiumCard theme={theme}>
+            </PremiumCard>}
+            {showStatistics && <PremiumCard theme={theme}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))" }}>
                 {[
                   ["Net P&L", money(journalNet), journalNet >= 0 ? "good" : "bad"],
@@ -99,8 +101,8 @@ export default function JournalWorkspacePage({
                   <MetricTile key={label} theme={theme} label={label} value={value} tone={tone} detail={detail} />
                 ))}
               </div>
-            </PremiumCard>
-            <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) 300px 0.85fr", gap: 10 }}>
+            </PremiumCard>}
+            {showStatistics && <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) 300px 0.85fr", gap: 10 }}>
               <PremiumCard theme={theme} title="Equity Curve">
                 <div style={{ padding: 16, height: 310 }}>
                   <div style={{ width: 170, marginBottom: 12 }}>
@@ -140,8 +142,8 @@ export default function JournalWorkspacePage({
                   })}
                 </div>
               </PremiumCard>
-            </div>
-            <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
+            </div>}
+            {showTrades && <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[
@@ -167,7 +169,15 @@ export default function JournalWorkspacePage({
                 <span>{journalRows.length ? `Showing 1 to ${Math.min(journalRows.length, 8)} of ${journalRows.length} trades` : "No recorded trades"}</span>
                 {journalRows.length > 8 ? <span style={{ fontFamily: terminalMonoFont }}>1 2 3 4 5 ...</span> : null}
               </div>
-            </PremiumCard>
+            </PremiumCard>}
+            {journalView === "Exports" && <PremiumCard theme={theme} title="Journal & Performance Exports">
+              <div style={{ padding: 16, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+                <ActionButton theme={theme} onClick={exportJournalCsv}>Journal CSV</ActionButton>
+                <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
+                <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
+              </div>
+              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports contain only locally recorded journal and review data. Daily and weekly reports are generated as portable Markdown files.</div>
+            </PremiumCard>}
         </div>
       </div>
     );

@@ -14,6 +14,9 @@ export function usePremiumWorkspaceState() {
   const [newsSearch, setNewsSearch] = useState("");
   const [orderView, setOrderView] = useState("All Orders");
   const [orderSearch, setOrderSearch] = useState("");
+  const [positionView, setPositionView] = useState("Open Positions");
+  const [riskView, setRiskView] = useState("Overview");
+  const [journalView, setJournalView] = useState("Overview");
   const [bottomDockView, setBottomDockView] = useState("positions");
   const [replayIndicatorMenuOpen, setReplayIndicatorMenuOpen] = useState(false);
   const [replaySettingsOpen, setReplaySettingsOpen] = useState(false);
@@ -33,6 +36,9 @@ export function usePremiumWorkspaceState() {
     newsView,
     orderSearch,
     orderView,
+    positionView,
+    riskView,
+    journalView,
     passwordResetStatus,
     replayActionStatus,
     replayChartRef,
@@ -52,6 +58,9 @@ export function usePremiumWorkspaceState() {
     setNewsView,
     setOrderSearch,
     setOrderView,
+    setPositionView,
+    setRiskView,
+    setJournalView,
     setPasswordResetStatus,
     setReplayActionStatus,
     setReplayIndicatorMenuOpen,

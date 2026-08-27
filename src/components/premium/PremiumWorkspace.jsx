@@ -275,6 +275,9 @@ export default function PremiumWorkspace({
   const scannerAutoRefresh = premiumPreferences.scannerAutoRefresh !== false;
   const relativeVolumeThreshold = String(premiumPreferences.relativeVolumeThreshold ?? "1.50");
   const riskWarnings = premiumPreferences.riskWarnings !== false;
+  const hotkeysEnabled = premiumPreferences.hotkeysEnabled !== false;
+  const defaultOrderType = premiumPreferences.defaultOrderType || "LIMIT";
+  const defaultTif = premiumPreferences.defaultTif || "DAY";
   const notificationPreferences = {
     priceAlerts: true,
     newsCatalysts: false,
@@ -539,11 +542,11 @@ export default function PremiumWorkspace({
     <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0, overflow: "hidden" }}>
       <div style={{ padding: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 62px 76px 82px", gap: 7, minWidth: 0 }}>
-          {["Symbol", "Shares", "Order Type", "Limit Price"].map((label, index) => (
+          {["Symbol", "Shares", "Order Type", defaultOrderType === "LIMIT" ? "Limit Price" : "Review Price"].map((label, index) => (
             <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase", minWidth: 0 }}>
               {label}
               <input
-                value={index === 0 ? selectedStock : index === 1 ? quantity : index === 2 ? "LIMIT" : num(selected.price).toFixed(2)}
+                value={index === 0 ? selectedStock : index === 1 ? quantity : index === 2 ? defaultOrderType : defaultOrderType === "LIMIT" ? num(selected.price).toFixed(2) : "Market"}
                 onChange={(event) => index === 1 && setQuantity?.(Number(event.target.value) || 1)}
                 readOnly={index !== 1}
                 style={{ width: "100%", minWidth: 0, boxSizing: "border-box", height: 31, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, padding: "0 7px", fontFamily: terminalMonoFont }}
@@ -562,7 +565,7 @@ export default function PremiumWorkspace({
                 setOrderSide?.(side);
                 setOrderConfirmed?.(false);
                 setPremiumDockTab?.("orders");
-                setOrderMessage?.(`${side} review prepared for ${selectedStock}. This shortcut is review-only.`);
+                setOrderMessage?.(`${side} review prepared for ${selectedStock}. Type ${defaultOrderType}, TIF ${defaultTif}. This shortcut is review-only.`);
               }}
             >
               {side === "BUY" ? "Buy" : "Sell"}
@@ -925,6 +928,8 @@ export default function PremiumWorkspace({
           brokerConnected,
           chartIndicators,
           compactMode,
+          defaultOrderType,
+          defaultTif,
           defaultLandingTab,
           deleteAccount,
           entitlements,
@@ -944,6 +949,7 @@ export default function PremiumWorkspace({
           relativeVolumeThreshold,
           resetWorkspace,
           riskWarnings,
+          hotkeysEnabled,
           saveWorkspaceToCloud,
           scannerAutoRefresh,
           sendPasswordReset,

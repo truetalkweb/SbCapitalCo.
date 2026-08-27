@@ -229,6 +229,9 @@ export default function App() {
     scannerAutoRefresh: true,
     relativeVolumeThreshold: "1.50",
     riskWarnings: true,
+    hotkeysEnabled: true,
+    defaultOrderType: "LIMIT",
+    defaultTif: "DAY",
     notificationPreferences: {
       priceAlerts: true,
       newsCatalysts: false,
@@ -1318,6 +1321,9 @@ export default function App() {
       scannerAutoRefresh: true,
       relativeVolumeThreshold: "1.50",
       riskWarnings: true,
+      hotkeysEnabled: true,
+      defaultOrderType: "LIMIT",
+      defaultTif: "DAY",
       notificationPreferences: {
         priceAlerts: true,
         newsCatalysts: false,
@@ -2203,6 +2209,8 @@ export default function App() {
 
   useEffect(() => {
     function handleHotkeys(event) {
+      if (premiumPreferences.hotkeysEnabled === false) return;
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setCommandPaletteOpen((open) => !open);
@@ -2243,7 +2251,7 @@ export default function App() {
     window.addEventListener("keydown", handleHotkeys);
 
     return () => window.removeEventListener("keydown", handleHotkeys);
-  }, [setGridMode, setLayoutMode]);
+  }, [premiumPreferences.hotkeysEnabled, setGridMode, setLayoutMode]);
 
   useEffect(() => {
     return subscribeToSymbols(trackedSymbols);

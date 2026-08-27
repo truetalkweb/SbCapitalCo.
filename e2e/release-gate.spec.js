@@ -120,6 +120,22 @@ test("settings reports the actual cloud workspace state", async ({ page }) => {
   expect(backupWidth).toBeGreaterThan(900);
 });
 
+test("trading preferences update real review defaults and shortcut state", async ({ page }) => {
+  await page.goto(fixtureUrl("settings"));
+  await page.getByRole("tab", { name: "Trading", exact: true }).click();
+
+  await page.getByLabel("Default order type").selectOption("MARKET");
+  await expect(page.getByTestId("order-message")).toContainText("MARKET");
+  await page.getByLabel("Default time in force").selectOption("GTC");
+  await expect(page.getByTestId("order-message")).toContainText("GTC");
+
+  const hotkeys = page.getByRole("button", { name: "Toggle keyboard shortcuts" });
+  await expect(hotkeys).toHaveAttribute("aria-pressed", "true");
+  await hotkeys.click();
+  await expect(hotkeys).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByTestId("order-message")).toContainText("disabled");
+});
+
 test("settings exports and explicitly confirms portable workspace restore", async ({ page }) => {
   await page.goto(fixtureUrl("settings"));
   await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();

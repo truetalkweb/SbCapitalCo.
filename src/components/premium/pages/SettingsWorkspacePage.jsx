@@ -12,6 +12,8 @@ export default function SettingsWorkspacePage({
       brokerConnected,
       chartIndicators,
       compactMode,
+      defaultOrderType,
+      defaultTif,
       defaultLandingTab,
       deleteAccount,
       entitlements,
@@ -31,6 +33,7 @@ export default function SettingsWorkspacePage({
       relativeVolumeThreshold,
       resetWorkspace,
       riskWarnings,
+      hotkeysEnabled,
       saveWorkspaceToCloud,
       scannerAutoRefresh,
       sendPasswordReset,
@@ -224,10 +227,10 @@ export default function SettingsWorkspacePage({
               ["Currency display", settingSelect("Currency display", "USD", ["USD"], null, true)],
             ])}
             {group("Trading Preferences", [
-              ["Default order type", disabledSetting("Review-only until broker execution is enabled")],
+              ["Default order type", settingSelect("Default order type", defaultOrderType, [["MARKET", "Market review"], ["LIMIT", "Limit review"]], (value) => { updatePremiumPreference("defaultOrderType", value); setOrderMessage?.(`Default review order type saved: ${value}.`); })],
               ["Confirm before order", settingToggle(true, null, true, "Confirm before order")],
-              ["Default TIF", disabledSetting("Review-only")],
-              ["Hotkeys enabled", disabledSetting()],
+              ["Default TIF", settingSelect("Default time in force", defaultTif, [["DAY", "Day"], ["GTC", "Good till cancelled"]], (value) => { updatePremiumPreference("defaultTif", value); setOrderMessage?.(`Default review time in force saved: ${value}.`); })],
+              ["Hotkeys enabled", settingToggle(hotkeysEnabled, (value) => { updatePremiumPreference("hotkeysEnabled", value); setOrderMessage?.(`Keyboard shortcuts ${value ? "enabled" : "disabled"}.`); }, false, "Toggle keyboard shortcuts")],
               ["Risk warnings enabled", settingToggle(riskWarnings, (value) => updatePremiumPreference("riskWarnings", value), false, "Toggle risk warnings")],
             ], "Trading")}
             {group("Chart & Scanner Defaults", [
@@ -312,6 +315,8 @@ export default function SettingsWorkspacePage({
                   `Time zone: ${timeZone}`,
                   `Default landing: ${landingOptions.find(([id]) => id === defaultLandingTab)?.[1] || defaultLandingTab}`,
                   `Chart timeframe: ${timeframe || "15m"}`,
+                  `Review order default: ${defaultOrderType} / ${defaultTif}`,
+                  `Keyboard shortcuts: ${hotkeysEnabled ? "On" : "Off"}`,
                   `Scanner auto refresh: ${scannerAutoRefresh ? "On" : "Paused"}`,
                 ].map((x) => (
                   <div key={x} style={{ color: theme.text }}>

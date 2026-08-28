@@ -48,6 +48,23 @@ test("verified provider rows rank ahead of higher-scoring synthetic context", ()
   assert.deepEqual(rankScannerRows([synthetic, verified]).map((row) => row.symbol), ["NVDA", "SYN"]);
 });
 
+test("restored provider rows stay verified and are presented as cached", () => {
+  const restored = normalizeScannerRow(marketRow({
+    isCached: true,
+    freshness: "cached",
+    providerTimestamp: "2026-07-25T11:30:00Z",
+  }), {
+    cached: true,
+    persisted: true,
+    updatedAt: "2026-07-25T11:30:00Z",
+  });
+
+  assert.equal(restored.verified, true);
+  assert.equal(restored.isCached, true);
+  assert.equal(restored.freshness, "cached");
+  assert.notEqual(restored.dataStatus, "Live");
+});
+
 test("scanner categories stay independent", () => {
   const groups = normalizeScannerGroups({
     gainers: [marketRow({ symbol: "GAIN" })],

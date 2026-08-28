@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  mergeNewsRows,
+  normalizeNewsRow,
   normalizeScannerGroups,
   normalizeScannerRow,
   rankScannerRows,
@@ -75,4 +77,32 @@ test("scanner categories stay independent", () => {
   assert.deepEqual(groups.gainers.map((row) => row.symbol), ["GAIN"]);
   assert.deepEqual(groups.newsMovers.map((row) => row.symbol), ["NEWS"]);
   assert.deepEqual(groups.newHighs.map((row) => row.symbol), ["HIGH"]);
+});
+
+test("restored news remains clickable but is never presented as live", () => {
+  const row = normalizeNewsRow({
+    id: "cached-story",
+    headline: "Nvidia raises guidance",
+    source: "Yahoo Finance",
+    timestamp: "2026-07-25T11:30:00Z",
+    relatedTicker: "NVDA",
+    url: "https://example.com/nvda",
+    cached: true,
+    persisted: true,
+  });
+
+  assert.equal(row.isClickable, true);
+  assert.equal(row.cached, true);
+  assert.equal(row.sourceType, "Cached Article");
+  assert.equal(row.fallback, false);
+});
+
+test("news merge keeps ticker rows first and removes exact duplicate links", () => {
+  const tickerRows = [{ id: "ticker", headline: "Ticker catalyst", url: "https://example.com/ticker" }];
+  const marketRows = [
+    { id: "duplicate", headline: "Ticker catalyst", url: "https://example.com/ticker" },
+    { id: "market", headline: "Market context", url: "https://example.com/market" },
+  ];
+
+  assert.deepEqual(mergeNewsRows(tickerRows, marketRows).map((row) => row.id), ["ticker", "market"]);
 });

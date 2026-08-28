@@ -24,6 +24,7 @@ function getArticleType(item) {
 
 function getArticleTypeColor(type, theme) {
   if (type === "Ticker Catalyst" || type === "Real Article" || type === "Article" || type === "Market News") return theme.green;
+  if (type === "Cached Article") return theme.blue || theme.muted;
   if (type === "Market Context") return theme.blue || theme.green;
   if (type === "Fallback Context" || type === "Scanner Catalyst") return theme.amber;
 

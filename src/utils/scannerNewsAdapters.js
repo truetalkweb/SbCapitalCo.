@@ -306,6 +306,7 @@ export function normalizeNewsRow(item, _index = 0, selectedSymbol = "MARKET") {
   const relatedTicker = symbolOf(item.relatedTicker || item.symbol || item.ticker || selectedSymbol) || "MARKET";
   const url = /^https?:\/\//i.test(String(item.url || item.link || "")) ? String(item.url || item.link) : null;
   const fallback = Boolean(item.fallback || item.degraded) || /fallback|scanner/i.test(String(item.source || ""));
+  const cached = Boolean(item.cached || item.persisted);
   const timestamp = normalizeTimestamp(item.timestamp || item.publishedDate || item.datetime || item.time);
   const source = fallback
     ? String(item.source || "").toLowerCase().includes("scanner") ? "Scanner Catalyst" : "Fallback Context"
@@ -326,7 +327,14 @@ export function normalizeNewsRow(item, _index = 0, selectedSymbol = "MARKET") {
     sentiment: text(item.sentiment, "Not classified"),
     impact: text(item.impact, "Not classified"),
     fallback,
-    sourceType: fallback ? (source === "Scanner Catalyst" ? "Scanner Catalyst" : "Fallback") : url ? "Real Article" : "Market Context",
+    cached,
+    sourceType: fallback
+      ? (source === "Scanner Catalyst" ? "Scanner Catalyst" : "Fallback")
+      : cached
+        ? "Cached Article"
+        : url
+          ? "Real Article"
+          : "Market Context",
     isClickable: Boolean(url),
   };
 }

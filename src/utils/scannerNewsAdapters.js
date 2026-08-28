@@ -350,6 +350,10 @@ export function mergeNewsRows(primaryRows = [], secondaryRows = []) {
   });
 }
 
+export function shouldFetchMarketNews(rows, minimumTickerRows = 6) {
+  return !Array.isArray(rows) || rows.length < Math.max(1, Number(minimumTickerRows) || 6);
+}
+
 export function createNormalizedNewsFallback(selectedSymbol = "MARKET", scannerRows = []) {
   const scannerFallback = scannerRows
     .slice(0, 3)

@@ -5,6 +5,7 @@ import {
   createNormalizedNewsFallback,
   mergeNewsRows,
   normalizeNewsRow,
+  shouldFetchMarketNews,
 } from "../utils/scannerNewsAdapters";
 
 const DEFAULT_NEWS_META = {
@@ -85,10 +86,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
             return { payload: null, error: error.message || `${label} unavailable` };
           }
         };
-        const tickerNewsRequest = fetchNewsPayload(tickerNewsUrl, "Ticker news");
-        const marketNewsRequest = fetchNewsPayload(marketNewsUrl, "Market news");
-
-        const symbolResult = await tickerNewsRequest;
+        const symbolResult = await fetchNewsPayload(tickerNewsUrl, "Ticker news");
 
         if (symbolResult.payload) {
           const symbolPayload = symbolResult.payload;
@@ -98,8 +96,8 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
           providerWarnings.push(symbolResult.error);
         }
 
-        if (rows.length < 6) {
-          const marketResult = await marketNewsRequest;
+        if (shouldFetchMarketNews(rows)) {
+          const marketResult = await fetchNewsPayload(marketNewsUrl, "Market news");
 
           if (marketResult.payload) {
             const marketPayload = marketResult.payload;

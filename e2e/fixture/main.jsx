@@ -106,8 +106,22 @@ function Harness() {
   const [selectedStock, setSelectedStock] = useState("NVDA");
   const [quantity, setQuantity] = useState(10);
   const [scannerTab, setScannerTab] = useState("Gainers");
+  const [scannerPresets, setScannerPresets] = useState([{ id: "default", name: "Default Scan", minRvol: 0, filters: {} }]);
+  const [activeScannerPreset, setActiveScannerPreset] = useState("default");
   const [timeframe, setTimeframe] = useState("1m");
   const [orderMessage, setOrderMessage] = useState("");
+  const [watchlistStocks, setWatchlistStocks] = useState(stocks);
+  const [fixtureAlerts, setFixtureAlerts] = useState([{ id: "a1", symbol: "NVDA", trigger: 220, direction: "above", active: true, createdAt: "2026-08-05T16:00:00.000Z" }]);
+  const [fixtureJournalEntries, setFixtureJournalEntries] = useState([]);
+  const [journalDraft, setJournalDraft] = useState({ setup: "", symbol: "NVDA", review: "", result: "Review", grade: "B" });
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(1);
+  const [replayIndex, setReplayIndex] = useState(1);
+  const [replayBookmarks, setReplayBookmarks] = useState([]);
+  const [replayNotes, setReplayNotes] = useState("");
+  const [layoutMode, setLayoutMode] = useState("1");
+  const [gridMode, setGridMode] = useState("2");
+  const [chartIndicators, setChartIndicators] = useState({ ema9: true, ema20: true, vwap: false, volume: true });
   const [premiumPreferences, setPremiumPreferences] = useState({
     compactMode: false,
     scannerAutoRefresh: true,
@@ -132,7 +146,7 @@ function Harness() {
         renderChartGrid={() => <ReleaseChartFixture />}
         selectedStock={selectedStock}
         selectedStockData={selectedStockData}
-        liveStocks={stocks}
+        liveStocks={watchlistStocks}
         scannerStocks={stocks}
         scannerGroups={{
           gainers: stocks.filter((row) => row.changePercent > 0),
@@ -145,10 +159,20 @@ function Harness() {
         news={news}
         newsMeta={{ source: "Release fixture", degraded: false }}
         marketIndexes={stocks}
-        alerts={[{ id: "a1", symbol: "NVDA", trigger: 220, direction: "above", active: true, createdAt: "2026-08-05T16:00:00.000Z" }]}
+        alerts={fixtureAlerts}
+        createPriceAlert={({ symbol, trigger, direction }) => {
+          const value = Number(trigger);
+          if (!symbol || value <= 0) return null;
+          const created = { id: `a${fixtureAlerts.length + 1}`, symbol, trigger: value, direction, active: true, createdAt: new Date().toISOString() };
+          setFixtureAlerts((current) => [...current, created]);
+          return created;
+        }}
+        toggleAlert={(id) => setFixtureAlerts((current) => current.map((alert) => alert.id === id ? { ...alert, active: !alert.active } : alert))}
+        updateAlert={(id, patch) => setFixtureAlerts((current) => current.map((alert) => alert.id === id ? { ...alert, ...patch } : alert))}
+        removeAlert={(id) => setFixtureAlerts((current) => current.filter((alert) => alert.id !== id))}
         orders={[{ id: "o1", symbol: "NVDA", side: "BUY", type: "LIMIT", quantity: 10, limitPrice: 215, status: "FILLED", filled: 10, remaining: 0, tif: "DAY" }, { id: "o2", symbol: "TSLA", side: "SELL", type: "LIMIT", quantity: 5, limitPrice: 188, status: "WORKING", filled: 0, remaining: 5, tif: "DAY" }]}
         positions={{ NVDA: { quantity: 10, average: 210 }, AAPL: { quantity: 5, average: 208 } }}
-        allSymbols={stocks}
+        allSymbols={watchlistStocks}
         accountSummary={{ buyingPower: 25000, netLiquidation: 102000 }}
         realizedPnL={320}
         totalUnrealizedPnL={125}
@@ -159,14 +183,22 @@ function Harness() {
         orderMessage={orderMessage}
         setOrderMessage={setOrderMessage}
         selectMainSymbol={(symbol) => setSelectedStock(symbol)}
-        addSymbolToWatchlist={() => {}}
-        removeWatchlistSymbol={() => {}}
+        addSymbolToWatchlist={(symbol) => setWatchlistStocks((current) => current.some((row) => row.symbol === symbol) ? current : [...current, stocks.find((row) => row.symbol === symbol)].filter(Boolean))}
+        removeWatchlistSymbol={(symbol) => setWatchlistStocks((current) => current.filter((row) => row.symbol !== symbol))}
         scannerTab={scannerTab}
         setScannerTab={setScannerTab}
+        scannerPresets={scannerPresets}
+        setScannerPresets={setScannerPresets}
+        activeScannerPreset={activeScannerPreset}
+        setActiveScannerPreset={setActiveScannerPreset}
         timeframe={timeframe}
         setTimeframe={setTimeframe}
-        chartIndicators={{ ema9: true, ema20: true, vwap: false, volume: true }}
-        setChartIndicators={() => {}}
+        layoutMode={layoutMode}
+        setLayoutMode={setLayoutMode}
+        gridMode={gridMode}
+        setGridMode={setGridMode}
+        chartIndicators={chartIndicators}
+        setChartIndicators={setChartIndicators}
         themeMode="dark"
         setThemeMode={() => {}}
         premiumPreferences={premiumPreferences}
@@ -182,11 +214,30 @@ function Harness() {
         exportWeeklyReport={() => setOrderMessage("Weekly report exported")}
         exportTradeSummaryCsv={() => setOrderMessage("Trade summary exported")}
         exportJournalCsv={() => setOrderMessage("Journal CSV exported")}
-        journalEntries={[]}
+        journalEntries={fixtureJournalEntries}
         replayTrades={[]}
         replayStats={{}}
-        journalDraft={{ setup: "", symbol: "NVDA" }}
-        setJournalDraft={() => {}}
+        replayPlaying={replayPlaying}
+        setReplayPlaying={setReplayPlaying}
+        replaySpeed={replaySpeed}
+        setReplaySpeed={setReplaySpeed}
+        replayIndex={replayIndex}
+        setReplayIndex={setReplayIndex}
+        replayDataLength={candles.length}
+        replayBookmarks={replayBookmarks}
+        setReplayBookmarks={setReplayBookmarks}
+        replayNotes={replayNotes}
+        setReplayNotes={setReplayNotes}
+        stepReplay={() => setReplayIndex((current) => Math.min(current + 1, candles.length - 1))}
+        resetReplay={() => { setReplayIndex(0); setReplayPlaying(false); }}
+        journalDraft={journalDraft}
+        setJournalDraft={setJournalDraft}
+        addJournalEntry={() => {
+          if (!journalDraft.setup.trim()) return;
+          setFixtureJournalEntries((current) => [...current, { id: `j${current.length + 1}`, ...journalDraft, timestamp: new Date().toISOString(), pnl: 0 }]);
+          setJournalDraft((current) => ({ ...current, setup: "", review: "" }));
+        }}
+        removeJournalEntry={(id) => setFixtureJournalEntries((current) => current.filter((entry) => entry.id !== id))}
         entitlements={{ plan, status: "active", capabilities: {} }}
       />
     </main>

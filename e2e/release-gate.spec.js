@@ -229,6 +229,141 @@ test("workspace access follows the Free, Premium, and Admin policy matrix", asyn
   expect(admin).toHaveLength(13);
 });
 
+test("stateful workspace controls mutate watchlist, alerts, journal, replay, and chart layout", async ({ page }) => {
+  const failures = guardRuntime(page);
+
+  await page.goto(fixtureUrl("watchlist"));
+  await page.getByRole("button", { name: "Remove NVDA from watchlist", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Remove NVDA from watchlist", exact: true })).toHaveCount(0);
+
+  await page.goto(fixtureUrl("alerts"));
+  await page.getByRole("row", { name: /Select NVDA/i }).first().click();
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.getByRole("tab", { name: "Paused", exact: true }).click();
+  await expect(page.getByText("Paused", { exact: true }).first()).toBeVisible();
+  await page.getByRole("row", { name: /Select NVDA/i }).first().click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
+  await page.getByRole("tab", { name: "Active Alerts", exact: true }).click();
+  await expect(page.getByText("Active", { exact: true }).first()).toBeVisible();
+
+  await page.goto(fixtureUrl("journal"));
+  await page.getByLabel("Journal setup").fill("Opening range breakout");
+  await page.getByLabel("Journal review").fill("Held the planned stop and reviewed execution.");
+  await page.getByRole("button", { name: "Save Trade", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Opening range breakout", exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Delete journal entry NVDA", exact: true }).click();
+  await expect(page.getByRole("cell", { name: "Opening range breakout", exact: true })).toHaveCount(0);
+
+  await page.goto(fixtureUrl("replay"));
+  const progress = page.getByRole("progressbar", { name: "Replay progress", exact: true });
+  await expect(progress).toHaveAttribute("aria-valuenow", "1");
+  await page.getByRole("button", { name: "Previous replay candle", exact: true }).click();
+  await expect(progress).toHaveAttribute("aria-valuenow", "0");
+  await page.getByRole("button", { name: "Advance replay five candles", exact: true }).click();
+  await expect(progress).toHaveAttribute("aria-valuenow", "4");
+  await page.getByRole("button", { name: "Jump to replay start", exact: true }).click();
+  await expect(progress).toHaveAttribute("aria-valuenow", "0");
+  await page.getByRole("button", { name: "Jump to replay end", exact: true }).click();
+  await expect(progress).toHaveAttribute("aria-valuenow", "4");
+
+  await page.goto(fixtureUrl("chart-analysis"));
+  await page.getByRole("button", { name: "4 chart layout", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("4 chart trading desk layout selected");
+
+  expect(failures).toEqual([]);
+});
+
+test("scanner filters, presets, and table keyboard selection remain functional", async ({ page }) => {
+  const failures = guardRuntime(page);
+
+  await page.goto(fixtureUrl("scanner"));
+  await page.getByLabel("Filter scanner by symbol or company").fill("AAPL");
+  await expect(page.getByRole("row", { name: /Select AAPL/i })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Select NVDA/i })).toHaveCount(0);
+
+  await page.getByLabel("Minimum relative volume").selectOption("1.50");
+  await page.getByLabel("Risk filter").selectOption("controlled");
+  await page.getByRole("button", { name: "Save Preset", exact: true }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Scanner preset saved");
+  await expect(page.getByLabel("Scanner preset")).toHaveValue("custom");
+
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await expect(page.getByLabel("Filter scanner by symbol or company")).toHaveValue("");
+  await page.getByRole("tab", { name: "Losers", exact: true }).click();
+  const tslaRow = page.getByRole("row", { name: /Select TSLA/i });
+  await tslaRow.focus();
+  await tslaRow.press("Enter");
+  await expect(page.getByText("TSLA", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: /Auto Refresh/i }).click();
+  await expect(page.getByRole("button", { name: /Auto Refresh/i })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByLabel("Scanner preset")).toHaveValue("default");
+
+  expect(failures).toEqual([]);
+});
+
+test("alert lifecycle and review-only order safety actions are operational", async ({ page }) => {
+  const failures = guardRuntime(page);
+
+  await page.goto(fixtureUrl("alerts"));
+  await page.getByLabel("Alert trigger price").fill("225");
+  await page.getByLabel("Alert direction").selectOption("below");
+  await page.getByRole("button", { name: /Create/i }).click();
+  await expect(page.getByTestId("order-message")).toContainText("Alert created for NVDA");
+  await page.getByRole("tab", { name: "All Alerts", exact: true }).click();
+  const createdAlert = page.getByRole("row", { name: "Select NVDA", exact: true }).filter({
+    has: page.getByRole("cell", { name: "Price below $225.00", exact: true }),
+  });
+  await createdAlert.click();
+  await page.getByLabel("Alert trigger price").fill("226");
+  await page.getByRole("button", { name: "Update & Reactivate", exact: true }).click();
+  await expect(page.getByText(/Below \$226\.00/i).first()).toBeVisible();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByText(/Below \$226\.00/i)).toHaveCount(0);
+
+  await page.goto(fixtureUrl("orders"));
+  await page.getByRole("row", { name: /Select NVDA/i }).first().click();
+  for (const [button, message] of [
+    ["Cancel", "Cancel orders review"],
+    ["Close", "Close positions review"],
+    ["Flatten", "Flatten day review"],
+  ]) {
+    await page.getByRole("button", { name: button, exact: true }).click();
+    await expect(page.getByTestId("order-review-status")).toContainText(message);
+    await expect(page.getByTestId("order-review-status")).toContainText(/review-?only/i);
+  }
+
+  expect(failures).toEqual([]);
+});
+
+test("replay settings, speed, indicators, bookmarks, notes, and transport controls work", async ({ page }) => {
+  const failures = guardRuntime(page);
+
+  await page.goto(fixtureUrl("replay"));
+  await page.getByRole("button", { name: "Replay Settings", exact: true }).click();
+  await page.getByLabel("Default timeframe").selectOption("15m");
+  await page.getByRole("button", { name: "5x", exact: true }).click();
+  await expect(page.getByText("5x", { exact: true }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Indicators", exact: true }).click();
+  await page.getByRole("button", { name: /VWAP/i }).click();
+  await expect(page.getByRole("button", { name: /VWAP/i })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "+ Add", exact: true }).click();
+  await expect(page.getByRole("button", { name: "NVDA step 2", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Delete replay bookmark NVDA step 2", exact: true }).click();
+  await expect(page.getByRole("button", { name: "NVDA step 2", exact: true })).toHaveCount(0);
+
+  await page.getByLabel("Replay session notes").fill("Reviewed the opening drive and risk discipline.");
+  await page.getByRole("button", { name: "Start Replay", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Pause Replay", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Pause Replay", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Start Replay", exact: true })).toBeVisible();
+
+  expect(failures).toEqual([]);
+});
+
 test("dashboard remains within the page at representative desktop sizes", async ({ page }) => {
   for (const viewport of [
     { width: 1366, height: 768 },

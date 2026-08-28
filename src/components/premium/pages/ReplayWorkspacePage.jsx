@@ -19,7 +19,9 @@ export default function ReplayWorkspacePage({
       replayActionStatus,
       replayBookmarks,
       replayChartRef,
+      replayDataLength,
       replayEquity,
+      replayIndex,
       replayIndicatorMenuOpen,
       replayNet,
       replayNotes,
@@ -96,6 +98,15 @@ export default function ReplayWorkspacePage({
       ["Profit Factor", replayRows.length ? "Review" : "Unavailable"],
       ["Max Drawdown", money(replayMaxDrawdown)],
     ];
+    const replayProgress = replayDataLength > 1
+      ? Math.min(100, Math.max(0, (replayIndex / (replayDataLength - 1)) * 100))
+      : 0;
+    const moveReplay = (steps) => {
+      setReplayIndex?.((current) => Math.min(
+        Math.max(current + steps, 0),
+        Math.max(replayDataLength - 1, 0)
+      ));
+    };
     const replayStatusRows = [
       ["Replay Session", "Current"],
       ["Data Speed", `${replaySpeed || 1}x`],
@@ -287,7 +298,7 @@ export default function ReplayWorkspacePage({
                   {replayIndicatorMenuOpen && (
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {CHART_INDICATOR_OPTIONS.map((indicator) => (
-                        <ActionButton key={indicator.id} theme={theme} active={Boolean(chartIndicators?.[indicator.id])} onClick={() => setChartIndicators?.((current) => ({ ...current, [indicator.id]: !current?.[indicator.id] }))}>
+                        <ActionButton key={indicator.id} theme={theme} active={Boolean(chartIndicators?.[indicator.id])} aria-pressed={Boolean(chartIndicators?.[indicator.id])} onClick={() => setChartIndicators?.((current) => ({ ...current, [indicator.id]: !current?.[indicator.id] }))}>
                           {indicator.label}
                         </ActionButton>
                       ))}
@@ -303,19 +314,28 @@ export default function ReplayWorkspacePage({
               <PremiumCard theme={theme}>
                 <div style={{ padding: 14, display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 16 }}>
                   <div>
-                    <div style={{ height: 4, background: theme.panel2, borderRadius: 99, overflow: "hidden" }}>
-                      <div style={{ width: replayRows.length ? "36%" : "0%", height: "100%", background: `linear-gradient(90deg, ${theme.blue}, ${theme.green})` }} />
+                    <div
+                      role="progressbar"
+                      aria-label="Replay progress"
+                      aria-valuemin="0"
+                      aria-valuemax={Math.max(replayDataLength - 1, 0)}
+                      aria-valuenow={Math.min(replayIndex, Math.max(replayDataLength - 1, 0))}
+                      style={{ height: 4, background: theme.panel2, borderRadius: 99, overflow: "hidden" }}
+                    >
+                      <div style={{ width: `${replayProgress}%`, height: "100%", background: `linear-gradient(90deg, ${theme.blue}, ${theme.green})` }} />
                     </div>
-                    <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont, fontWeight: 850 }}>Replay {replayStatus.toLowerCase()}</div>
+                    <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont, fontWeight: 850 }}>
+                      Replay {replayStatus.toLowerCase()} · Step {Math.min(replayIndex + 1, Math.max(replayDataLength, 1))} of {Math.max(replayDataLength, 1)}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "end" }}>
-                    <ActionButton theme={theme} onClick={() => resetReplay?.()}>|&lt;</ActionButton>
-                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&lt;</ActionButton>
-                    <ActionButton theme={theme} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                    <ActionButton theme={theme} aria-label="Jump to replay start" title="Jump to start" onClick={() => setReplayIndex?.(0)}>|&lt;</ActionButton>
+                    <ActionButton theme={theme} aria-label="Previous replay candle" title="Previous candle" onClick={() => moveReplay(-1)}>&lt;</ActionButton>
+                    <ActionButton theme={theme} aria-label={replayPlaying ? "Pause replay" : "Play replay"} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
                       {replayPlaying ? "||" : ">"}
                     </ActionButton>
-                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;&gt;</ActionButton>
-                    <ActionButton theme={theme} onClick={() => stepReplay?.()}>&gt;|</ActionButton>
+                    <ActionButton theme={theme} aria-label="Advance replay five candles" title="Advance five candles" onClick={() => moveReplay(5)}>&gt;&gt;</ActionButton>
+                    <ActionButton theme={theme} aria-label="Jump to replay end" title="Jump to end" onClick={() => setReplayIndex?.(Math.max(replayDataLength - 1, 0))}>&gt;|</ActionButton>
                     <ActionButton theme={theme} onClick={() => resetReplay?.()}>Reset</ActionButton>
                   </div>
                 </div>
@@ -371,4 +391,3 @@ export default function ReplayWorkspacePage({
     );
   
 }
-

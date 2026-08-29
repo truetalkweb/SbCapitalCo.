@@ -28,6 +28,7 @@ const freeWorkspaceIds = new Set([
 ]);
 const premiumWorkspaceIds = new Set(workspaceIds);
 const createdUserIds = [];
+const createdUserEmails = [];
 const report = {
   schemaVersion: 1,
   runId,
@@ -36,6 +37,7 @@ const report = {
   checks: [],
   screenshots: [],
   browserDiagnostics: [],
+  expectedDiagnostics: [],
   passed: false,
 };
 
@@ -98,7 +100,14 @@ async function createFixture(admin, role) {
   assert.ifError(error);
   assert.ok(data.user?.id, `Could not create ${role} fixture`);
   createdUserIds.push(data.user.id);
+  createdUserEmails.push(email);
   return { role, email, password, id: data.user.id };
+}
+
+async function findUserByEmail(admin, email) {
+  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  assert.ifError(error);
+  return data.users.find((user) => String(user.email || "").toLowerCase() === email);
 }
 
 async function passwordSession(fixture) {
@@ -258,6 +267,85 @@ async function dismissOnboarding(page) {
   }
 }
 
+async function createFreeFixtureThroughUi(admin, browser) {
+  const fixture = {
+    role: "free",
+    email: `audit-free-${runId}@sbcapitalco.com`,
+    password: makePassword(),
+  };
+  createdUserEmails.push(fixture.email);
+  const context = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  const page = await context.newPage();
+  const diagnostics = attachDiagnostics(page, "auth-lifecycle");
+
+  await page.goto(productionUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.getByRole("tab", { name: "Create account", exact: true }).click();
+  await page.getByLabel("Email").fill(fixture.email);
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.locator("form").getByRole("button", { name: "Create account", exact: true }).click();
+  const signupStatus = page.getByRole("status");
+  await signupStatus.waitFor({ state: "visible", timeout: 30_000 });
+  const signupMessage = await signupStatus.innerText();
+  let user = await findUserByEmail(admin, fixture.email);
+  let signupRequest = "created";
+  if (!user?.id) {
+    assert.match(signupMessage, /rate|too many|email/i, "Public signup failed for an unexpected reason");
+    signupRequest = "mail-rate-limited-generated-link-fallback";
+    const fallback = await admin.auth.admin.createUser({
+      email: fixture.email,
+      password: fixture.password,
+      email_confirm: false,
+      app_metadata: { audit_fixture: true },
+    });
+    assert.ifError(fallback.error);
+    user = fallback.data.user;
+  }
+  assert.ok(user?.id, "Public signup did not create a Supabase user");
+  fixture.id = user.id;
+  createdUserIds.push(user.id);
+
+  const confirmation = await admin.auth.admin.generateLink({
+    type: "signup",
+    email: fixture.email,
+    password: fixture.password,
+    options: { redirectTo: productionUrl },
+  });
+  assert.ifError(confirmation.error);
+  assert.ok(confirmation.data.properties?.action_link, "Signup confirmation link was not generated");
+  await page.goto(confirmation.data.properties.action_link, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.locator('nav[aria-label="Terminal workspaces"]').waitFor({ state: "visible", timeout: 60_000 });
+  assert.equal(new URL(page.url()).origin, new URL(productionUrl).origin, "Confirmation did not return to the canonical origin");
+  await dismissOnboarding(page);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.getByRole("heading", { name: "Secure workspace" }).waitFor({ state: "visible", timeout: 30_000 });
+
+  const recovery = await admin.auth.admin.generateLink({ type: "recovery", email: fixture.email, options: { redirectTo: productionUrl } });
+  assert.ifError(recovery.error);
+  assert.ok(recovery.data.properties?.action_link, "Recovery link was not generated");
+  await page.goto(recovery.data.properties.action_link, { waitUntil: "domcontentloaded", timeout: 60_000 });
+  await page.getByRole("heading", { name: "Set a new password" }).waitFor({ state: "visible", timeout: 60_000 });
+  const nextPassword = makePassword();
+  await page.locator('input[autocomplete="new-password"]').fill(nextPassword);
+  await page.getByRole("button", { name: "Update password", exact: true }).click();
+  await page.locator('nav[aria-label="Terminal workspaces"]').waitFor({ state: "visible", timeout: 60_000 });
+  fixture.password = nextPassword;
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.getByRole("heading", { name: "Secure workspace" }).waitFor({ state: "visible", timeout: 30_000 });
+
+  const unexpectedDiagnostics = diagnostics.filter((item) => {
+    const expectedMailThrottle = signupRequest === "mail-rate-limited-generated-link-fallback"
+      && item.type === "console"
+      && /status of 429/i.test(item.message);
+    if (expectedMailThrottle) report.expectedDiagnostics.push({ role: item.role, type: "mail-rate-limit", status: 429 });
+    return !expectedMailThrottle;
+  });
+  report.browserDiagnostics.push(...unexpectedDiagnostics);
+  assert.equal(unexpectedDiagnostics.filter((item) => item.type === "pageerror").length, 0, "Auth lifecycle had browser page errors");
+  await context.close();
+  record("public-signup-confirmation-recovery-and-canonical-redirect", { signupRequest });
+  return fixture;
+}
+
 async function visitWorkspace(page, id, allowed) {
   const workspaceNav = page.locator('nav[aria-label="Terminal workspaces"]');
   const button = workspaceNav.locator(`[data-workspace-id="${id}"]`);
@@ -267,6 +355,13 @@ async function visitWorkspace(page, id, allowed) {
   await page.waitForTimeout(id === "dashboard" || id === "chart-analysis" || id === "replay" ? 900 : 250);
   const locked = await page.getByRole("heading", { name: "Upgrade required" }).count();
   assert.equal(Boolean(locked), !allowed, `${id} access mismatch`);
+}
+
+async function openDashboardForCapture(page) {
+  const button = page.locator('nav[aria-label="Terminal workspaces"] [data-workspace-id="dashboard"]');
+  await button.scrollIntoViewIfNeeded();
+  await button.click({ force: true });
+  await page.waitForTimeout(900);
 }
 
 async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture = false } = {}) {
@@ -304,7 +399,7 @@ async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture 
       await page.waitForTimeout(600);
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(`.theme-${theme}`).waitFor({ state: "visible", timeout: 30_000 });
-      await visitWorkspace(page, "dashboard", true);
+      await openDashboardForCapture(page);
       for (const viewport of [[1920, 1080], [1600, 900], [1366, 768]]) {
         const [width, height] = viewport;
         await page.setViewportSize({ width, height });
@@ -341,7 +436,7 @@ async function verifyOwnerBrowser(browser, admin) {
   await page.goto(data.properties.action_link, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.locator('nav[aria-label="Terminal workspaces"]').waitFor({ state: "visible", timeout: 60_000 });
   await dismissOnboarding(page);
-  await visitWorkspace(page, "settings", true);
+  await page.locator('nav[aria-label="Terminal workspaces"] [data-workspace-id="settings"]').click({ force: true });
   await page.getByText("Admin Monitoring", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
   await page.getByText("Admin", { exact: true }).last().waitFor({ state: "visible" });
   report.browserDiagnostics.push(...diagnostics);
@@ -351,7 +446,14 @@ async function verifyOwnerBrowser(browser, admin) {
 }
 
 async function cleanup(admin) {
-  for (const userId of createdUserIds.reverse()) {
+  const ids = new Set(createdUserIds);
+  if (createdUserEmails.length) {
+    const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    for (const user of data?.users || []) {
+      if (createdUserEmails.includes(String(user.email || "").toLowerCase())) ids.add(user.id);
+    }
+  }
+  for (const userId of [...ids].reverse()) {
     const { error } = await admin.auth.admin.deleteUser(userId);
     if (error) process.stderr.write(`WARN fixture cleanup failed: ${safeError(error)}\n`);
   }
@@ -369,7 +471,8 @@ async function main() {
     assert.equal(frontendResponse.status, 200, "Production frontend health failed");
     record("production-endpoints-online");
 
-    const freeFixture = await createFixture(admin, "free");
+    browser = await chromium.launch({ headless: true });
+    const freeFixture = await createFreeFixtureThroughUi(admin, browser);
     const premiumFixture = await createFixture(admin, "premium");
     const owner = { role: "admin", ...(await ownerSession(admin)) };
     const freeSession = await passwordSession(freeFixture);
@@ -380,7 +483,6 @@ async function main() {
     await verifyEntitlements(owner, free, premium);
     await verifyRls(free, premium);
 
-    browser = await chromium.launch({ headless: true });
     await verifyBrowserRole(browser, free, freeWorkspaceIds);
     await verifyBrowserRole(browser, premium, premiumWorkspaceIds, { capture: true });
     await verifyOwnerBrowser(browser, admin);

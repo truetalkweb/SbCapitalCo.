@@ -58,11 +58,13 @@ Audit date: 2026-08-28
 - Automated Playwright release gate: 31 browser/API checks passed across all 13 workspaces and three desktop viewports
 - Nonblank chart canvas proof: passed with usable canvas dimensions and image pixels
 - Production smoke command: passed against `www.sbcapitalco.com` and the Railway production API on 2026-08-28
+- Supabase authentication lifecycle: passed signup creation, confirmation-token verification, login, logout, session refresh, password recovery, new-password login, revoked-session rejection, and disposable-user cleanup on 2026-08-28
+- Production backend logs: no application-level error events after deployment
 
 ## Remaining External Checkpoints
 
-- Frontend deployment `dpl_29wsDP5pLEqX2ZZSJNiAHV7XaqK6` is ready and aliased to the canonical domain.
-- Backend deployment `163b7c4d-0b7d-4b84-82ba-2010693dfc75` serves the verified reliability contract; Railway deployment-state finalization was delayed by its acknowledged deployment-start incident.
-- A real mailbox round trip for signup confirmation and password reset requires a controlled test account; local policy tests cover safe redirects and expired-link cleanup, but do not substitute for receiving email.
+- Frontend deployment `dpl_Bg6KfwN3kCNaihh7xkwteMRn5Peg` is ready and aliased to the canonical domain.
+- Backend deployment `163b7c4d-0b7d-4b84-82ba-2010693dfc75` is successful, online, and serves the verified reliability contract.
+- Confirmation and recovery token mechanics are verified. A real SMTP inbox-delivery round trip remains an external email-provider checkpoint and was not simulated or claimed by this audit.
 - Provider depth and freshness remain constrained by the current free/limited market-data plans.
 - Economic calendar, checkout, device management, PDF export, and public live broker execution are intentionally not connected.

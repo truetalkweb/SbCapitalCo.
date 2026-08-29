@@ -357,13 +357,6 @@ async function visitWorkspace(page, id, allowed) {
   assert.equal(Boolean(locked), !allowed, `${id} access mismatch`);
 }
 
-async function openDashboardForCapture(page) {
-  const button = page.locator('nav[aria-label="Terminal workspaces"] [data-workspace-id="dashboard"]');
-  await button.scrollIntoViewIfNeeded();
-  await button.click({ force: true });
-  await page.waitForTimeout(900);
-}
-
 async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1600, height: 900 } });
   const page = await context.newPage();
@@ -394,12 +387,8 @@ async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture 
     for (const theme of ["dark", "light"]) {
       await page.getByRole("tab", { name: "General", exact: true }).click();
       await themeSelect.selectOption(theme);
-      await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();
-      await page.getByRole("button", { name: "Save", exact: true }).click();
-      await page.waitForTimeout(600);
-      await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(`.theme-${theme}`).waitFor({ state: "visible", timeout: 30_000 });
-      await openDashboardForCapture(page);
+      await visitWorkspace(page, "dashboard", true);
       for (const viewport of [[1920, 1080], [1600, 900], [1366, 768]]) {
         const [width, height] = viewport;
         await page.setViewportSize({ width, height });
@@ -409,6 +398,11 @@ async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture 
         report.screenshots.push(filename);
       }
       await visitWorkspace(page, "settings", true);
+      await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await page.getByText(/Workspace (saved|up to date)/i).waitFor({ state: "visible", timeout: 30_000 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(`.theme-${theme}`).waitFor({ state: "visible", timeout: 30_000 });
     }
     record("premium-cloud-theme-persistence-and-responsive-screenshots", { screenshots: report.screenshots.length });
   }
@@ -436,8 +430,13 @@ async function verifyOwnerBrowser(browser, admin) {
   await page.goto(data.properties.action_link, { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page.locator('nav[aria-label="Terminal workspaces"]').waitFor({ state: "visible", timeout: 60_000 });
   await dismissOnboarding(page);
-  await page.locator('nav[aria-label="Terminal workspaces"] [data-workspace-id="settings"]').click({ force: true });
-  await page.getByText("Admin Monitoring", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+  const settingsButton = page.locator('nav[aria-label="Terminal workspaces"] [data-workspace-id="settings"]');
+  const adminMonitoring = page.getByText("Admin Monitoring", { exact: true });
+  for (let attempt = 0; attempt < 3 && !await adminMonitoring.isVisible().catch(() => false); attempt += 1) {
+    await settingsButton.click({ force: true });
+    await adminMonitoring.waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
+  }
+  assert.equal(await adminMonitoring.isVisible().catch(() => false), true, "Admin Monitoring did not render in the owner Settings workspace");
   await page.getByText("Admin", { exact: true }).last().waitFor({ state: "visible" });
   report.browserDiagnostics.push(...diagnostics);
   assert.equal(diagnostics.filter((item) => item.type === "pageerror").length, 0, "Admin had browser page errors");

@@ -1,6 +1,8 @@
 import { Lock, MoreVertical, Search, Star } from "lucide-react";
 
+import { Component } from "react";
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
+import { captureRuntimeDiagnostic } from "../../services/runtimeDiagnostics";
 import {
   PLAN_LABELS,
   WORKSPACE_FEATURES,
@@ -31,6 +33,36 @@ export function SeriesSparkline({ theme, values = [], height = 240 }) {
   const positive = points[points.length - 1] >= 0;
   const color = positive ? theme.green : theme.red;
   return <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: "100%", height, display: "block" }} aria-label="Recorded cumulative performance"><path d={d} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" /><path d={`${d} L${width} ${height} L0 ${height} Z`} fill={color} opacity="0.1" /></svg>;
+}
+
+class CardContentErrorBoundary extends Component {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error, info) {
+    captureRuntimeDiagnostic({
+      type: "render",
+      error,
+      message: "Terminal panel render failed",
+      stack: `${error?.stack || ""}\n${info?.componentStack || ""}`,
+    });
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    const { theme } = this.props;
+    return (
+      <div role="alert" style={{ minHeight: 96, display: "grid", placeItems: "center", gap: 8, padding: 16, color: theme.muted, textAlign: "center" }}>
+        <span>This panel is temporarily unavailable.</span>
+        <button type="button" onClick={() => this.setState({ failed: false })} style={{ minHeight: 30, padding: "0 12px", border: `1px solid ${theme.border}`, borderRadius: 5, background: theme.panel2, color: theme.text, cursor: "pointer" }}>
+          Retry panel
+        </button>
+      </div>
+    );
+  }
 }
 
 export function PremiumCard({ theme, children, style = {}, title, action }) {
@@ -65,7 +97,7 @@ export function PremiumCard({ theme, children, style = {}, title, action }) {
           {action}
         </div>
       )}
-      {children}
+      <CardContentErrorBoundary theme={theme}>{children}</CardContentErrorBoundary>
     </section>
   );
 }
@@ -564,4 +596,3 @@ export function DetailRail({ theme, selected, children, title = "Selected Symbol
     </div>
   );
 }
-

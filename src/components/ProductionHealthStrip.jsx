@@ -130,7 +130,7 @@ export default function ProductionHealthStrip({
         terminalMonoFont={terminalMonoFont}
         label={brokerToolsEnabled ? "QTRD" : "Market"}
         value={qtrdHealth.label}
-        detail={qtrdHealth.rawMessage || qtrdHealth.message}
+        detail={getCleanProviderMessage(qtrdHealth.message || qtrdHealth.rawMessage, "Market-data diagnostics are temporarily unavailable.")}
         status={qtrdHealth.status}
       />
       <HealthCell

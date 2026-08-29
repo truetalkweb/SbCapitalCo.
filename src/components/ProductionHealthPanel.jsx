@@ -100,7 +100,6 @@ export default function ProductionHealthPanel({
     platformHealth?.scanner?.providerStatus?.userMessage ||
     platformHealth?.scanner?.providerStatus?.userWarnings?.[0] ||
     "";
-  const scannerDiagnostic = scannerMeta?.lastWarning || platformHealth?.scanner?.lastError || "";
   const backendOnline = platformHealth?.backend?.status === "online";
   const scannerDegraded = Boolean(scannerMeta?.degraded || platformHealth?.scanner?.degraded);
   const tokenPersisted = Boolean(tokenStore.firestore || tokenStatus.refreshTokenPersisted);
@@ -125,6 +124,18 @@ export default function ProductionHealthPanel({
   const newsHealth = platformHealth?.news || platformHealth?.deepHealth?.news || {};
   const aiLive = aiHealth.source === "gemini" && (aiHealth.live || aiHealth.providerLabel === "LIVE");
   const aiPersistentCache = aiHealth.persistentCache || {};
+  const aiStatusMessage = getCleanProviderMessage(
+    aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError,
+    "AI intelligence is ready when provider data is available."
+  );
+  const brokerStatusMessage = getCleanProviderMessage(
+    resolvedQtrdHealth.message || resolvedQtrdHealth.rawMessage,
+    "Broker diagnostics are temporarily unavailable."
+  );
+  const brokerSyncMessage = getCleanProviderMessage(
+    brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError,
+    "No broker sync error recorded."
+  );
   const aiLabel = aiLive
     ? "GEMINI LIVE"
     : aiHealth.label || (aiHealth.configured ? "AI DEGRADED" : "AI FALLBACK");
@@ -222,7 +233,7 @@ export default function ProductionHealthPanel({
         label="AI Intelligence"
         value={aiLabel}
         status={aiLive ? "ok" : aiHealth.configured ? "warn" : "info"}
-        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. Persistent cache: ${aiPersistentCache.enabled ? "Firestore" : "disabled"}${aiPersistentCache.lastHitAt ? `, last hit ${formatDateTime(aiPersistentCache.lastHitAt)}` : ""}. ${aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError || "Gemini catalyst intelligence ready when data is available."}`}
+        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. Persistent cache: ${aiPersistentCache.enabled ? "Firestore" : "disabled"}${aiPersistentCache.lastHitAt ? `, last hit ${formatDateTime(aiPersistentCache.lastHitAt)}` : ""}. ${aiStatusMessage}`}
       />
       {brokerToolsEnabled && (
       <HealthRow
@@ -230,7 +241,7 @@ export default function ProductionHealthPanel({
         label="Questrade Connection"
         value={brokerConnected ? "BROKER CONNECTED" : marketDataLabel}
         status={brokerConnected ? "ok" : resolvedQtrdHealth.status === "bad" ? "bad" : "warn"}
-        detail={resolvedQtrdHealth.rawMessage || resolvedQtrdHealth.message || "Broker status endpoint responded without an active error."}
+        detail={brokerStatusMessage}
       />
       )}
       {brokerToolsEnabled && (
@@ -248,7 +259,7 @@ export default function ProductionHealthPanel({
         label="Last Broker Sync"
         value={formatDateTime(brokerSyncMeta?.lastSuccessAt || platformHealth?.broker?.sync?.lastSuccessAt)}
         status={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError ? "bad" : "ok"}
-        detail={brokerSyncMeta?.lastError || platformHealth?.broker?.sync?.lastError || "No broker sync error recorded."}
+        detail={brokerSyncMessage}
       />
       )}
 
@@ -267,7 +278,6 @@ export default function ProductionHealthPanel({
             .map((warning, index) => (
               <div
                 key={`${warning}-${index}`}
-                title={index === brokerWarnings.slice(0, 3).length && scannerDiagnostic ? scannerDiagnostic : undefined}
                 style={{ marginTop: index ? "5px" : 0 }}
               >
                 {getCleanProviderMessage(warning)}

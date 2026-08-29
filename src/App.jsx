@@ -29,6 +29,7 @@ import AuthGate from "./components/AuthGate";
 import IssueReportDialog from "./components/IssueReportDialog";
 import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
 import PremiumWorkspace from "./components/premium/PremiumWorkspace";
+import WorkspaceErrorBoundary from "./components/WorkspaceErrorBoundary";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
   BROKER_TOOLS_ENABLED,
@@ -3862,7 +3863,12 @@ export default function App() {
 
   function renderReplicaPremiumWorkspace() {
     return (
-      <PremiumWorkspace
+      <WorkspaceErrorBoundary
+        resetKey={activeWorkspace}
+        theme={theme}
+        onDashboard={() => setActiveWorkspace("dashboard")}
+      >
+        <PremiumWorkspace
         activeWorkspace={activeWorkspace}
         setActiveWorkspace={setActiveWorkspace}
         viewportWidth={viewportWidth}
@@ -3983,7 +3989,8 @@ export default function App() {
         entitlementsStatus={effectiveEntitlementsStatus}
         onOpenHelp={openPublicOnboarding}
         onOpenIssueReport={() => setIssueReportOpen(true)}
-      />
+        />
+      </WorkspaceErrorBoundary>
     );
   }
 

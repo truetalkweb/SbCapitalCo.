@@ -1,6 +1,6 @@
 # SbCapitalCo Terminal Reliability Audit
 
-Audit date: 2026-08-05
+Audit date: 2026-08-28
 
 ## Functional Classification
 
@@ -37,25 +37,31 @@ Audit date: 2026-08-05
 - Scanner fallback must return useful context rows rather than an empty core screen.
 - Missing numeric values remain unavailable; they are not converted to zero.
 - Questrade premarket movement is derived from the latest completed daily close when quote change fields are absent.
+- Public health reports safe service modes and freshness without provider URLs, credentials, or private cache diagnostics.
+- Transient news-provider failures receive at most three bounded attempts; quota and rate-limit failures are not retried and activate cooldowns.
+- Premium cards recover independently, while a workspace boundary keeps the terminal shell usable if a page render fails.
+- Backend JSON errors include the same request ID returned in the `x-request-id` header.
 
 ## Verification Baseline
 
 - Frontend lint: passed
-- Frontend tests: 49 passed
+- Frontend tests: 79 passed
 - Frontend production build: passed
 - Backend syntax check: passed
-- Backend tests: 31 passed
+- Backend tests: 52 passed
 - Frontend production dependency audit: 0 vulnerabilities
 - Backend production dependency audit: 0 vulnerabilities
 - Local API smoke test: health, scanner, movers, ticker news passed
 - Anonymous access test: entitlement, watchlist, broker account, and admin routes returned `401`
 - Authenticated production browser QA: all 13 premium workspaces rendered without a visible error state
 - Local changed-surface QA: Dashboard categories, Watchlist, News, and Orders interactions passed
-- Automated Playwright release gate: 20 browser/API checks passed across all 13 workspaces and three desktop viewports
+- Automated Playwright release gate: 31 browser/API checks passed across all 13 workspaces and three desktop viewports
+- Nonblank chart canvas proof: passed with usable canvas dimensions and image pixels
+- Production smoke command: `npm run smoke:production` (run after deployment)
 
 ## Remaining External Checkpoints
 
-- The scanner and workspace improvements require a later deployment and post-deploy production verification.
-- Exact fresh screenshots at every target viewport were not recaptured in this pass; current desktop QA and existing 1366/1600/1920 artifacts were reviewed.
+- This reliability change set requires deployment and a successful post-deploy production smoke run before it can be called production-verified.
+- A real mailbox round trip for signup confirmation and password reset requires a controlled test account; local policy tests cover safe redirects and expired-link cleanup, but do not substitute for receiving email.
 - Provider depth and freshness remain constrained by the current free/limited market-data plans.
 - Economic calendar, checkout, device management, PDF export, and public live broker execution are intentionally not connected.

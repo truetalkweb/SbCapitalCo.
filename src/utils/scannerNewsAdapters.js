@@ -1,4 +1,5 @@
 import { newsFallbackRows, scannerFallbackRows } from "../mocks/scannerNewsMockData.js";
+import { formatPacificTime } from "./timeFormatters.js";
 
 const BAD_TEXT = /^(unknown|n\/a|null|undefined|-|--|\$100\+|placeholder)$/i;
 const PROVIDER_LIMITED_RE = /429|rate|quota|limit|limited|restricted|subscription|plan/i;
@@ -319,7 +320,7 @@ export function normalizeNewsRow(item, _index = 0, selectedSymbol = "MARKET") {
     text: headline,
     source,
     timestamp,
-    time: timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Unavailable",
+    time: formatPacificTime(timestamp),
     relatedTicker,
     symbol: relatedTicker,
     url,

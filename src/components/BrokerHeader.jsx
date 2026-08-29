@@ -1,4 +1,5 @@
 import { getCleanProviderMessage, getQuestradeHealth } from "../utils/healthStatus";
+import { formatPacificDateTime } from "../utils/timeFormatters";
 
 function formatMoney(value) {
   if (value === null || value === undefined || value === "") return "Pending";
@@ -16,13 +17,7 @@ function formatMoney(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return "Not synced";
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) return "Not synced";
-
-  return parsed.toLocaleString();
+  return formatPacificDateTime(value, { fallback: "Not synced" });
 }
 
 function formatLatency(ms) {

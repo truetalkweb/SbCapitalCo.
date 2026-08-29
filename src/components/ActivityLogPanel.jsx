@@ -1,13 +1,8 @@
 import { useMemo, useState } from "react";
+import { formatPacificDateTime } from "../utils/timeFormatters";
 
 function formatDateTime(value) {
-  if (!value) return "Pending";
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) return "Pending";
-
-  return parsed.toLocaleString();
+  return formatPacificDateTime(value, { fallback: "Pending" });
 }
 
 function getStatusColor(theme, status) {

@@ -59,6 +59,13 @@ export default function AdminMonitoringPanel({ brokerApiUrl, theme }) {
 
   const services = Object.entries(state.monitoring?.services || {});
   const serviceDetails = state.monitoring?.serviceDetails || {};
+  const efficiency = state.monitoring?.efficiency || {};
+  const efficiencyMetrics = [
+    ["API requests", efficiency.requests?.total ?? 0],
+    ["API errors", efficiency.requests?.errors ?? 0],
+    ["Cache hit rate", `${Math.round(Number(efficiency.caches?.hitRate || 0) * 100)}%`],
+    ["Provider calls", efficiency.providers?.calls ?? 0],
+  ];
   return (
     <section aria-labelledby="admin-monitoring-title" style={{ display: "grid", gap: 10, paddingTop: 12, borderTop: `1px solid ${theme.borderSoft || theme.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
@@ -81,6 +88,14 @@ export default function AdminMonitoringPanel({ brokerApiUrl, theme }) {
           })}
         </div>
         <div style={{ color: theme.muted, fontSize: 10 }}>Request ID: {state.monitoring?.requestId || "Unavailable"}</div>
+        <section aria-label="Backend efficiency metrics" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
+          {efficiencyMetrics.map(([label, value]) => (
+            <div key={label} style={{ padding: "8px 9px", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: theme.panel2 }}>
+              <div style={{ color: theme.muted, fontSize: 9, textTransform: "uppercase" }}>{label}</div>
+              <div style={{ color: theme.text, fontSize: 12, fontWeight: 800, marginTop: 3 }}>{value}</div>
+            </div>
+          ))}
+        </section>
         <div style={{ color: theme.muted, fontSize: 11 }}>{state.monitoring?.incidents?.buffered || 0} reports buffered on this backend instance.</div>
         <div style={{ display: "grid", gap: 5 }}>
           {state.reports.length === 0 ? <div style={{ color: theme.muted, fontSize: 11 }}>No issue reports available.</div> : state.reports.slice(0, 5).map((report) => <div key={report.id} style={{ display: "grid", gridTemplateColumns: "90px 90px minmax(0, 1fr) 28px", gap: 8, alignItems: "center", color: theme.text, fontSize: 11, padding: "7px 0", borderTop: `1px solid ${theme.borderSoft || theme.border}` }}><span style={{ color: theme.blue }}>{titleCase(report.category)}</span><span style={{ color: theme.muted }}>{report.workspace || "Unknown"}</span><span title={report.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{report.description}</span><button type="button" aria-label={`Remove ${titleCase(report.category)} issue report`} title="Remove report" onClick={() => removeReport(report.id)} style={{ width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 4, color: theme.red, background: "transparent", cursor: "pointer" }}><Trash2 size={13} /></button></div>)}

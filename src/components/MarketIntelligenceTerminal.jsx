@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, RefreshCw, Search, Star } from "lucide-react";
 import { getNewsSourceType } from "../utils/marketUtils";
 import { authenticatedFetch } from "../services/authenticatedRequest";
+import { formatPacificTime } from "../utils/timeFormatters";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -10,16 +11,7 @@ function parsePercent(value) {
 }
 
 function formatTime(value) {
-  if (!value) return "Pending";
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) return "Pending";
-
-  return parsed.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPacificTime(value, { fallback: "Pending" });
 }
 
 function formatAgeMs(value) {

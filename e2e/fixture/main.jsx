@@ -7,7 +7,7 @@ import PremiumWorkspace from "/src/components/premium/PremiumWorkspace.jsx";
 import { premiumWorkspaceViews } from "/src/config/premiumNavigation.js";
 import { canUseWorkspace } from "/src/services/entitlementPolicy.js";
 
-const theme = {
+const darkTheme = {
   mode: "dark",
   isDark: true,
   bg: "#040507",
@@ -25,6 +25,27 @@ const theme = {
   green: "#00c896",
   red: "#ef5350",
   amber: "#f5b84b",
+};
+
+const lightTheme = {
+  ...darkTheme,
+  mode: "light",
+  isDark: false,
+  bg: "#f4f7fb",
+  panel: "#ffffff",
+  panel2: "#eef3f8",
+  panel3: "#e4ebf3",
+  card: "#ffffff",
+  border: "#b9c6d5",
+  borderSoft: "#d6dee8",
+  text: "#111827",
+  muted: "#526175",
+  faint: "#6b7789",
+  blue: "#1168c7",
+  cyan: "#007f91",
+  green: "#087f5b",
+  red: "#c92a2a",
+  amber: "#9a6700",
 };
 
 const stocks = [
@@ -48,7 +69,7 @@ const candles = [
   { time: "2026-08-04", open: 212, high: 218, low: 211, close: 216.79, volume: 68000000 },
 ];
 
-function ReleaseChartFixture() {
+function ReleaseChartFixture({ theme }) {
   const hostRef = useRef(null);
 
   useEffect(() => {
@@ -84,7 +105,7 @@ function ReleaseChartFixture() {
     chart.timeScale().fitContent();
 
     return () => chart.remove();
-  }, []);
+  }, [theme]);
 
   return <div ref={hostRef} data-testid="release-chart" aria-label="Release gate market chart" style={{ width: "100%", height: "100%", minHeight: 280 }} />;
 }
@@ -102,6 +123,7 @@ function Harness() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const requested = params.get("view") || "dashboard";
   const plan = params.get("plan") || "admin";
+  const theme = params.get("theme") === "light" ? lightTheme : darkTheme;
   const [activeWorkspace, setActiveWorkspace] = useState(requested);
   const [selectedStock, setSelectedStock] = useState("NVDA");
   const [quantity, setQuantity] = useState(10);
@@ -134,7 +156,12 @@ function Harness() {
   const selectedStockData = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
 
   return (
-    <main data-testid="release-workspace" data-workspace={activeWorkspace} style={{ height: "100%", padding: 12, color: theme.text, overflow: "auto" }}>
+    <main
+      className={`theme-${theme.mode}`}
+      data-testid="release-workspace"
+      data-workspace={activeWorkspace}
+      style={{ height: "100%", padding: 12, color: theme.text, background: theme.bg, overflow: "auto" }}
+    >
       <AccessProbe plan={plan} />
       <output data-testid="order-message" style={{ position: "fixed", left: -10000 }}>{orderMessage}</output>
       <PremiumWorkspace
@@ -143,7 +170,7 @@ function Harness() {
         viewportWidth={window.innerWidth}
         viewportHeight={window.innerHeight}
         theme={theme}
-        renderChartGrid={() => <ReleaseChartFixture />}
+        renderChartGrid={() => <ReleaseChartFixture theme={theme} />}
         selectedStock={selectedStock}
         selectedStockData={selectedStockData}
         liveStocks={watchlistStocks}
@@ -199,7 +226,7 @@ function Harness() {
         setGridMode={setGridMode}
         chartIndicators={chartIndicators}
         setChartIndicators={setChartIndicators}
-        themeMode="dark"
+        themeMode={theme.mode}
         setThemeMode={() => {}}
         premiumPreferences={premiumPreferences}
         setPremiumPreferences={setPremiumPreferences}

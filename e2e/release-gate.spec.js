@@ -364,27 +364,57 @@ test("replay settings, speed, indicators, bookmarks, notes, and transport contro
   expect(failures).toEqual([]);
 });
 
-test("dashboard remains within the page at representative desktop sizes", async ({ page }) => {
-  for (const viewport of [
-    { width: 1366, height: 768 },
-    { width: 1600, height: 900 },
-    { width: 1920, height: 1080 },
-  ]) {
+for (const viewport of [
+  { width: 1366, height: 768 },
+  { width: 1600, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`all workspaces remain within the page at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
+    for (const [workspace, landmark] of Object.entries(workspaces)) {
+      await page.goto(fixtureUrl(workspace));
+      await expect(page.getByText(landmark, { exact: false }).first()).toBeVisible();
+      const dimensions = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+      expect(dimensions.scrollWidth, workspace).toBeLessThanOrEqual(dimensions.clientWidth + 2);
+    }
+
     await page.goto(fixtureUrl("dashboard"));
-    await expect(page.getByText("Opportunity Board", { exact: true })).toBeVisible();
-
-    const dimensions = await page.evaluate(() => ({
-      clientWidth: document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-    }));
-    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 2);
-
     await page.screenshot({
       path: path.join(artifactDir, `dashboard-${viewport.width}x${viewport.height}.png`),
       fullPage: true,
     });
+  });
+}
+
+test("every workspace renders in the complete light theme", async ({ page }) => {
+  const failures = guardRuntime(page);
+  for (const [workspace, landmark] of Object.entries(workspaces)) {
+    await page.goto(fixtureUrl(workspace, "&theme=light"));
+    await expect(page.getByText(landmark, { exact: false }).first()).toBeVisible();
+    const textColor = await page.getByTestId("release-workspace").evaluate((node) => getComputedStyle(node).color);
+    expect(textColor, workspace).toBe("rgb(17, 24, 39)");
   }
+  expect(failures).toEqual([]);
+});
+
+test("tabs support arrow keys, controls retain focus, and reduced motion is honored", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(fixtureUrl("dashboard"));
+  const gainers = page.getByRole("tab", { name: "Gainers", exact: true });
+  await gainers.focus();
+  await gainers.press("ArrowRight");
+  const losers = page.getByRole("tab", { name: "Losers", exact: true });
+  await expect(losers).toHaveAttribute("aria-selected", "true");
+  await expect(losers).toBeFocused();
+  const accessibilityStyle = await losers.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { outlineStyle: style.outlineStyle, transitionDuration: style.transitionDuration };
+  });
+  expect(accessibilityStyle.outlineStyle).not.toBe("none");
+  expect(Number.parseFloat(accessibilityStyle.transitionDuration)).toBeLessThanOrEqual(0.001);
 });
 
 test("backend health is public and protected routes fail closed", async ({ request }) => {

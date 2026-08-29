@@ -19,17 +19,22 @@ function getQuoteTimestamp(quote) {
   const explicitTimestamp = Number(quote.timestamp || quote.t || 0);
 
   if (Number.isFinite(explicitTimestamp) && explicitTimestamp > 0) {
-    return explicitTimestamp > 10_000_000_000
-      ? Math.floor(explicitTimestamp / 1000)
-      : Math.floor(explicitTimestamp);
+    return {
+      timestamp: explicitTimestamp > 10_000_000_000
+        ? Math.floor(explicitTimestamp / 1000)
+        : Math.floor(explicitTimestamp),
+      source: "provider",
+    };
   }
 
   const tradeTime = quote.lastTradeTime || quote.updatedAt;
   const tradeTimeMs = tradeTime ? new Date(tradeTime).getTime() : 0;
 
-  return Number.isFinite(tradeTimeMs) && tradeTimeMs > 0
-    ? Math.floor(tradeTimeMs / 1000)
-    : Math.floor(Date.now() / 1000);
+  if (Number.isFinite(tradeTimeMs) && tradeTimeMs > 0) {
+    return { timestamp: Math.floor(tradeTimeMs / 1000), source: "provider-time" };
+  }
+
+  return { timestamp: Math.floor(Date.now() / 1000), source: "received" };
 }
 
 function parseEventData(event) {
@@ -50,9 +55,22 @@ class MarketDataService {
     this.connectTimer = null;
     this.pollTimer = null;
     this.pollInFlight = false;
+    this.pollAbortController = null;
     this.reconnectAttempt = 0;
     this.activeStreamKey = "";
     this.status = "BACKEND";
+    this.handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearTimeout(this.connectTimer);
+        this.connectTimer = null;
+        this.closeEventSource();
+        this.clearPollTimer();
+        this.setStatus("BACKEND");
+        return;
+      }
+      if (this.subscribedSymbols.size) this.scheduleConnect(0);
+    };
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
   }
 
   setStatus(status) {
@@ -84,6 +102,8 @@ class MarketDataService {
   clearPollTimer() {
     clearTimeout(this.pollTimer);
     this.pollTimer = null;
+    this.pollAbortController?.abort();
+    this.pollAbortController = null;
     this.pollInFlight = false;
   }
 
@@ -101,6 +121,7 @@ class MarketDataService {
   }
 
   connect() {
+    if (document.visibilityState === "hidden") return;
     const symbols = this.getSubscribedSymbolList();
 
     if (!symbols.length) {
@@ -178,6 +199,7 @@ class MarketDataService {
     this.setStatus("BACKEND");
 
     clearTimeout(this.pollTimer);
+    if (document.visibilityState === "hidden") return;
     this.pollTimer = window.setTimeout(() => {
       this.pollQuotes();
     }, delayMs);
@@ -186,14 +208,16 @@ class MarketDataService {
   async pollQuotes() {
     const symbols = this.getSubscribedSymbolList();
 
-    if (!symbols.length || this.pollInFlight) return;
+    if (!symbols.length || this.pollInFlight || document.visibilityState === "hidden") return;
 
     this.pollInFlight = true;
+    const controller = new AbortController();
+    this.pollAbortController = controller;
 
     try {
       const url = new URL(`${DEFAULT_BROKER_API_URL}/api/questrade/quotes`);
       url.searchParams.set("symbols", symbols.join(","));
-      const response = await fetch(url.toString());
+      const response = await fetch(url.toString(), { signal: controller.signal });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -210,17 +234,22 @@ class MarketDataService {
       this.setStatus(payload.delayed ? "DELAYED" : "BACKEND");
       this.reconnectAttempt = 0;
     } catch {
+      if (controller.signal.aborted) return;
       const attempt = Math.min(this.reconnectAttempt + 1, 8);
       this.reconnectAttempt = attempt;
       this.setStatus("RECONNECTING");
     } finally {
+      const isCurrentRequest = this.pollAbortController === controller;
+      if (isCurrentRequest) this.pollAbortController = null;
       this.pollInFlight = false;
 
-      const retryDelay = Math.min(
-        STREAM_RECONNECT_BASE_MS * 2 ** Math.max(this.reconnectAttempt - 1, 0),
-        STREAM_RECONNECT_MAX_MS
-      );
-      this.startRestFallback(this.reconnectAttempt ? retryDelay : REST_QUOTE_POLL_MS);
+      if (isCurrentRequest && document.visibilityState !== "hidden") {
+        const retryDelay = Math.min(
+          STREAM_RECONNECT_BASE_MS * 2 ** Math.max(this.reconnectAttempt - 1, 0),
+          STREAM_RECONNECT_MAX_MS
+        );
+        this.startRestFallback(this.reconnectAttempt ? retryDelay : REST_QUOTE_POLL_MS);
+      }
     }
   }
 
@@ -262,11 +291,16 @@ class MarketDataService {
 
     const delayed = Boolean(quote.delayed || payload.delayed);
     const transport = payload.stream?.transport;
+    const receivedAt = new Date().toISOString();
+    const timestamp = getQuoteTimestamp(quote);
     const trade = {
       s: symbol,
       p: price,
       v: quote.volume || quote.v || null,
-      t: getQuoteTimestamp(quote),
+      t: timestamp.timestamp,
+      timestampSource: timestamp.source,
+      sourceTimestamp: timestamp.source === "received" ? null : timestamp.timestamp,
+      receivedAt,
       bidPrice: quote.bidPrice ?? null,
       askPrice: quote.askPrice ?? null,
       lastTradeSize: quote.lastTradeSize ?? null,

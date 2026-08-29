@@ -1,14 +1,9 @@
+import { formatPacificTime } from "./timeFormatters.js";
+
 export function formatHealthTime(value) {
-  if (!value) return "Pending";
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) return "Pending";
-
-  return parsed.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
+  return formatPacificTime(value, {
     second: "2-digit",
+    fallback: "Pending",
   });
 }
 

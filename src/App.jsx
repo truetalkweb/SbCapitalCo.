@@ -28,7 +28,6 @@ import PublicOnboarding from "./components/PublicOnboarding";
 import AuthGate from "./components/AuthGate";
 import IssueReportDialog from "./components/IssueReportDialog";
 import MarketSnapshotStrip from "./components/MarketSnapshotStrip";
-import PremiumWorkspace from "./components/premium/PremiumWorkspace";
 import WorkspaceErrorBoundary from "./components/WorkspaceErrorBoundary";
 import { createButtonStyle, createPanelStyle } from "./components/uiPrimitives";
 import {
@@ -80,6 +79,12 @@ import {
   serializeWorkspaceBackup,
 } from "./services/workspaceBackupPolicy";
 import { buildCsv } from "./utils/csvExport";
+import { createVisibilityAwarePoller } from "./utils/visibilityScheduler";
+import {
+  formatPacificDate,
+  formatPacificDateTime,
+  formatPacificTime,
+} from "./utils/timeFormatters";
 import {
   getDefaultIndicatorState,
   normalizeIndicatorState,
@@ -104,6 +109,7 @@ const ShortcutsPanel = lazy(() => import("./components/ShortcutsPanel"));
 const ActivityLogPanel = lazy(() => import("./components/ActivityLogPanel"));
 const ProductionHealthPanel = lazy(() => import("./components/ProductionHealthPanel"));
 const MarketIntelligenceTerminal = lazy(() => import("./components/MarketIntelligenceTerminal"));
+const PremiumWorkspace = lazy(() => import("./components/premium/PremiumWorkspace"));
 
 const publicRightTabIds = new Set(["intel", "risk", "health", "alerts"]);
 const brokerRightTabIds = new Set(["broker", "order", "audit", "replay", "activity", "dom", "keys"]);
@@ -356,7 +362,7 @@ export default function App() {
   const [viewportHeight, setViewportHeight] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight
   );
-  const [level2, setLevel2] = useState([]);
+  const [level2] = useState([]);
 
   const chartAreaRef = useRef(null);
   const brokerBootstrappedRef = useRef(false);
@@ -691,9 +697,10 @@ export default function App() {
     0
   );
 
-  const basePrice = Number(selectedStockData?.price || 100);
+  const basePrice = Number(selectedStockData?.price);
 
   const ladderRows = useMemo(() => {
+    if (!Number.isFinite(basePrice) || basePrice <= 0 || !level2.length) return [];
     return Array.from({ length: 15 }, (_, index) => {
       const offset = 7 - index;
       const price = basePrice + offset * 0.05;
@@ -1098,7 +1105,7 @@ export default function App() {
       ...journalDraft,
       id: Date.now(),
       symbol,
-      createdAt: new Date().toLocaleString(),
+      createdAt: formatPacificDateTime(new Date()),
       linkedPrice: Number(selectedStockData?.price || 0).toFixed(2),
       linkedRealizedPnL: Number(realizedPnL || 0).toFixed(2),
     };
@@ -1433,7 +1440,7 @@ export default function App() {
       guardrails: options.guardrails || null,
       confirmationKey: options.confirmationKey,
       submittedAt: options.submittedAt,
-      time: new Date().toLocaleTimeString(),
+      time: formatPacificTime(new Date(), { second: "2-digit" }),
     };
 
     setOrders((prev) => [order, ...prev.slice(0, 20)]);
@@ -1909,7 +1916,7 @@ export default function App() {
   }
 
   function buildDailyReportText() {
-    const today = new Date().toLocaleDateString();
+    const today = formatPacificDate(new Date());
     const todaysOrders = orders.filter((order) => isTodayRecord(order.time));
     const todaysJournal = journalEntries.filter((entry) => isTodayRecord(entry.createdAt));
     const closedToday = todaysOrders.filter((order) => order.realizedPnL !== null);
@@ -1989,7 +1996,7 @@ export default function App() {
     downloadFile(
       `weekly-review-${new Date().toISOString().slice(0, 10)}.md`,
       [
-        `# SbCapitalCo Weekly Review - ${new Date().toLocaleDateString()}`,
+        `# SbCapitalCo Weekly Review - ${formatPacificDate(new Date())}`,
         "",
         `- Closed/order records: ${weeklyOrders.length}`,
         `- Journal reviews: ${weeklyJournal.length}`,
@@ -2307,53 +2314,16 @@ export default function App() {
       }
     };
 
-    refreshMarketSnapshot();
-    const interval = setInterval(refreshMarketSnapshot, 30_000);
+    const stopPolling = createVisibilityAwarePoller(refreshMarketSnapshot, 30_000, {
+      immediate: true,
+    });
 
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
     };
   }, []);
 
-  useEffect(() => {
-    if (!BROKER_TOOLS_ENABLED) {
-      return undefined;
-    }
-    const interval = setInterval(() => {
-      const basePrice = Number(selectedStockData?.price || 100);
-
-      setLevel2([
-        {
-          marketMaker: "ARCA",
-          bid: (basePrice - 0.05).toFixed(2),
-          ask: (basePrice + 0.05).toFixed(2),
-          size: Math.floor(Math.random() * 2000) + 100,
-        },
-        {
-          marketMaker: "NASDAQ",
-          bid: (basePrice - 0.1).toFixed(2),
-          ask: (basePrice + 0.1).toFixed(2),
-          size: Math.floor(Math.random() * 2000) + 100,
-        },
-        {
-          marketMaker: "BATS",
-          bid: (basePrice - 0.15).toFixed(2),
-          ask: (basePrice + 0.15).toFixed(2),
-          size: Math.floor(Math.random() * 2000) + 100,
-        },
-        {
-          marketMaker: "IEX",
-          bid: (basePrice - 0.2).toFixed(2),
-          ask: (basePrice + 0.2).toFixed(2),
-          size: Math.floor(Math.random() * 2000) + 100,
-        },
-      ]);
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [selectedStockData]);
-  
   const showLeftDock =
     activeWorkspace === "charts" ||
     activeWorkspace === "scanner" ||
@@ -2985,7 +2955,7 @@ export default function App() {
           order.quantity || order.qty || "-",
           order.price ? `$${Number(order.price).toFixed(2)}` : order.limitPrice ? `$${Number(order.limitPrice).toFixed(2)}` : "Market",
           order.status || order.mode || "Recorded",
-          order.time ? new Date(order.time).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "-",
+          order.time ? formatPacificTime(order.time) : "-",
         ]);
       }
 
@@ -3868,7 +3838,8 @@ export default function App() {
         theme={theme}
         onDashboard={() => setActiveWorkspace("dashboard")}
       >
-        <PremiumWorkspace
+        <Suspense fallback={<LoadingPanel theme={theme} label="Loading workspace" />}>
+          <PremiumWorkspace
         activeWorkspace={activeWorkspace}
         setActiveWorkspace={setActiveWorkspace}
         viewportWidth={viewportWidth}
@@ -3989,7 +3960,8 @@ export default function App() {
         entitlementsStatus={effectiveEntitlementsStatus}
         onOpenHelp={openPublicOnboarding}
         onOpenIssueReport={() => setIssueReportOpen(true)}
-        />
+          />
+        </Suspense>
       </WorkspaceErrorBoundary>
     );
   }
@@ -5181,7 +5153,7 @@ export default function App() {
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
                 ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel], ["Mode", modeSourceLabel]] : [["AI", aiHealthLabel]]),
-                ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
+                ["Checked", formatPacificTime(healthLastCheckedAt, { fallback: "Pending" })],
               ]
             : [
                 ["Data", resolvedMarketDataStatusLabel],
@@ -5189,7 +5161,7 @@ export default function App() {
                 ["Scanner", scannerSourceLabel],
                 ["News", resolvedNewsStatusLabel],
                 ...(BROKER_TOOLS_ENABLED ? [["Broker", brokerSourceLabel], ["Mode", modeSourceLabel]] : [["AI", aiHealthLabel]]),
-                ["Checked", healthLastCheckedAt ? new Date(healthLastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Pending"],
+                ["Checked", formatPacificTime(healthLastCheckedAt, { fallback: "Pending" })],
               ]
         }
       />

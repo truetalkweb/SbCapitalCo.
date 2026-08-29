@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createVisibilityAwarePoller } from "../utils/visibilityScheduler";
 
 export function useReplayEngine({
   initialReplayMode = false,
@@ -127,7 +128,7 @@ export function useReplayEngine({
   useEffect(() => {
     if (!replayMode || !replayPlaying) return;
 
-    const interval = setInterval(() => {
+    return createVisibilityAwarePoller(() => {
       setReplayIndex((prev) => {
         if (!mainReplayData.length) return prev;
 
@@ -138,9 +139,10 @@ export function useReplayEngine({
 
         return prev + 1;
       });
-    }, Math.max(120, 900 / replaySpeed));
-
-    return () => clearInterval(interval);
+    }, Math.max(120, 900 / replaySpeed), {
+      immediate: false,
+      resumeImmediately: false,
+    });
   }, [mainReplayData.length, replayMode, replayPlaying, replaySpeed]);
 
   return {

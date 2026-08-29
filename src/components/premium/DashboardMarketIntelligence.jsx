@@ -6,6 +6,8 @@ import {
   formatPercent,
   formatPrice,
 } from "../../utils/dashboardFormatters";
+import { formatPacificTime } from "../../utils/timeFormatters";
+import { createVisibilityAwarePoller } from "../../utils/visibilityScheduler";
 
 const OPPORTUNITY_TABS = [
   "Gainers",
@@ -58,11 +60,17 @@ function useMarketPulseSeries(brokerApiUrl, rows) {
   useEffect(() => {
     if (!brokerApiUrl) return undefined;
     let cancelled = false;
+    let activeController = null;
     const symbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
 
     const load = async () => {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
       const settled = await Promise.allSettled(symbols.map(async (symbol) => {
-        const response = await fetch(`${brokerApiUrl}/api/questrade/candles/${symbol}?timeframe=5m`);
+        const response = await fetch(`${brokerApiUrl}/api/questrade/candles/${symbol}?timeframe=5m`, {
+          signal: controller.signal,
+        });
         if (!response.ok) return null;
         const payload = await response.json();
         const sparkline = (Array.isArray(payload.candles) ? payload.candles : [])
@@ -87,13 +95,13 @@ function useMarketPulseSeries(brokerApiUrl, rows) {
       setSeriesBySymbol(next);
     };
 
-    load().catch(() => {
+    const stopPolling = createVisibilityAwarePoller(() => load().catch(() => {
       if (!cancelled) setSeriesBySymbol({});
-    });
-    const interval = window.setInterval(load, 5 * 60_000);
+    }), 5 * 60_000, { immediate: true });
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      activeController?.abort();
+      stopPolling();
     };
   }, [brokerApiUrl]);
 
@@ -120,10 +128,7 @@ function freshnessLabel(row = {}) {
   const timestamp = rawTimestamp ? new Date(rawTimestamp) : null;
   if (!timestamp || Number.isNaN(timestamp.getTime())) return "Freshness unavailable";
 
-  return `Updated ${timestamp.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+  return `Updated ${formatPacificTime(timestamp)} PT`;
 }
 
 function Card({ theme, title, action, children, style = {} }) {
@@ -314,6 +319,20 @@ function rowsForTab(tab, groups, news) {
   return all;
 }
 
+function handleTabKey(event, values, select) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const currentIndex = values.indexOf(event.currentTarget.dataset.tabValue);
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? values.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + values.length) % values.length;
+  select(values[nextIndex]);
+  const tabs = event.currentTarget.parentElement?.querySelectorAll('[role="tab"]');
+  tabs?.[nextIndex]?.focus();
+}
+
 export function OpportunityBoard({ theme, groups = {}, news = [], selectedSymbol, onSelect, onOpenChart }) {
   const [tab, setTab] = useState("Gainers");
   const rows = uniqueRows(rowsForTab(tab, groups, news)).slice(0, 12);
@@ -326,7 +345,7 @@ export function OpportunityBoard({ theme, groups = {}, news = [], selectedSymbol
     >
       <div role="tablist" aria-label="Opportunity categories" style={{ padding: "9px 10px", display: "flex", gap: 5, overflowX: "auto", borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
         {OPPORTUNITY_TABS.map((item) => (
-          <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)} style={{ minHeight: 28, padding: "0 10px", borderRadius: 5, border: `1px solid ${tab === item ? theme.blue : theme.borderSoft || theme.border}`, background: tab === item ? `${theme.blue}25` : "transparent", color: tab === item ? theme.text : theme.muted, fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", cursor: "pointer" }}>{item}</button>
+          <button key={item} type="button" role="tab" data-tab-value={item} aria-selected={tab === item} tabIndex={tab === item ? 0 : -1} onClick={() => setTab(item)} onKeyDown={(event) => handleTabKey(event, OPPORTUNITY_TABS, setTab)} style={{ minHeight: 28, padding: "0 10px", borderRadius: 5, border: `1px solid ${tab === item ? theme.blue : theme.borderSoft || theme.border}`, background: tab === item ? `${theme.blue}25` : "transparent", color: tab === item ? theme.text : theme.muted, fontSize: 11, fontWeight: 800, whiteSpace: "nowrap", cursor: "pointer" }}>{item}</button>
         ))}
       </div>
       <div style={{ overflow: "auto" }}>
@@ -387,7 +406,7 @@ export function SectorHeatmap({ theme, rows = [], onSelect }) {
     <Card
       theme={theme}
       title="Sector Heatmap"
-      action={<div role="tablist" aria-label="Heatmap period" style={{ display: "flex", gap: 4 }}>{Object.keys(PERIOD_FIELDS).map((item) => <button key={item} type="button" role="tab" aria-selected={period === item} onClick={() => setPeriod(item)} style={{ height: 25, minWidth: 34, border: `1px solid ${period === item ? theme.blue : theme.borderSoft || theme.border}`, borderRadius: 5, background: period === item ? `${theme.blue}24` : "transparent", color: period === item ? theme.text : theme.muted, fontSize: 10, cursor: "pointer" }}>{item}</button>)}</div>}
+      action={<div role="tablist" aria-label="Heatmap period" style={{ display: "flex", gap: 4 }}>{Object.keys(PERIOD_FIELDS).map((item) => <button key={item} type="button" role="tab" data-tab-value={item} aria-selected={period === item} tabIndex={period === item ? 0 : -1} onClick={() => setPeriod(item)} onKeyDown={(event) => handleTabKey(event, Object.keys(PERIOD_FIELDS), setPeriod)} style={{ height: 25, minWidth: 34, border: `1px solid ${period === item ? theme.blue : theme.borderSoft || theme.border}`, borderRadius: 5, background: period === item ? `${theme.blue}24` : "transparent", color: period === item ? theme.text : theme.muted, fontSize: 10, cursor: "pointer" }}>{item}</button>)}</div>}
     >
       {heatmapRows.length === 0 ? (
         <EmptyState theme={theme}>No sector rows include a valid {period} performance field. The heatmap will populate when the provider supplies sector and period data.</EmptyState>

@@ -195,7 +195,7 @@ export function LockedWorkspace({ theme, activeWorkspace, entitlements, status }
   );
 }
 
-export function PremiumTabs({ theme, tabs, active, onChange }) {
+export function PremiumTabs({ theme, tabs, active, onChange, ariaLabel = "Workspace views" }) {
   const interactive = typeof onChange === "function";
   if (!interactive) {
     const activeTab = tabs.find((tab) => {
@@ -226,7 +226,7 @@ export function PremiumTabs({ theme, tabs, active, onChange }) {
     );
   }
   return (
-    <div role="tablist" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+    <div role="tablist" aria-label={ariaLabel} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
       {tabs.map((tab) => {
         const id = typeof tab === "string" ? tab : tab.id;
         const label = typeof tab === "string" ? tab : tab.label;
@@ -237,7 +237,23 @@ export function PremiumTabs({ theme, tabs, active, onChange }) {
             type="button"
             role="tab"
             aria-selected={selected}
+            tabIndex={selected ? 0 : -1}
             onClick={() => onChange?.(id)}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const buttons = [...event.currentTarget.parentElement.querySelectorAll('[role="tab"]')];
+              const currentIndex = buttons.indexOf(event.currentTarget);
+              const nextIndex = event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? buttons.length - 1
+                  : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+              const nextTab = tabs[nextIndex];
+              const nextId = typeof nextTab === "string" ? nextTab : nextTab.id;
+              onChange?.(nextId);
+              buttons[nextIndex]?.focus();
+            }}
             style={{
               height: 30,
               padding: "0 13px",

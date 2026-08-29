@@ -4,6 +4,8 @@ import { BROKER_TOOLS_ENABLED } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { loadSetting, saveSetting } from "../utils/storage";
 import { getAuthenticatedAxiosConfig } from "../services/authenticatedRequest";
+import { createVisibilityAwarePoller } from "../utils/visibilityScheduler";
+import { formatPacificTime } from "../utils/timeFormatters";
 
 export function useBrokerData(brokerApiUrl) {
   const [brokerStatus, setBrokerStatus] = useState("Disconnected");
@@ -129,14 +131,7 @@ export function useBrokerData(brokerApiUrl) {
   }, [brokerApiUrl]);
 
   useEffect(() => {
-    const initial = window.setTimeout(checkBrokerStatus, 0);
-
-    const interval = window.setInterval(checkBrokerStatus, 60_000);
-
-    return () => {
-      window.clearTimeout(initial);
-      window.clearInterval(interval);
-    };
+    return createVisibilityAwarePoller(checkBrokerStatus, 60_000, { immediate: true });
   }, [checkBrokerStatus]);
 
   const loadLiveReadiness = useCallback(
@@ -313,7 +308,7 @@ export function useBrokerData(brokerApiUrl) {
           payload?.degraded || payload?.fallback
         );
 
-        setBrokerStatus(degradedSync ? "Broker data degraded" : `Synced ${new Date().toLocaleTimeString()}`);
+        setBrokerStatus(degradedSync ? "Broker data degraded" : `Synced ${formatPacificTime(new Date())} PT`);
         setBrokerSyncMeta({
           lastSuccessAt: new Date().toISOString(),
           latencyMs: Date.now() - startedAt,

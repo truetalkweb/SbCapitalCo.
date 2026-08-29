@@ -1,3 +1,5 @@
+import { formatPacificTime } from "./timeFormatters.js";
+
 function toNumber(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,x]/g, "").trim());
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -41,9 +43,7 @@ export function formatCompactNumber(value, digits = 2) {
 
 export function formatNewsClock(timestamp) {
   if (!timestamp) return "Market";
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return String(timestamp);
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatPacificTime(timestamp, { fallback: String(timestamp) });
 }
 
 export function asNumber(value, fallback = 0) {

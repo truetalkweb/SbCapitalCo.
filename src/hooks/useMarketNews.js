@@ -55,7 +55,7 @@ export function getNewsStatusLabel(newsMeta = {}) {
   if (newsMeta.degraded) return "NEWS FALLBACK";
   if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "NEWS PROVIDER LIMITED";
   if (newsMeta.cached) return "NEWS CACHED";
-  if (newsMeta.source) return "NEWS LIVE";
+  if (Number(newsMeta.rowCount) > 0 && newsMeta.updatedAt) return "NEWS LIVE";
 
   return "NEWS PENDING";
 }

@@ -1,4 +1,5 @@
 import { createNormalizedNewsFallback } from "./scannerNewsAdapters.js";
+import { formatPacificTime } from "./timeFormatters.js";
 
 export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
   const controller = new AbortController();
@@ -20,13 +21,7 @@ export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
 }
 
 export function formatNewsTime(value) {
-  const timestamp = typeof value === "number" ? value * 1000 : value;
-  const date = new Date(timestamp || Date.now());
-
-  return (Number.isNaN(date.getTime()) ? new Date() : date).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatPacificTime(value);
 }
 
 export function normalizePanelNewsItem(item, index, selectedSymbol) {

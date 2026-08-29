@@ -8,6 +8,7 @@ import {
   normalizeScannerRow,
   rankScannerRows,
 } from "../../utils/scannerNewsAdapters.js";
+import { formatPacificDateTime } from "../../utils/timeFormatters.js";
 
 export function num(value, fallback = 0) {
   const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
@@ -78,8 +79,12 @@ export function buildStocks(liveStocks, scannerStocks, selectedStockData, select
       ...stock,
       symbol,
       name: stock.name || stock.company || bySymbol.get(symbol)?.name || symbol,
-      price: num(stock.price, bySymbol.get(symbol)?.price || 0),
-      change: stock.changePercent ?? stock.change ?? bySymbol.get(symbol)?.change ?? 0,
+      price: hasNumericValue(stock.price)
+        ? num(stock.price)
+        : bySymbol.get(symbol)?.price ?? null,
+      change: hasNumericValue(stock.changePercent ?? stock.change)
+        ? num(stock.changePercent ?? stock.change)
+        : bySymbol.get(symbol)?.change ?? null,
       volume: stock.volume ?? bySymbol.get(symbol)?.volume ?? null,
       rvol: stock.rvol ?? stock.relativeVolume ?? bySymbol.get(symbol)?.rvol ?? null,
       float: stock.float ?? bySymbol.get(symbol)?.float ?? null,
@@ -148,7 +153,9 @@ export function makeJournalTrades(entries) {
     const pnl = num(entry.pnl ?? entry.netPnl ?? entry.resultAmount, 0);
     return {
       id: entry.id,
-      date: entry.createdAt ? new Date(entry.createdAt).toLocaleString() : entry.date || "Not recorded",
+      date: entry.createdAt
+        ? formatPacificDateTime(entry.createdAt, { fallback: "Not recorded" })
+        : entry.date || "Not recorded",
       symbol: entry.symbol || "Unspecified",
       setup: entry.setup || entry.tags || "Review",
       side: entry.bias || entry.side || "Long",

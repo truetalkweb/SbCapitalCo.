@@ -1,3 +1,5 @@
+import { formatPacificDateTime } from "../utils/timeFormatters";
+
 function formatMoney(value, fallback = "Pending") {
   const number = Number(value);
 
@@ -22,13 +24,7 @@ function formatNumber(value, fallback = "Pending") {
 }
 
 function formatDateTime(value) {
-  if (!value) return "Not synced";
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) return "Not synced";
-
-  return parsed.toLocaleString();
+  return formatPacificDateTime(value, { fallback: "Not synced" });
 }
 
 function getPositionValue(position) {

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithTimeout } from "../utils/marketUtils";
 import { cleanConfidenceLabel, normalizeScannerGroups } from "../utils/scannerNewsAdapters";
 import { loadSetting, saveSetting } from "../utils/storage";
+import { createVisibilityAwarePoller } from "../utils/visibilityScheduler";
 
 const emptyScannerGroups = {
   gainers: [],
@@ -47,8 +48,8 @@ const scannerUnavailableMeta = {
   updatedAt: null,
   cacheAgeMs: null,
   counts: null,
-  warnings: ["Backend FMP scanner bridge did not return usable rows."],
-  lastWarning: "Backend FMP scanner bridge did not return usable rows.",
+  warnings: ["Scanner data is temporarily unavailable."],
+  lastWarning: "Scanner data is temporarily unavailable.",
 };
 
 function buildScannerMeta(data) {
@@ -94,11 +95,13 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   const [scannerGroups, setScannerGroups] = useState(emptyScannerGroups);
   const [scannerMeta, setScannerMeta] = useState(defaultScannerMeta);
   const [scannerLoading, setScannerLoading] = useState(false);
+  const scannerGroupsRef = useRef(emptyScannerGroups);
   const [selectedScannerStock, setSelectedScannerStock] = useState(() =>
     loadSetting("sb_selected_scanner_stock", null)
   );
 
-  const loadScanner = useCallback(async () => {
+  const loadScanner = useCallback(async (options = {}) => {
+    const silent = Boolean(options?.silent);
     setScannerLoading(true);
 
     try {
@@ -128,24 +131,42 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
       }, nextMeta);
 
       setScannerGroups(normalizedGroups);
+      scannerGroupsRef.current = normalizedGroups;
       setScannerMeta(nextMeta);
-      onActivity?.({
+      if (!silent) onActivity?.({
         type: "scanner",
         status: data.degraded ? "degraded" : "success",
         title: "Scanner Refreshed",
         detail: `${data.source || "FMP SCANNER"} returned ${getScannerRowCount(data)} ranked rows.`,
       });
     } catch {
-      setScannerGroups(normalizeScannerGroups(emptyScannerGroups, scannerUnavailableMeta));
-      setScannerMeta({
-        ...scannerUnavailableMeta,
-        confidenceLabel: "Fallback Context",
-      });
-      onActivity?.({
+      const hasPreviousRows = Object.values(scannerGroupsRef.current)
+        .some((rows) => Array.isArray(rows) && rows.length > 0);
+      if (!hasPreviousRows) {
+        const unavailableGroups = normalizeScannerGroups(emptyScannerGroups, scannerUnavailableMeta);
+        scannerGroupsRef.current = unavailableGroups;
+        setScannerGroups(unavailableGroups);
+        setScannerMeta({
+          ...scannerUnavailableMeta,
+          confidenceLabel: "Unavailable",
+        });
+      } else {
+        setScannerMeta((current) => ({
+          ...current,
+          degraded: true,
+          cached: true,
+          warnings: ["The latest scanner refresh failed. Previously verified rows remain visible."],
+          lastWarning: "The latest scanner refresh failed. Previously verified rows remain visible.",
+          confidenceLabel: "Cached",
+        }));
+      }
+      if (!silent) onActivity?.({
         type: "scanner",
         status: "failed",
         title: "Scanner Refresh Failed",
-        detail: "Backend FMP scanner bridge did not return usable rows.",
+        detail: hasPreviousRows
+          ? "Previously verified scanner rows remain available."
+          : "Scanner data is temporarily unavailable.",
       });
     } finally {
       setScannerLoading(false);
@@ -153,13 +174,16 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   }, [brokerApiUrl, onActivity]);
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(loadScanner, 0);
-    const interval = autoRefresh ? setInterval(loadScanner, 5 * 60 * 1000) : null;
-
-    return () => {
-      window.clearTimeout(initialLoad);
-      if (interval) clearInterval(interval);
-    };
+    if (!autoRefresh) return createVisibilityAwarePoller(
+      () => loadScanner({ silent: true }),
+      5 * 60 * 1000,
+      { immediate: true, repeat: false }
+    );
+    return createVisibilityAwarePoller(
+      () => loadScanner({ silent: true }),
+      5 * 60 * 1000,
+      { immediate: true }
+    );
   }, [autoRefresh, loadScanner]);
 
   useEffect(() => {

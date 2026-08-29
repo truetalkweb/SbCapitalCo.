@@ -1,3 +1,5 @@
+import { formatPacificTime } from "../utils/timeFormatters";
+
 const PAPER_STARTING_EQUITY = 100000;
 
 function money(value, fallback = "$0.00") {
@@ -108,9 +110,7 @@ export default function RiskDashboard({
 
     return total + Math.abs(marketValue);
   }, 0);
-  const lastSync = brokerSyncMeta?.lastSuccessAt
-    ? new Date(brokerSyncMeta.lastSuccessAt).toLocaleTimeString()
-    : "Not synced";
+  const lastSync = formatPacificTime(brokerSyncMeta?.lastSuccessAt, { fallback: "Not synced" });
   const warnings = [
     lossLimit > 0 && dailyLoss >= lossLimit ? "Daily loss lockout is active." : null,
     paperPositions.some((item) => item.stopLoss <= 0) ? "One or more paper positions has no stop reference." : null,

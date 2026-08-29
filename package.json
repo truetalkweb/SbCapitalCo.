@@ -13,6 +13,7 @@
     "measure:performance": "node scripts/measure-performance.mjs",
     "release:gate": "npm run lint && npm test && npm run build && npm run test:e2e",
     "smoke:production": "node scripts/production-smoke.mjs",
+    "audit:production-auth": "node scripts/authenticated-production-audit.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

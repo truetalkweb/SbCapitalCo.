@@ -19,6 +19,9 @@ import {
   saveWorkspaceFallback,
 } from "../services/workspacePersistencePolicy";
 import {
+  AUTH_RECOVERY_MESSAGES,
+  getAuthEventRecovery,
+  getSafeAuthErrorMessage,
   getSafeAuthReturnPath,
   isSafeInternalReturnPath,
 } from "../services/authNavigationPolicy";
@@ -52,7 +55,7 @@ function getInitialAuthMessage() {
   if (typeof window === "undefined") return "";
   const url = new URL(window.location.href);
   return url.searchParams.get("error_description") || url.searchParams.get("error")
-    ? "This authentication link is invalid or expired. Request a new link and try again."
+    ? AUTH_RECOVERY_MESSAGES.expiredLink
     : "";
 }
 
@@ -60,15 +63,6 @@ function getAuthRedirectTo() {
   if (authRedirectOrigin) return authRedirectOrigin.replace(/\/+$/, "");
   if (typeof window !== "undefined") return `${window.location.origin}${window.location.pathname}`;
   return undefined;
-}
-
-function getAuthMessage(error, fallback) {
-  const message = String(error?.message || "").toLowerCase();
-  if (message.includes("invalid login")) return "Email or password is incorrect.";
-  if (message.includes("email not confirmed")) return "Confirm your email before signing in.";
-  if (message.includes("password")) return "Use a password with at least 8 characters.";
-  if (message.includes("rate limit")) return "Too many attempts. Wait briefly and try again.";
-  return fallback;
 }
 
 async function withTimeout(promise, timeoutMs, message) {
@@ -201,7 +195,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       }
       setAuthPassword("");
     } catch (error) {
-      setAuthMessage(getAuthMessage(error, "Authentication failed. Try again."));
+      setAuthMessage(getSafeAuthErrorMessage(error));
     } finally {
       setAuthBusy(false);
     }
@@ -220,7 +214,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     });
     setAuthBusy(false);
     setAuthMessage(error
-      ? getAuthMessage(error, "Password reset could not be sent.")
+      ? getSafeAuthErrorMessage(error, "Password reset could not be sent.")
       : "Password reset instructions were sent if the account exists.");
     return !error;
   }, [authEmail, user]);
@@ -234,7 +228,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     const { error } = await supabase.auth.updateUser({ password: authPassword });
     setAuthBusy(false);
     if (error) {
-      setAuthMessage(getAuthMessage(error, "Password could not be updated."));
+      setAuthMessage(getSafeAuthErrorMessage(error, "Password could not be updated."));
       return;
     }
     setAuthPassword("");
@@ -570,17 +564,16 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       })
       .catch(() => {
         if (!initialized) {
-          setAuthMessage("The saved session could not be restored. Sign in again.");
+          setAuthMessage(AUTH_RECOVERY_MESSAGES.restoreFailed);
           finishSessionRestore(null);
         }
       });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
-      if (event === "SIGNED_IN") restoreIntendedDestination();
-      if (event === "SIGNED_OUT" && initialized) {
-        setAuthMessage("Your session ended. Sign in to continue.");
-      }
+      const recovery = getAuthEventRecovery(event, { initialized });
+      if (recovery.passwordRecovery) setPasswordRecovery(true);
+      if (recovery.restoreDestination) restoreIntendedDestination();
+      if (recovery.message) setAuthMessage(recovery.message);
       finishSessionRestore(session);
       if (session?.user?.email) setAuthEmail(session.user.email);
     });

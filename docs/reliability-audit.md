@@ -45,7 +45,7 @@ Audit date: 2026-08-28
 ## Verification Baseline
 
 - Frontend lint: passed
-- Frontend tests: 79 passed
+- Frontend tests: 81 passed
 - Frontend production build: passed
 - Backend syntax check: passed
 - Backend tests: 52 passed

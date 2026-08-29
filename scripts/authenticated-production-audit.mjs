@@ -221,11 +221,21 @@ function attachDiagnostics(page, role) {
   const diagnostics = [];
   page.on("pageerror", (error) => diagnostics.push({ role, type: "pageerror", message: safeError(error) }));
   page.on("console", (message) => {
-    if (message.type() === "error") diagnostics.push({ role, type: "console", message: safeError(message.text()) });
+    if (message.type() === "error") {
+      const locationUrl = message.location()?.url || "";
+      diagnostics.push({
+        role,
+        type: "console",
+        message: safeError(message.text()),
+        path: locationUrl && (locationUrl.startsWith(productionUrl) || locationUrl.startsWith(backendUrl))
+          ? new URL(locationUrl).pathname
+          : undefined,
+      });
+    }
   });
   page.on("response", (response) => {
     const url = response.url();
-    if (response.status() >= 500 && (url.startsWith(productionUrl) || url.startsWith(backendUrl))) {
+    if (response.status() >= 400 && (url.startsWith(productionUrl) || url.startsWith(backendUrl))) {
       diagnostics.push({ role, type: "http", status: response.status(), path: new URL(url).pathname });
     }
   });
@@ -249,14 +259,14 @@ async function dismissOnboarding(page) {
 }
 
 async function visitWorkspace(page, id, allowed) {
-  const button = page.locator(`[data-workspace-id="${id}"]`).first();
+  const workspaceNav = page.locator('nav[aria-label="Terminal workspaces"]');
+  const button = workspaceNav.locator(`[data-workspace-id="${id}"]`);
   await button.scrollIntoViewIfNeeded();
   await button.click();
-  await assert.doesNotReject(() => button.getAttribute("aria-current"));
+  await workspaceNav.locator(`[data-workspace-id="${id}"][aria-current="page"]`).waitFor({ state: "visible", timeout: 10_000 });
   await page.waitForTimeout(id === "dashboard" || id === "chart-analysis" || id === "replay" ? 900 : 250);
   const locked = await page.getByRole("heading", { name: "Upgrade required" }).count();
   assert.equal(Boolean(locked), !allowed, `${id} access mismatch`);
-  assert.equal(await button.getAttribute("aria-current"), "page", `${id} did not become active`);
 }
 
 async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture = false } = {}) {
@@ -287,8 +297,10 @@ async function verifyBrowserRole(browser, current, allowedWorkspaces, { capture 
   if (capture) {
     const themeSelect = page.getByLabel("Theme", { exact: true });
     for (const theme of ["dark", "light"]) {
+      await page.getByRole("tab", { name: "General", exact: true }).click();
       await themeSelect.selectOption(theme);
-      await page.getByRole("button", { name: "Save", exact: true }).first().click();
+      await page.getByRole("tab", { name: "Data & Connections", exact: true }).click();
+      await page.getByRole("button", { name: "Save", exact: true }).click();
       await page.waitForTimeout(600);
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(`.theme-${theme}`).waitFor({ state: "visible", timeout: 30_000 });

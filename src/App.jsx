@@ -452,6 +452,12 @@ export default function App() {
     };
 
     setOrderAuditTrail((prev) => [nextEntry, ...prev].slice(0, 150));
+
+    if (!BROKER_TOOLS_ENABLED) {
+      setOrderAuditSyncStatus("Local audit ready");
+      return;
+    }
+
     setOrderAuditSyncStatus("Syncing latest audit row");
 
     getAuthHeaders({ "Content-Type": "application/json" })
@@ -2106,7 +2112,7 @@ export default function App() {
   }, [brokerError, pushActivity]);
 
   useEffect(() => {
-    if (!authReady || !user?.id) {
+    if (!BROKER_TOOLS_ENABLED || !authReady || !user?.id) {
       return undefined;
     }
 

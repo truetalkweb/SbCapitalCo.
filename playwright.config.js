@@ -8,6 +8,7 @@ const backendUrl = process.env.RELEASE_BACKEND_URL || `http://127.0.0.1:${backen
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/correctness/**",
   outputDir: "./test-results",
   timeout: 45_000,
   expect: { timeout: 10_000 },

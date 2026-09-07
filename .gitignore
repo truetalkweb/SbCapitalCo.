@@ -152,6 +152,7 @@ qa-*.png
 *-smoke.log
 *-smoke.err.log
 playwright-report/
+playwright-correctness-report/
 test-results/
 release-gate-artifacts/
 artifacts/

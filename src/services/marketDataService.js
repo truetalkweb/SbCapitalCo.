@@ -1,3 +1,5 @@
+import { normalizeQuoteEvent } from "../utils/marketDataContract.js";
+
 const DEFAULT_BROKER_API_URL = (
   import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000"
 ).replace(/\/+$/, "");
@@ -13,28 +15,6 @@ function normalizeSymbol(value) {
     .toUpperCase()
     .replace(/[^A-Z0-9.:-]/g, "")
     .slice(0, 16);
-}
-
-function getQuoteTimestamp(quote) {
-  const explicitTimestamp = Number(quote.timestamp || quote.t || 0);
-
-  if (Number.isFinite(explicitTimestamp) && explicitTimestamp > 0) {
-    return {
-      timestamp: explicitTimestamp > 10_000_000_000
-        ? Math.floor(explicitTimestamp / 1000)
-        : Math.floor(explicitTimestamp),
-      source: "provider",
-    };
-  }
-
-  const tradeTime = quote.lastTradeTime || quote.updatedAt;
-  const tradeTimeMs = tradeTime ? new Date(tradeTime).getTime() : 0;
-
-  if (Number.isFinite(tradeTimeMs) && tradeTimeMs > 0) {
-    return { timestamp: Math.floor(tradeTimeMs / 1000), source: "provider-time" };
-  }
-
-  return { timestamp: Math.floor(Date.now() / 1000), source: "received" };
 }
 
 function parseEventData(event) {
@@ -273,48 +253,10 @@ class MarketDataService {
   }
 
   emitQuote(quote, payload = {}) {
-    const symbol = normalizeSymbol(quote.symbol || quote.s);
-    const price = Number(
-      quote.price ||
-        quote.p ||
-        quote.lastTradePrice ||
-        quote.lastTradePriceTrHrs ||
-        quote.bidPrice ||
-        quote.askPrice ||
-        0
-    );
-
-    if (!symbol || !Number.isFinite(price) || price <= 0) return;
-
-    const callbacks = this.subscribers.get(symbol);
-    if (!callbacks?.size) return;
-
-    const delayed = Boolean(quote.delayed || payload.delayed);
-    const transport = payload.stream?.transport;
-    const receivedAt = new Date().toISOString();
-    const timestamp = getQuoteTimestamp(quote);
-    const trade = {
-      s: symbol,
-      p: price,
-      v: quote.volume || quote.v || null,
-      t: timestamp.timestamp,
-      timestampSource: timestamp.source,
-      sourceTimestamp: timestamp.source === "received" ? null : timestamp.timestamp,
-      receivedAt,
-      bidPrice: quote.bidPrice ?? null,
-      askPrice: quote.askPrice ?? null,
-      lastTradeSize: quote.lastTradeSize ?? null,
-      lastTradeTime: quote.lastTradeTime || payload.updatedAt || null,
-      delayed,
-      realtime: quote.realtime !== false && payload.realtime !== false && !delayed,
-      source: delayed
-        ? "QTRD DELAYED"
-        : transport === "sse"
-          ? "QTRD STREAM"
-          : "QTRD REST",
-    };
-
-    callbacks.forEach((callback) => callback(trade));
+    const trade = normalizeQuoteEvent(quote, payload);
+    if (!trade.symbol) return;
+    const callbacks = this.subscribers.get(trade.symbol);
+    callbacks?.forEach(callback => callback(trade));
   }
 
   sendSubscribe(symbol) {

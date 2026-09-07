@@ -80,6 +80,8 @@ export function calculateEMA(data, period) {
 
 export function calculateVWAP(data) {
   if (!Array.isArray(data) || !data.length) return [];
+  if (data.some(candle => [candle.high, candle.low, candle.close, candle.volume]
+    .some(value => value === null || value === undefined || !Number.isFinite(Number(value))) || Number(candle.volume) < 0)) return [];
 
   let cumulativePriceVolume = 0;
   let cumulativeVolume = 0;
@@ -94,15 +96,16 @@ export function calculateVWAP(data) {
       const high = Number(candle.high);
       const low = Number(candle.low);
       const close = Number(candle.close);
-      const volume = Math.max(Number(candle.volume || 1), 1);
+      const volume = Number(candle.volume);
       const typicalPrice = (high + low + close) / 3;
 
       cumulativePriceVolume += typicalPrice * volume;
       cumulativeVolume += volume;
 
+      if (!cumulativeVolume) return null;
       return {
         time: candle.time,
         value: Number((cumulativePriceVolume / cumulativeVolume).toFixed(4)),
       };
-    });
+    }).filter(Boolean);
 }

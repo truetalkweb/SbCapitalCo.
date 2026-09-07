@@ -1,17 +1,19 @@
 import { Search, X } from "lucide-react";
 import { terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
 import { CHART_INDICATOR_OPTIONS } from "../../../indicators/chartIndicators";
-import { money, nullableMoveOf, num, pct, toneColor } from "../premiumWorkspaceData";
+import { money, num, pct, toneColor } from "../premiumWorkspaceData";
 import { ActionButton, PremiumCard, PremiumTable, SectionTitle } from "../PremiumWorkspacePrimitives";
 
 export default function ReplayWorkspacePage({
   addReplayBookmark,
-      allSymbols,
       captureReplayScreenshot,
       chartIndicators,
       enterReplayFullscreen,
       isNarrowWorkspace,
       jumpReplay,
+      selectReplayBookmark,
+      replayData = [],
+      timeZone = "America/Vancouver",
       openReplayJournal,
       page,
       removeReplayBookmark,
@@ -20,20 +22,19 @@ export default function ReplayWorkspacePage({
       replayBookmarks,
       replayChartRef,
       replayDataLength,
-      replayEquity,
       replayIndex,
       replayIndicatorMenuOpen,
-      replayNet,
       replayNotes,
       replayPlaying,
       replayRows,
       replaySettingsOpen,
       replaySpeed,
       replayStats,
-      replayTrades,
-      replayWinRate,
+      replayBuy,
+      replaySell,
+      quantity,
+      setQuantity,
       resetReplay,
-      selected,
       selectedStock,
       setChartIndicators,
       setReplayIndex,
@@ -48,55 +49,33 @@ export default function ReplayWorkspacePage({
       timeframe
 }) {
     const replayStartingCash = 100000;
-    const replayNetLiquidation = num(replayStats?.equity, replayEquity.at(-1) ?? replayStartingCash);
-    const replayPeak = replayEquity.length ? Math.max(...replayEquity.map((value) => num(value, replayStartingCash))) : replayStartingCash;
-    const replayMaxDrawdown = replayEquity.length
-      ? Math.min(...replayEquity.map((value) => num(value, replayStartingCash) - replayPeak))
-      : 0;
-    const replayPositionsBySymbol = (replayTrades || []).reduce((positionsBySymbol, trade) => {
-      const symbol = String(trade.symbol || selectedStock || "").toUpperCase();
-      if (!symbol) return positionsBySymbol;
-      const quantityValue = Math.abs(num(trade.quantity ?? trade.qty, 0));
-      const priceValue = num(trade.price ?? trade.fillPrice, 0);
-      const direction = String(trade.side || trade.type || "").toUpperCase();
-      const quantityDelta = direction === "SELL" || direction === "SHORT" ? -quantityValue : quantityValue;
-      const existing = positionsBySymbol[symbol] || { symbol, quantity: 0, cost: 0 };
-      if (quantityDelta > 0) existing.cost += quantityDelta * priceValue;
-      existing.quantity += quantityDelta;
-      if (existing.quantity <= 0) existing.cost = 0;
-      positionsBySymbol[symbol] = existing;
-      return positionsBySymbol;
-    }, {});
-    const replayPositions = Object.values(replayPositionsBySymbol)
-      .filter((position) => position.quantity !== 0)
-      .map((position) => {
-        const averagePrice = position.quantity > 0 ? position.cost / position.quantity : 0;
-        const lastPrice = num(allSymbols?.find((row) => row.symbol === position.symbol)?.price, averagePrice);
-        const unrealizedPnl = (lastPrice - averagePrice) * position.quantity;
-        return {
-          symbol: position.symbol,
-          side: position.quantity > 0 ? "Long" : "Short",
-          qty: Math.abs(position.quantity),
-          avg: averagePrice ? money(averagePrice) : "Unavailable",
-          last: lastPrice ? money(lastPrice) : "Unavailable",
-          pnl: money(unrealizedPnl),
-          pct: averagePrice ? `${((lastPrice - averagePrice) / averagePrice * 100).toFixed(2)}%` : "Unavailable",
-        };
-      });
-    const replaySymbolData = allSymbols?.find((row) => row.symbol === selectedStock) || selected;
-    const replayPrice = num(replaySymbolData?.price ?? selected?.price, 0);
-    const replayMove = nullableMoveOf(replaySymbolData) ?? nullableMoveOf(selected) ?? 0;
-    const replayStatus = replayPlaying ? "Running" : "Paused";
+    const ready = Boolean(replayStats?.candle);
+    const value = amount => amount === null || amount === undefined ? "Unavailable" : money(amount);
+    const replayPositions = (replayStats?.positions || []).map(position => ({
+      symbol: position.symbol, side: position.side, qty: position.qty,
+      avg: value(position.avgPrice), last: value(position.lastPrice), pnl: value(position.unrealizedPnl),
+      pnlValue: position.unrealizedPnl,
+      pct: position.unrealizedPnl === null ? "Unavailable" : pct(position.unrealizedPnl / position.costBasis * 100),
+    }));
+    const replayPrice = replayStats?.candle?.close ?? null;
+    const replayOpen = replayStats?.candle?.open ?? null;
+    const replayMove = replayPrice !== null && replayOpen > 0 ? (replayPrice - replayOpen) / replayOpen * 100 : null;
+    const replayStatus = !ready ? "Unavailable" : replayPlaying ? "Running" : "Paused";
+    const formatReplayTime = candle => candle?.time
+      ? new Date(candle.time * 1000).toLocaleString("en-CA", { timeZone, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" })
+      : "Unavailable";
     const replaySummaryRows = [
       ["Starting Cash", money(replayStartingCash)],
-      ["Net Liquidation", money(replayNetLiquidation)],
-      ["Total P&L", money(replayNet)],
-      ["Realized P&L", money(replayNet)],
-      ["Unrealized P&L", replayPositions.length ? money(replayPositions.reduce((total, row) => total + num(row.pnl), 0)) : money(0)],
-      ["Total Trades", replayRows.length],
-      ["Win Rate", `${replayWinRate}%`],
-      ["Profit Factor", replayRows.length ? "Review" : "Unavailable"],
-      ["Max Drawdown", money(replayMaxDrawdown)],
+      ["Cash", ready ? value(replayStats.cash) : "Unavailable"],
+      ["Net Liquidation", ready ? value(replayStats.equity) : "Unavailable"],
+      ["Total P&L", ready ? value(replayStats.netPnL) : "Unavailable"],
+      ["Realized P&L", ready ? value(replayStats.realizedPnl) : "Unavailable"],
+      ["Unrealized P&L", ready ? value(replayStats.unrealizedPnl) : "Unavailable"],
+      ["Fees", ready ? value(replayStats.fees) : "Unavailable"],
+      ["Closed Sales", ready ? replayStats.totalTrades : "Unavailable"],
+      ["Win Rate", ready && replayStats.winRate !== null ? `${Number(replayStats.winRate).toFixed(1)}%` : "Unavailable"],
+      ["Profit Factor", ready && replayStats.profitFactor !== null ? Number(replayStats.profitFactor).toFixed(2) : "Unavailable"],
+      ["Max Drawdown", ready ? value(replayStats.maxDrawdown) : "Unavailable"],
     ];
     const replayProgress = replayDataLength > 1
       ? Math.min(100, Math.max(0, (replayIndex / (replayDataLength - 1)) * 100))
@@ -108,9 +87,10 @@ export default function ReplayWorkspacePage({
       ));
     };
     const replayStatusRows = [
-      ["Replay Session", "Current"],
+      ["Replay Time", formatReplayTime(replayStats?.candle)],
       ["Data Speed", `${replaySpeed || 1}x`],
-      ["Data Source", "Historical simulation"],
+      ["Data Source", replayStats?.source || "Unavailable"],
+      ["Data Quality", replayStats?.dataQuality || "unavailable"],
       ["Status", replayStatus],
     ];
     const replayMetric = (label, value) => (
@@ -171,13 +151,13 @@ export default function ReplayWorkspacePage({
             >
               {[
                 ["Market", "Stocks (US)"],
-                ["Date", "Current replay session"],
-                ["Start Time", "Market open"],
-                ["End Time", "Market close"],
+                ["Time Zone", timeZone],
+                ["First Bar", formatReplayTime(replayData[0])],
+                ["Last Bar", formatReplayTime(replayData.at(-1))],
                 ["Speed", `${replaySpeed || 1}x`],
               ].map(([label, value]) => replayMetric(label, value))}
               <div style={{ display: "flex", gap: 8, justifyContent: "end", flexWrap: "wrap", gridColumn: isNarrowWorkspace ? "1 / -1" : "auto" }}>
-                <ActionButton theme={theme} onClick={() => jumpReplay("open")}>Skip to Open</ActionButton>
+                <ActionButton theme={theme} disabled={!ready} onClick={() => jumpReplay("open")}>Go to Start</ActionButton>
                 <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
                 <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
                   {replayPlaying ? "Pause Replay" : "Start Replay"}
@@ -208,11 +188,11 @@ export default function ReplayWorkspacePage({
                   <div style={{ color: theme.muted, fontSize: 12, marginBottom: 9 }}>Jump to Time</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     {[
-                      ["Market Open", "open"],
+                      ["First Bar", "open"],
                       ["+ 1 Hour", 60],
                       ["+ 2 Hours", 120],
                       ["+ 3 Hours", 180],
-                      ["Market Close", "close"],
+                      ["Last Bar", "close"],
                     ].map(([label, target]) => (
                       <ActionButton
                         key={label}
@@ -231,11 +211,11 @@ export default function ReplayWorkspacePage({
                   </div>
                   <div style={{ minHeight: 86, border: `1px dashed ${theme.borderSoft || theme.border}`, borderRadius: 8, padding: 8, color: theme.muted, fontSize: 12, lineHeight: 1.5, display: "grid", gap: 4, alignContent: "start" }}>
                     {replayBookmarks.length
-                      ? replayBookmarks.slice(0, 5).map((bookmark) => (
+                      ? replayBookmarks.map((bookmark) => (
                           <div key={bookmark.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 28px", gap: 4, alignItems: "center" }}>
                             <button
                               type="button"
-                              onClick={() => setReplayIndex?.(bookmark.index)}
+                              onClick={() => selectReplayBookmark?.(bookmark)}
                               style={{ minWidth: 0, border: 0, background: "transparent", color: theme.text, padding: "4px 3px", textAlign: "left", cursor: "pointer", fontFamily: terminalMonoFont, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                             >
                               {bookmark.label}
@@ -271,9 +251,9 @@ export default function ReplayWorkspacePage({
                       <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
                         <span style={{ color: theme.text, fontSize: 28, fontWeight: 950, fontFamily: terminalMonoFont }}>{selectedStock}</span>
                         <span style={{ color: theme.text, fontSize: 16, fontWeight: 850, fontFamily: terminalMonoFont }}>{replayPrice ? money(replayPrice) : "Unavailable"}</span>
-                        <span style={{ color: toneColor(theme, replayMove), fontSize: 13, fontWeight: 900, fontFamily: terminalMonoFont }}>{pct(replayMove)}</span>
+                        <span style={{ color: replayMove === null ? theme.muted : toneColor(theme, replayMove), fontSize: 13, fontWeight: 900, fontFamily: terminalMonoFont }}>{replayMove === null ? "Unavailable" : pct(replayMove)}</span>
                       </div>
-                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{replaySymbolData?.company || `${selectedStock} INC.`} · {timeframe} · NASDAQ</div>
+                      <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{timeframe} · Historical replay · Simulated orders</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <div style={{ height: 32, minWidth: 180, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", color: theme.muted }}>
@@ -307,7 +287,7 @@ export default function ReplayWorkspacePage({
                 </div>
                 <div style={{ minHeight: 420, height: "100%" }}>{renderChartGrid?.({ layoutMode: "1", compact: true, embeddedChart: true })}</div>
                 <div style={{ borderTop: `1px solid ${theme.borderSoft || theme.border}`, padding: "10px 14px", color: theme.muted, fontSize: 12 }}>
-                  Replay indicators are shown only when calculated by the chart. No synthetic RSI series is generated.
+                  <span role="status">{replayStats?.message || "Historical replay data is unavailable"}</span>
                 </div>
                 </PremiumCard>
               </div>
@@ -345,6 +325,15 @@ export default function ReplayWorkspacePage({
             <div style={{ display: "grid", gap: 10 }}>
               <PremiumCard theme={theme} title="Simulation Summary">
                 <div style={{ padding: 14, display: "grid", gap: 11 }}>{replaySummaryRows.map(valueRow)}</div>
+                <div style={{ padding: 14, display: "grid", gap: 8 }}>
+                  <label style={{ display: "grid", gap: 4, color: theme.muted }}>Shares
+                    <input aria-label="Simulated order shares" type="number" min="1" step="1" value={quantity ?? ""} onChange={event => setQuantity?.(event.target.value)} style={{ width: "100%", minWidth: 0, boxSizing: "border-box", color: theme.text, background: theme.panel2, border: `1px solid ${theme.border}`, padding: 8 }} />
+                  </label>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <ActionButton theme={theme} disabled={!ready || !replayBuy} onClick={() => replayBuy?.()}>Simulate buy</ActionButton>
+                    <ActionButton theme={theme} disabled={!ready || !replaySell} onClick={() => replaySell?.()}>Simulate sell</ActionButton>
+                  </div>
+                </div>
               </PremiumCard>
               <PremiumCard theme={theme} title="Market Replay Status">
                 <div style={{ padding: 14, display: "grid", gap: 11 }}>
@@ -380,10 +369,10 @@ export default function ReplayWorkspacePage({
 
           <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 0.95fr) minmax(0, 1.45fr)", gap: 10 }}>
             <PremiumCard theme={theme} title="Open Positions (Replay)">
-              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: () => theme.green }, { key: "pct", label: "P&L (%)", width: "80px", color: () => theme.green }]} rows={replayPositions} />
+              <PremiumTable theme={theme} columns={[{ key: "symbol", label: "Symbol", width: "1fr", mono: true }, { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "60px" }, { key: "avg", label: "Avg Price", width: "90px" }, { key: "last", label: "Last", width: "80px" }, { key: "pnl", label: "Unrealized P&L", width: "120px", color: (row) => row.pnlValue === null ? theme.muted : toneColor(theme, row.pnlValue) }, { key: "pct", label: "P&L (%)", width: "80px", color: (row) => row.pnlValue === null ? theme.muted : toneColor(theme, row.pnlValue) }]} rows={replayPositions} />
             </PremiumCard>
             <PremiumCard theme={theme} title="Trade History (Replay)">
-              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "Sell" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => String(row.pnl).startsWith("+") ? theme.green : theme.muted }]} rows={replayRows} />
+              <PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "180px" }, { key: "symbol", label: "Symbol", width: "90px", mono: true }, { key: "side", label: "Side", width: "80px", color: (row) => row.side === "SELL" || row.side === "Short" ? theme.red : theme.green }, { key: "qty", label: "Qty", width: "70px" }, { key: "price", label: "Price", width: "90px" }, { key: "pnl", label: "P&L", width: "90px", color: (row) => row.pnl === "Unavailable" ? theme.muted : String(row.pnl).includes("-") ? theme.red : theme.green }]} rows={replayRows} />
             </PremiumCard>
             </div>
         </div>

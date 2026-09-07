@@ -1,4 +1,5 @@
 import { formatPacificTime } from "./timeFormatters.js";
+import { aggregateQuoteQuality } from "./marketDataContract.js";
 
 export function formatHealthTime(value) {
   return formatPacificTime(value, {
@@ -56,22 +57,14 @@ export function getQuestradeHealth({
         platformHealth?.marketData?.lastSuccessAt
       )
   );
-  const hasQuestradeQuote = quoteRows.some((quote) =>
-    /QTRD|QUESTRADE/i.test(String(quote?.source || "")) &&
-    Number.isFinite(Number(quote?.price)) &&
-    Number(quote.price) > 0
-  );
-  const delayed = platformHealth?.marketData?.delayed === true ||
-    deepMarketData?.providerLabel === "DELAYED" ||
-    deepQuestrade?.providerLabel === "DELAYED" ||
-    quoteRows.some((quote) => quote?.delayed);
+  const quality = aggregateQuoteQuality(quoteRows.filter(quote => /QTRD|QUESTRADE/i.test(String(quote?.source || ""))));
   const timeout = /timeout|ECONNABORTED/i.test(rawMessage);
 
-  if (hasQuestradeQuote || platformReportsLive) {
+  if (quality !== "unavailable" || platformReportsLive) {
     return {
-      label: delayed ? "QTRD DELAYED" : "QTRD LIVE",
-      status: delayed ? "warn" : "ok",
-      message: delayed ? "Questrade data is delayed." : "Questrade data is live.",
+      label: quality === "unavailable" ? "QTRD AVAILABLE" : `QTRD ${quality.toUpperCase()}`,
+      status: quality === "live" ? "ok" : "warn",
+      message: quality === "unavailable" ? "Provider responded; quote freshness is unverified." : `Questrade quote quality: ${quality}.`,
       rawMessage,
       tokenPersisted,
     };

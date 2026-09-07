@@ -4,3 +4,11 @@ qa-screenshots
 *.log
 *-verify.png
 qa-*.png
+.env
+.env.*
+node_modules
+dist
+playwright-report
+playwright-correctness-report
+test-results
+release-gate-artifacts

@@ -50,15 +50,15 @@ test("configured Questrade source without successful data remains pending", () =
 
   assert.equal(getQuestradeHealth({ platformHealth }).label, "QTRD PENDING");
   assert.equal(getQuestradeHealth({ brokerConnected: true, platformHealth }).label, "QTRD PENDING");
-  assert.equal(buildTerminalSourceLabels({ platformHealth }).marketDataStatusLabel, "QTRD PENDING");
+  assert.equal(buildTerminalSourceLabels({ platformHealth }).marketDataStatusLabel, "QUOTES UNAVAILABLE");
 });
 
-test("Questrade source becomes live only with a usable quote or confirmed success", () => {
+test("provider success is not proof of live quotes; identity and a fresh market timestamp are required", () => {
   const unusableQuotes = {
     NVDA: { source: "QTRD", price: null },
   };
   const usableQuotes = {
-    NVDA: { source: "QTRD", price: 210.69 },
+    NVDA: { symbol: "NVDA", source: "QTRD", price: 210.69, asOf: Date.now() },
   };
   const confirmedHealth = {
     marketData: {
@@ -69,7 +69,14 @@ test("Questrade source becomes live only with a usable quote or confirmed succes
   };
 
   assert.equal(getQuestradeHealth({ liveQuotes: unusableQuotes }).label, "QTRD PENDING");
-  assert.equal(buildTerminalSourceLabels({ liveQuotes: unusableQuotes }).marketDataStatusLabel, "QTRD PENDING");
+  assert.equal(buildTerminalSourceLabels({ liveQuotes: unusableQuotes }).marketDataStatusLabel, "QUOTES UNAVAILABLE");
   assert.equal(getQuestradeHealth({ liveQuotes: usableQuotes }).label, "QTRD LIVE");
-  assert.equal(buildTerminalSourceLabels({ platformHealth: confirmedHealth }).marketDataStatusLabel, "QTRD LIVE");
+  assert.equal(buildTerminalSourceLabels({ liveQuotes: usableQuotes }).marketDataStatusLabel, "QUOTES LIVE");
+  assert.equal(buildTerminalSourceLabels({ platformHealth: confirmedHealth }).marketDataStatusLabel, "QUOTES UNAVAILABLE");
+  assert.equal(getQuestradeHealth({ platformHealth: confirmedHealth }).label, "QTRD AVAILABLE");
+  for (const quality of ["cached", "delayed", "historical", "simulated", "stale"]) {
+    const liveQuotes = { NVDA: { ...usableQuotes.NVDA, quality } };
+    assert.equal(buildTerminalSourceLabels({ liveQuotes }).marketDataStatusLabel, `QUOTES ${quality.toUpperCase()}`);
+    assert.notEqual(getQuestradeHealth({ liveQuotes }).status, "ok");
+  }
 });

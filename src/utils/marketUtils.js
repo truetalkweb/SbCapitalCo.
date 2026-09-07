@@ -1,5 +1,6 @@
 import { createNormalizedNewsFallback } from "./scannerNewsAdapters.js";
 import { formatPacificTime } from "./timeFormatters.js";
+import { aggregateQuoteQuality, mergeQuoteSnapshot, normalizeMarketQuote } from "./marketDataContract.js";
 
 export async function fetchWithTimeout(url, timeoutMs = 5000, options = {}) {
   const controller = new AbortController();
@@ -108,30 +109,13 @@ function lowestConfidence(...values) {
 export function buildDataConfidence({
   selectedStock = "",
   selectedStockData = null,
-  qtrdHealth = null,
   newsMeta = {},
   scannerMeta = {},
 } = {}) {
-  const quoteSource = String(selectedStockData?.source || qtrdHealth?.label || "Quote Pending");
-  const quoteLabel = selectedStockData?.delayed || /DELAYED|PENDING|SIM|DEGRADED/i.test(quoteSource)
-    ? quoteSource
-    : /QTRD|QUESTRADE|LIVE/i.test(quoteSource)
-      ? "Questrade Quote"
-      : quoteSource;
-  const quoteConfidence = /LIVE|QTRD|QUESTRADE/i.test(quoteLabel) && !/DELAYED|PENDING|DEGRADED/i.test(quoteLabel)
-    ? "High"
-    : /DELAYED|REST|BACKEND|SIM/i.test(quoteLabel)
-      ? "Medium"
-      : "Limited";
-  const quoteMode = !selectedStockData
-    ? "unavailable"
-    : /SIM/i.test(quoteLabel)
-      ? "simulated"
-      : selectedStockData?.delayed || /DELAYED/i.test(quoteLabel)
-        ? "delayed"
-        : /LIVE|QTRD|QUESTRADE/i.test(quoteLabel)
-          ? "live"
-          : "cached";
+  const quote = normalizeMarketQuote(selectedStockData, { symbol: selectedStock || selectedStockData?.symbol });
+  const quoteMode = quote.quality;
+  const quoteLabel = `${quote.source || "Quote"} (${quoteMode})`;
+  const quoteConfidence = quoteMode === "live" ? "High" : ["historical", "cached", "delayed"].includes(quoteMode) ? "Medium" : "Limited";
   const newsLabel = newsMeta?.source || newsMeta?.providerStatus?.source || "News Pending";
   const newsConfidence = newsMeta?.degraded || (newsMeta?.fallbackRows > 0 && newsMeta?.fallbackRows === newsMeta?.rowCount)
     ? "Limited"
@@ -178,11 +162,11 @@ export function buildDataConfidence({
   const lastUpdated = updatedCandidates.length ? new Date(Math.max(...updatedCandidates)).toISOString() : null;
   const confidence = lowestConfidence(quoteConfidence, newsConfidence, scannerConfidence);
   const modes = [quoteMode, newsMode, scannerMode];
-  const mode = modes.includes("unavailable")
+  const mode = modes.includes("unavailable") || modes.includes("stale")
     ? "degraded"
     : modes.includes("simulated") || modes.includes("fallback")
       ? "fallback"
-      : modes.includes("delayed") || modes.includes("cached")
+      : modes.includes("delayed") || modes.includes("cached") || modes.includes("historical")
         ? "delayed"
         : "live";
 
@@ -193,7 +177,7 @@ export function buildDataConfidence({
     disclosure: mode === "live"
       ? "Provider data"
       : mode === "delayed"
-        ? "Delayed or cached data"
+        ? "Historical, delayed or cached data"
         : mode === "fallback"
           ? "Fallback or simulated context"
           : "Some data is unavailable",
@@ -237,12 +221,7 @@ export function formatChartSourceStatus(status) {
 }
 
 export function formatQuoteSourceStatus(quote) {
-  if (quote?.delayed) return "QUOTE DELAYED";
-  if (String(quote?.source || "").includes("QTRD")) return "QUOTE LIVE";
-  if (String(quote?.source || "").includes("WS")) return "QUOTE STREAM";
-  if (String(quote?.source || "").includes("REST")) return "QUOTE REST";
-
-  return "QUOTE PENDING";
+  return `QUOTE ${normalizeMarketQuote(quote).quality.toUpperCase()}`;
 }
 
 export function formatScannerSourceStatus(scannerMeta = {}) {
@@ -324,8 +303,6 @@ export function formatTerminalStatusLabel(label) {
   if (upper.includes("CHART LOADING")) return "Chart Loading";
   if (upper.includes("QUOTE DELAYED")) return "Quote Delayed";
   if (upper.includes("QUOTE LIVE")) return "Quote Live";
-  if (upper.includes("QUESTRADE QUOTE")) return "Live Quote";
-  if (upper.includes("QUESTRADE")) return "Live Quote";
   if (upper.includes("QTRD LIVE")) return "QTRD Live";
   if (upper.includes("QTRD PENDING")) return "QTRD Pending";
   if (upper.includes("AI PENDING")) return "AI Pending";
@@ -343,33 +320,14 @@ export function formatTerminalStatusLabel(label) {
 
 export function buildTerminalSourceLabels({
   liveQuotes = {},
-  platformHealth = null,
   mainChartStatus = "LOADING",
   scannerMeta = {},
   newsMeta = {},
   brokerConnected = false,
 }) {
-  const quoteMetaRows = Object.values(liveQuotes || {});
-  const hasQuestradeQuote =
-    quoteMetaRows.some((quote) =>
-      /QTRD|QUESTRADE/i.test(String(quote?.source || "")) &&
-      Number.isFinite(Number(quote?.price)) &&
-      Number(quote.price) > 0
-    );
-  const hasConfirmedProviderSuccess = Boolean(
-    platformHealth?.marketData?.httpStatus === 200 &&
-    platformHealth?.marketData?.lastSuccessAt
-  );
-  const quoteIsDelayed =
-    quoteMetaRows.some((quote) => quote?.delayed) ||
-    platformHealth?.marketData?.delayed === true;
-
+  const quality = aggregateQuoteQuality(Object.values(liveQuotes || {}));
   return {
-    marketDataStatusLabel: quoteIsDelayed && (hasQuestradeQuote || hasConfirmedProviderSuccess)
-      ? "QTRD DELAYED"
-      : hasQuestradeQuote || hasConfirmedProviderSuccess
-        ? "QTRD LIVE"
-        : "QTRD PENDING",
+    marketDataStatusLabel: `QUOTES ${quality.toUpperCase()}`,
     mainChartSourceLabel: formatChartSourceStatus(mainChartStatus),
     scannerSourceLabel: formatScannerSourceStatus(scannerMeta),
     newsSourceLabel: formatNewsSourceStatus(newsMeta),
@@ -383,19 +341,7 @@ export function applyLiveQuote(stock, liveQuotes) {
 
   if (!quote) return stock;
 
-  return {
-    ...stock,
-    price: quote.price,
-    change: quote.change,
-    volume: quote.volume || stock.volume,
-    source: quote.source || stock.source,
-    delayed: quote.delayed ?? stock.delayed,
-    realtime: quote.realtime ?? stock.realtime,
-    bidPrice: quote.bidPrice ?? stock.bidPrice,
-    askPrice: quote.askPrice ?? stock.askPrice,
-    lastTradeTime: quote.lastTradeTime || stock.lastTradeTime,
-    lastUpdated: quote.lastUpdated || stock.lastUpdated,
-  };
+  return mergeQuoteSnapshot(stock, quote);
 }
 
 export function getMomentumScore(stock) {

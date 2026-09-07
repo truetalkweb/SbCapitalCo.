@@ -175,11 +175,11 @@ export function makeJournalTrades(entries) {
 
 export function makeReplayTrades(replayTrades, selectedSymbol) {
   return (replayTrades || []).map((trade, index) => ({
-    time: trade.time || trade.timestamp?.slice(11, 19) || `Step ${index + 1}`,
+    time: typeof trade.time === "number" ? new Date(trade.time * 1000).toISOString().replace("T", " ").replace(".000Z", " UTC") : trade.time || trade.timestamp || `Step ${index + 1}`,
     symbol: trade.symbol || selectedSymbol,
     side: trade.type || trade.side || "Buy",
-    qty: trade.quantity || trade.qty || 0,
-    price: trade.price || trade.fillPrice || "Pending",
-    pnl: trade.pnl ? money(trade.pnl) : "Pending",
-  })).slice(0, 10);
+    qty: trade.quantity ?? trade.qty ?? "Unavailable",
+    price: trade.price ?? trade.fillPrice ?? "Unavailable",
+    pnl: trade.pnl === null || trade.pnl === undefined ? "Unavailable" : money(trade.pnl),
+  }));
 }

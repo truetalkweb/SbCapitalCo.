@@ -1,32 +1,22 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
   CrosshairMode,
+  createSeriesMarkers,
 } from "lightweight-charts";
 import { CHART_INDICATORS, VOLUME_INDICATOR } from "../indicators/chartIndicators";
 import { marketDataService } from "../services/marketDataService";
+import { normalizeCandleDataset, normalizeMarketQuote } from "../utils/marketDataContract.js";
+import { visibleReplayCandles } from "../utils/replayLedger.js";
 
 const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
 
-function getTimeframeSeconds(timeframe) {
-  if (timeframe === "1m") return 60;
-  if (timeframe === "5m") return 60 * 5;
-  if (timeframe === "15m") return 60 * 15;
-  if (timeframe === "1H") return 60 * 60;
-  if (timeframe === "1D") return 60 * 60 * 24;
-  return 60 * 15;
-}
-
-function bucketTime(timestamp, timeframe) {
-  const seconds = getTimeframeSeconds(timeframe);
-  return Math.floor(timestamp / seconds) * seconds;
-}
-
 function formatVolume(volume) {
-  const value = Number(volume || 0);
+  if (volume === null || volume === undefined || !Number.isFinite(Number(volume))) return "Unavailable";
+  const value = Number(volume);
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
@@ -40,35 +30,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function generateFallbackCandles(livePrice, timeframe) {
-  const seconds = getTimeframeSeconds(timeframe);
-  const now = bucketTime(Math.floor(Date.now() / 1000), timeframe);
-  let price = Number(livePrice) || 100;
-  const data = [];
-
-  for (let i = 220; i > 0; i--) {
-    const open = price;
-    const move = (Math.random() - 0.5) * (price * 0.012);
-    const close = open + move;
-    const high = Math.max(open, close) + Math.random() * (price * 0.006);
-    const low = Math.min(open, close) - Math.random() * (price * 0.006);
-    const volume = Math.floor(Math.random() * 900000) + 100000;
-
-    data.push({
-      time: now - i * seconds,
-      open: Number(open.toFixed(2)),
-      high: Number(high.toFixed(2)),
-      low: Number(low.toFixed(2)),
-      close: Number(close.toFixed(2)),
-      volume,
-    });
-
-    price = close;
-  }
-
-  return data;
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
@@ -86,25 +47,6 @@ async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
   } finally {
     window.clearTimeout(timeout);
   }
-}
-
-function normalizeBackendCandles(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .map((candle) => ({
-      time: Number(candle.time),
-      open: Number(Number(candle.open).toFixed(4)),
-      high: Number(Number(candle.high).toFixed(4)),
-      low: Number(Number(candle.low).toFixed(4)),
-      close: Number(Number(candle.close).toFixed(4)),
-      volume: Number(candle.volume || 1),
-    }))
-    .filter((candle) =>
-      Number.isFinite(candle.time) &&
-      Number.isFinite(candle.open) &&
-      Number.isFinite(candle.high) &&
-      Number.isFinite(candle.low) &&
-      Number.isFinite(candle.close)
-    );
 }
 
 function getCandleDateKey(candle) {
@@ -146,8 +88,6 @@ function calculateAutoLevels(candles) {
 function Chart({
   symbol,
   timeframe,
-  livePrice,
-  livePulse = null,
   indicators = {},
   onStatusChange,
   replayMode = false,
@@ -192,27 +132,28 @@ function Chart({
   const candleSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
   const indicatorSeriesRef = useRef({});
+  const markersRef = useRef(null);
   const trendLineRefs = useRef([]);
   const candlesRef = useRef([]);
   const lastCandleRef = useRef(null);
-  const lastLivePriceRef = useRef(null);
   const statusRef = useRef("LOADING");
-  const animationFrameRef = useRef(null);
-  const displayPriceRef = useRef(null);
-  const targetPriceRef = useRef(null);
-  const targetTickMetaRef = useRef(null);
-  const lastAppliedPriceRef = useRef(null);
   const lastAppliedTimeRef = useRef(0);
-  const livePriceRef = useRef(livePrice);
   const onReplayDataRef = useRef(onReplayData);
   const onStatusChangeRef = useRef(onStatusChange);
-  const lastIndicatorUpdateRef = useRef(0);
   const pendingStreamTickRef = useRef(null);
   const streamFrameRef = useRef(null);
   const lastStreamTickAtRef = useRef(null);
   const resizeFrameRef = useRef(null);
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [hadChartHistoryBeforeLoad, setHadChartHistoryBeforeLoad] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const replayViewRef = useRef({ replayMode, replayIndex });
+  const liveQuoteLineRef = useRef(null);
+
+  useLayoutEffect(() => {
+    replayViewRef.current = { replayMode, replayIndex };
+  }, [replayMode, replayIndex]);
 
   const setStatus = useCallback((nextStatus) => {
     if (statusRef.current === nextStatus) return;
@@ -222,10 +163,6 @@ function Chart({
       onStatusChangeRef.current(nextStatus);
     }
   }, []);
-
-  useEffect(() => {
-    livePriceRef.current = livePrice;
-  }, [livePrice]);
 
   useEffect(() => {
     onReplayDataRef.current = onReplayData;
@@ -238,12 +175,7 @@ function Chart({
   const getVisibleCandles = useCallback(() => {
     if (!replayMode) return candlesRef.current;
 
-    const safeIndex =
-      typeof replayIndex === "number"
-        ? Math.min(Math.max(replayIndex, 5), candlesRef.current.length - 1)
-        : candlesRef.current.length - 1;
-
-    return candlesRef.current.slice(0, safeIndex + 1);
+    return visibleReplayCandles(candlesRef.current, replayIndex);
   }, [replayIndex, replayMode]);
 
   const updateIndicators = useCallback((source = getVisibleCandles()) => {
@@ -253,6 +185,10 @@ function Chart({
 
       series.setData(indicators[indicator.id] ? indicator.calculate(source) : []);
     });
+    if (containerRef.current) {
+      const times = Object.values(indicatorSeriesRef.current).flatMap(series => series.data().map(row => row.time));
+      containerRef.current.dataset.indicatorEnd = times.length ? String(Math.max(...times)) : "";
+    }
   }, [getVisibleCandles, indicators]);
 
   const updateVolume = useCallback((source = getVisibleCandles()) => {
@@ -263,9 +199,9 @@ function Chart({
     }
 
     volumeSeriesRef.current.setData(
-      source.map((candle) => ({
+      source.filter((candle) => candle.volume !== null && candle.volume !== undefined).map((candle) => ({
         time: candle.time,
-        value: candle.volume || 1,
+        value: candle.volume,
         color:
           candle.close >= candle.open
             ? "rgba(0,200,150,0.35)"
@@ -278,7 +214,7 @@ function Chart({
     if (!candleSeriesRef.current) return;
 
     const markers = replayTrades
-      .filter((trade) => trade.time)
+      .filter((trade) => trade.symbol === chartSymbol && trade.time <= (candleSeriesRef.current.data().at(-1)?.time ?? -Infinity))
       .map((trade) => ({
         time: trade.time,
         position: trade.type === "BUY" ? "belowBar" : "aboveBar",
@@ -290,10 +226,10 @@ function Chart({
             : `SELL ${trade.qty}${trade.pnl ? ` $${Number(trade.pnl).toFixed(2)}` : ""}`,
       }));
 
-    if (typeof candleSeriesRef.current.setMarkers === "function") {
-      candleSeriesRef.current.setMarkers(markers);
-    }
-  }, [replayTrades]);
+    markersRef.current?.setMarkers(markers);
+    containerRef.current.dataset.markerEnd = markers.length ? String(Math.max(...markers.map(marker => marker.time))) : "";
+    containerRef.current.dataset.markerCount = String(markers.length);
+  }, [replayTrades, chartSymbol]);
 
   const clearTrendLines = useCallback(() => {
     if (!candleSeriesRef.current || !trendLineRefs.current.length) {
@@ -334,23 +270,25 @@ function Chart({
   const updateMarkersRef = useRef(updateMarkers);
   const updateTrendToolsRef = useRef(updateTrendTools);
 
-  const applyHistoryDataset = useCallback((rows, nextStatus, options = {}) => {
-    const normalizedRows = Array.isArray(rows) ? rows : [];
+  const applyHistoryDataset = useCallback((dataset, nextStatus, options = {}) => {
+    const normalizedRows = dataset.candles;
 
     if (!normalizedRows.length || !candleSeriesRef.current) return false;
 
     candlesRef.current = normalizedRows;
     lastCandleRef.current = normalizedRows[normalizedRows.length - 1];
-    displayPriceRef.current = lastCandleRef.current.close;
-    targetPriceRef.current = lastCandleRef.current.close;
-    lastAppliedPriceRef.current = lastCandleRef.current.close;
 
-    candleSeriesRef.current.setData(normalizedRows);
-    updateVolumeRef.current(normalizedRows);
-    if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(normalizedRows);
-    updateIndicatorsRef.current(normalizedRows);
+    const view = replayViewRef.current;
+    const visible = view.replayMode ? visibleReplayCandles(normalizedRows, view.replayIndex) : normalizedRows;
+    markersRef.current?.setMarkers([]);
+    candleSeriesRef.current.setData(visible);
+    containerRef.current.dataset.visibleCandleCount = String(candleSeriesRef.current.data().length);
+    containerRef.current.dataset.visibleEnd = String(candleSeriesRef.current.data().at(-1)?.time ?? "");
+    updateVolumeRef.current(visible);
+    if (typeof onReplayDataRef.current === "function") onReplayDataRef.current(dataset);
+    updateIndicatorsRef.current(visible);
     updateMarkersRef.current();
-    updateTrendToolsRef.current(normalizedRows);
+    updateTrendToolsRef.current(visible);
 
     if (chartRef.current && options.fitContent !== false) {
       chartRef.current.timeScale().fitContent();
@@ -360,225 +298,53 @@ function Chart({
     return true;
   }, [setStatus]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateVolumeRef.current = updateVolume;
   }, [updateVolume]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateIndicatorsRef.current = updateIndicators;
   }, [updateIndicators]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateMarkersRef.current = updateMarkers;
   }, [updateMarkers]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateTrendToolsRef.current = updateTrendTools;
   }, [updateTrendTools]);
 
-  const updateCurrentCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
-    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
-
-    const price = Number(priceValue);
-    const currentBucket = bucketTime(timestamp, timeframe);
-    const last = lastCandleRef.current;
-    const volumeIncrement = Math.max(Number(options.volumeIncrement || 1), 1);
-    let createdNewBucket = false;
-
-    let updated;
-
-    if (last.time === currentBucket) {
-      updated = {
-        ...last,
-        high: Number(Math.max(last.high, price).toFixed(2)),
-        low: Number(Math.min(last.low, price).toFixed(2)),
-        close: Number(price.toFixed(2)),
-        volume: Number(last.volume || 0) + volumeIncrement,
-      };
-
-      candlesRef.current = candlesRef.current.map((candle) =>
-        candle.time === currentBucket ? updated : candle
-      );
-    } else if (currentBucket > last.time) {
-      const open = Number(last.close.toFixed(2));
-      createdNewBucket = true;
-
-      updated = {
-        time: currentBucket,
-        open,
-        high: Number(Math.max(open, price).toFixed(2)),
-        low: Number(Math.min(open, price).toFixed(2)),
-        close: Number(price.toFixed(2)),
-        volume: volumeIncrement,
-      };
-
-      candlesRef.current = [...candlesRef.current, updated].slice(-350);
-    } else {
-      return;
-    }
-
-    lastCandleRef.current = updated;
-    lastAppliedPriceRef.current = price;
-    lastAppliedTimeRef.current = Date.now();
-
-    if (!replayMode) {
-      candleSeriesRef.current.update(updated);
-
-      if (volumeSeriesRef.current && indicators[VOLUME_INDICATOR.id]) {
-        volumeSeriesRef.current.update({
-          time: updated.time,
-          value: updated.volume,
-          color:
-            updated.close >= updated.open
-              ? "rgba(0,200,150,0.35)"
-              : "rgba(239,83,80,0.35)",
-        });
-      }
-
-      const now = Date.now();
-      const shouldUpdateIndicators =
-        options.forceIndicators ||
-        createdNewBucket ||
-        now - lastIndicatorUpdateRef.current > 1000;
-
-      if (shouldUpdateIndicators) {
-        updateIndicators(candlesRef.current);
-        updateTrendToolsRef.current(candlesRef.current);
-        lastIndicatorUpdateRef.current = now;
-      }
-    }
-
-    if (options.status) {
-      setStatus(options.status);
-    } else if (statusRef.current !== "LIVE" && statusRef.current !== "DELAYED" && statusRef.current !== "QTRD" && statusRef.current !== "SIM") {
-      setStatus("LIVE");
-    }
-  }, [indicators, replayMode, setStatus, timeframe, updateIndicators]);
-
-  const rebaseLatestCandle = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
-    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
-
-    const price = Number(priceValue);
-    const currentBucket = bucketTime(timestamp, timeframe);
-    const previous = lastCandleRef.current;
-    const spread = Math.max(price * 0.0012, 0.03);
-    const volumeIncrement = Math.max(Number(options.volumeIncrement || 1), 1);
-
-    const updated = {
-      time: currentBucket >= previous.time ? currentBucket : previous.time,
-      open: Number((price - spread * 0.35).toFixed(2)),
-      high: Number((price + spread).toFixed(2)),
-      low: Number((price - spread).toFixed(2)),
-      close: Number(price.toFixed(2)),
-      volume: Math.max(Number(previous.volume || 0) + volumeIncrement, Number(previous.volume || 0)),
-    };
-
-    candlesRef.current = candlesRef.current
-      .filter((candle) => candle.time !== updated.time)
-      .concat(updated)
-      .sort((a, b) => a.time - b.time)
-      .slice(-350);
-
-    lastCandleRef.current = updated;
-    displayPriceRef.current = price;
-    targetPriceRef.current = price;
-    lastAppliedPriceRef.current = price;
-    lastAppliedTimeRef.current = Date.now();
-
-    if (!replayMode) {
-      candleSeriesRef.current.update(updated);
-      updateVolume(candlesRef.current);
-      updateIndicators(candlesRef.current);
-      updateTrendToolsRef.current(candlesRef.current);
-    }
-
+  const applyLivePrice = useCallback((priceValue, timestamp, options = {}) => {
+    if (replayViewRef.current.replayMode || !candleSeriesRef.current || !lastCandleRef.current) return;
+    if (!Number.isFinite(priceValue) || priceValue <= 0 || !Number.isFinite(timestamp)) return;
+    if (timestamp <= lastAppliedTimeRef.current) return;
+    lastAppliedTimeRef.current = timestamp;
+    // Quote snapshots are not trades: show a separate price line, never invent OHLC or volume.
+    const settings = { price: priceValue, color: "#2196f3", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "Quote" };
+    if (liveQuoteLineRef.current) liveQuoteLineRef.current.applyOptions(settings);
+    else liveQuoteLineRef.current = candleSeriesRef.current.createPriceLine(settings);
+    containerRef.current.dataset.quotePrice = String(priceValue);
     setStatus(options.status || "LIVE");
-  }, [replayMode, setStatus, timeframe, updateIndicators, updateVolume]);
-
-  const runSmoothAnimation = useCallback(() => {
-    if (animationFrameRef.current) return;
-
-    const animate = () => {
-      animationFrameRef.current = null;
-
-      if (
-        replayMode ||
-        !targetPriceRef.current ||
-        !displayPriceRef.current ||
-        !candleSeriesRef.current ||
-        !lastCandleRef.current
-      ) {
-        return;
-      }
-
-      const target = Number(targetPriceRef.current);
-      const current = Number(displayPriceRef.current);
-      const diff = target - current;
-      const tickMeta = targetTickMetaRef.current || {};
-      const tickTimestamp = tickMeta.timestamp || Math.floor(Date.now() / 1000);
-      const tickOptions = tickMeta.options || {};
-
-      if (Math.abs(diff) < Math.max(target * 0.00008, 0.01)) {
-        displayPriceRef.current = target;
-        updateCurrentCandle(target, tickTimestamp, tickOptions);
-        return;
-      }
-
-      const next = current + diff * 0.18;
-      displayPriceRef.current = next;
-      updateCurrentCandle(next, tickTimestamp, tickOptions);
-
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(animate);
-  }, [replayMode, updateCurrentCandle]);
-
-  const applyLivePrice = useCallback((priceValue, timestamp = Math.floor(Date.now() / 1000), options = {}) => {
-    if (!priceValue || !candleSeriesRef.current || !lastCandleRef.current) return;
-
-    const price = Number(priceValue);
-    if (!price || Number.isNaN(price)) return;
-
-    const lastClose = Number(lastCandleRef.current.close || price);
-    const gapPercent = lastClose > 0 ? Math.abs((price - lastClose) / lastClose) : 0;
-
-    // If REST candles are delayed and the live quote is far away, do not draw one giant candle.
-    // Rebase the latest candle around the live quote, then smooth future ticks.
-    if (gapPercent > 0.025) {
-      rebaseLatestCandle(price, timestamp, options);
-      return;
-    }
-
-    if (!displayPriceRef.current) {
-      displayPriceRef.current = lastClose;
-    }
-
-    targetTickMetaRef.current = {
-      timestamp,
-      options,
-    };
-    targetPriceRef.current = price;
-    runSmoothAnimation();
-  }, [rebaseLatestCandle, runSmoothAnimation]);
-
-  const applyLivePriceRef = useRef(applyLivePrice);
-
-  useEffect(() => {
-    applyLivePriceRef.current = applyLivePrice;
-  }, [applyLivePrice]);
+  }, [setStatus]);
 
   const queueStreamTick = useCallback((trade) => {
-    const price = Number(trade?.p || trade?.price || 0);
-
-    if (!price || Number.isNaN(price) || replayMode) return;
+    if (replayMode) return;
+    const quote = normalizeMarketQuote({ ...trade, symbol: trade.s || trade.symbol, price: trade.p ?? trade.price }, { symbol: chartSymbol });
+    if (quote.asOf !== null && quote.asOf <= Math.max(lastAppliedTimeRef.current, pendingStreamTickRef.current?.timestamp || 0)) return;
+    if (quote.quality !== "live") {
+      pendingStreamTickRef.current = null;
+      if (liveQuoteLineRef.current && candleSeriesRef.current) candleSeriesRef.current.removePriceLine(liveQuoteLineRef.current);
+      liveQuoteLineRef.current = null;
+      if (containerRef.current) delete containerRef.current.dataset.quotePrice;
+      setStatus(quote.quality.toUpperCase());
+      return;
+    }
 
     pendingStreamTickRef.current = {
-      price,
-      timestamp: Number(trade.t || trade.timestamp || Math.floor(Date.now() / 1000)),
+      price: quote.price,
+      timestamp: quote.asOf,
       options: {
-        status: trade.delayed ? "DELAYED" : "QTRD",
-        volumeIncrement: Number(trade.lastTradeSize || 1) || 1,
+        status: "LIVE QUOTE",
       },
     };
     lastStreamTickAtRef.current = Date.now();
@@ -592,15 +358,27 @@ function Chart({
 
       if (!tick) return;
 
-      lastLivePriceRef.current = tick.price;
       applyLivePrice(tick.price, tick.timestamp, tick.options);
     });
-  }, [applyLivePrice, replayMode]);
+  }, [applyLivePrice, replayMode, chartSymbol, setStatus]);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const hadHistory = candlesRef.current.length > 0;
+    const hadHistory = false;
+    containerRef.current.dataset.visibleCandleCount = "0";
+    containerRef.current.dataset.visibleEnd = "";
+    containerRef.current.dataset.indicatorEnd = "";
+    containerRef.current.dataset.markerEnd = "";
+    containerRef.current.dataset.markerCount = "0";
+    delete containerRef.current.dataset.quotePrice;
+    candlesRef.current = [];
+    lastCandleRef.current = null;
+    lastAppliedTimeRef.current = 0;
+    liveQuoteLineRef.current = null;
+    if (tooltipRef.current) tooltipRef.current.style.display = "none";
+    setHistoryError("");
+    onReplayDataRef.current?.({ symbol: chartSymbol, interval: timeframe, quality: "unavailable", candles: [], reason: "Loading historical data" });
     setHadChartHistoryBeforeLoad(hadHistory);
     setIsHistoryLoading(true);
     setStatus(hadHistory ? "UPDATING" : "LOADING");
@@ -712,12 +490,9 @@ function Chart({
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
+    markersRef.current = createSeriesMarkers(candleSeries, []);
     volumeSeriesRef.current = volumeSeries;
     indicatorSeriesRef.current = indicatorSeries;
-
-    if (hadHistory) {
-      applyHistoryDataset(candlesRef.current, "UPDATING", { fitContent: true });
-    }
 
     chart.subscribeCrosshairMove((param) => {
       if (disposed) return;
@@ -728,11 +503,14 @@ function Chart({
         return;
       }
 
-      const candle = candlesRef.current.find((item) => item.time === param.time);
+      const candle = candleSeriesRef.current?.data().find((item) => item.time === param.time);
       if (!candle) {
         tooltipRef.current.style.display = "none";
         return;
       }
+
+      // The chart library returns OHLC only; look up volume after validating the visible timestamp.
+      const volume = candlesRef.current.find(item => item.time === candle.time)?.volume ?? null;
 
       tooltipRef.current.style.display = "block";
       tooltipRef.current.style.left = `${Math.min(param.point.x + 14, containerRef.current.clientWidth - 170)}px`;
@@ -743,50 +521,41 @@ function Chart({
         <div>H: <b style="color:#00c896">${candle.high.toFixed(2)}</b></div>
         <div>L: <b style="color:#ef5350">${candle.low.toFixed(2)}</b></div>
         <div>C: <b>${candle.close.toFixed(2)}</b></div>
-        <div>Vol: <b>${formatVolume(candle.volume)}</b></div>
+        <div>Vol: <b>${formatVolume(volume)}</b></div>
       `;
     });
 
     async function loadCandles() {
       try {
         const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
-
-        if (cleanBrokerApiUrl) {
+        if (!cleanBrokerApiUrl) throw new Error("Chart provider is not configured");
           const backendData = await fetchJsonWithTimeout(
             `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?timeframe=${encodeURIComponent(timeframe)}`,
             3500
           );
-          const backendCandles = normalizeBackendCandles(backendData.candles);
-
-          if (backendCandles.length) {
-            if (disposed) return;
-
-            applyHistoryDataset(backendCandles, "QTRD", { fitContent: true });
-            setIsHistoryLoading(false);
-
-            if (lastLivePriceRef.current) {
-              applyLivePriceRef.current(lastLivePriceRef.current);
-            }
-            return;
-          }
+        const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
+        if (disposed) return;
+        if (!dataset.candles.length) {
+          setStatus("UNAVAILABLE");
+          setHistoryError(dataset.reason);
+          onReplayDataRef.current?.(dataset);
+          setIsHistoryLoading(false);
+          return;
         }
-
-        const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
-        if (disposed) return;
-
-        applyHistoryDataset(fallback, "SIM", { fitContent: true });
+        applyHistoryDataset(dataset, dataset.quality.toUpperCase(), { fitContent: true });
         setIsHistoryLoading(false);
-      } catch {
-        const fallback = generateFallbackCandles(livePriceRef.current, timeframe);
+      } catch (error) {
         if (disposed) return;
-
-        applyHistoryDataset(fallback, "SIM", { fitContent: true });
+        setStatus("UNAVAILABLE");
+        setHistoryError(error.message || "Historical data is unavailable");
+        onReplayDataRef.current?.({ symbol: chartSymbol, interval: timeframe, quality: "unavailable", candles: [], reason: error.message });
         setIsHistoryLoading(false);
       }
     }
 
     loadCandles();
 
+    let priorWidth = containerRef.current.clientWidth;
     const resizeObserver = new ResizeObserver(() => {
       if (disposed) return;
       if (!containerRef.current || !chartRef.current) return;
@@ -800,6 +569,8 @@ function Chart({
           width: containerRef.current.clientWidth,
           height: containerRef.current.clientHeight,
         });
+        if (priorWidth === 0 && containerRef.current.clientWidth > 0) chartRef.current.timeScale().fitContent();
+        priorWidth = containerRef.current.clientWidth;
       });
     });
 
@@ -808,10 +579,6 @@ function Chart({
     return () => {
       disposed = true;
       resizeObserver.disconnect();
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
       if (streamFrameRef.current) {
         cancelAnimationFrame(streamFrameRef.current);
         streamFrameRef.current = null;
@@ -822,6 +589,7 @@ function Chart({
       }
       chartRef.current = null;
       candleSeriesRef.current = null;
+      markersRef.current = null;
       volumeSeriesRef.current = null;
       indicatorSeriesRef.current = {};
       trendLineRefs.current = [];
@@ -833,7 +601,7 @@ function Chart({
         }
       });
     };
-  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, chartTheme.background, chartTheme.border, chartTheme.grid, chartTheme.text, chartTheme.tooltipTitle, setStatus, timeframe]);
+  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, chartTheme.background, chartTheme.border, chartTheme.grid, chartTheme.text, chartTheme.tooltipTitle, setStatus, timeframe, historyRevision]);
 
   useEffect(() => {
     updateIndicators();
@@ -848,13 +616,6 @@ function Chart({
   }, [updateTrendTools]);
 
   useEffect(() => {
-    if (!livePrice || replayMode) return;
-
-    lastLivePriceRef.current = Number(livePrice);
-    applyLivePrice(Number(livePrice), Math.floor(Date.now() / 1000));
-  }, [applyLivePrice, livePrice, livePulse, replayMode]);
-
-  useEffect(() => {
     if (!chartSymbol || replayMode) return undefined;
 
     const unsubscribe = marketDataService.subscribe(chartSymbol, queueStreamTick);
@@ -862,7 +623,7 @@ function Chart({
       if (!lastStreamTickAtRef.current) return;
 
       const isStale = Date.now() - lastStreamTickAtRef.current > 15000;
-      if (isStale && statusRef.current === "QTRD") {
+      if (isStale && statusRef.current === "LIVE QUOTE") {
         setStatus("STALE");
       }
     }, 5000);
@@ -878,12 +639,23 @@ function Chart({
     };
   }, [chartSymbol, queueStreamTick, replayMode, setStatus]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!candleSeriesRef.current || !candlesRef.current.length) return;
+
+    if (replayMode && liveQuoteLineRef.current) {
+      candleSeriesRef.current.removePriceLine(liveQuoteLineRef.current);
+      liveQuoteLineRef.current = null;
+      delete containerRef.current.dataset.quotePrice;
+    }
+    if (tooltipRef.current) tooltipRef.current.style.display = "none";
 
     const source = replayMode ? getVisibleCandles() : candlesRef.current;
 
+    // Markers must be removed before their referenced bars leave the series.
+    markersRef.current?.setMarkers([]);
     candleSeriesRef.current.setData(source);
+    containerRef.current.dataset.visibleCandleCount = String(candleSeriesRef.current.data().length);
+    containerRef.current.dataset.visibleEnd = String(candleSeriesRef.current.data().at(-1)?.time ?? "");
     updateVolumeRef.current(source);
     updateIndicatorsRef.current(source);
     updateMarkersRef.current();
@@ -893,6 +665,7 @@ function Chart({
   return (
     <div
       ref={containerRef}
+      data-chart-canvas={chartSymbol}
       style={{
         position: "relative",
         width: "100%",
@@ -973,8 +746,16 @@ function Chart({
         </div>
       )}
 
+      {historyError && !isHistoryLoading && (
+        <div role="status" style={{ position: "absolute", inset: "40% 12px auto", zIndex: 7, textAlign: "center", color: chartTheme.text }}>
+          <div>{historyError}</div>
+          <button type="button" onClick={() => setHistoryRevision(value => value + 1)} style={{ marginTop: 12, padding: "8px 16px", color: chartTheme.text, background: chartTheme.background, border: `1px solid ${chartTheme.border}`, borderRadius: 4 }}>Retry chart data</button>
+        </div>
+      )}
+
       <div
         ref={tooltipRef}
+        data-chart-tooltip={chartSymbol}
         style={{
           position: "absolute",
           zIndex: 6,

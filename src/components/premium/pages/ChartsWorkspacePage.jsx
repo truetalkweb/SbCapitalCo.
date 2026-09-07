@@ -1,6 +1,7 @@
 import { terminalMonoFont } from "../../../config/terminalConfig";
 import { CHART_INDICATOR_OPTIONS } from "../../../indicators/chartIndicators";
 import { formatPercent, formatPrice } from "../../../utils/dashboardFormatters";
+import { isProviderSampleRow } from "../../../utils/marketDataContract.js";
 import { hasNumericValue, money, nullableMoveOf, pct, toneColor } from "../premiumWorkspaceData";
 import { ActionButton, DetailRail, PremiumCard, PremiumTable } from "../PremiumWorkspacePrimitives";
 
@@ -55,6 +56,7 @@ export default function ChartsWorkspacePage({
       ["Market Cap", selected.marketCap],
       ["Beta", selected.beta],
     ];
+    const sampleMoves = stocks.filter(isProviderSampleRow).map(nullableMoveOf).filter(value => value !== null);
     const intelligenceCards = [
       {
         title: "AI Market Brief",
@@ -63,9 +65,9 @@ export default function ChartsWorkspacePage({
         tone: nullableMoveOf(selected) === null ? "neutral" : nullableMoveOf(selected) >= 0 ? "good" : "bad",
       },
       {
-        title: "Market Breadth",
-        body: `${stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) >= 0).length} advancing / ${stocks.filter((row) => nullableMoveOf(row) !== null && nullableMoveOf(row) < 0).length} declining symbols in the current workspace feed.`,
-        footer: `${stocks.length} tracked symbols`,
+        title: "Workspace Sample Breadth",
+        body: `${sampleMoves.filter(value => value > 0).length} advancing / ${sampleMoves.filter(value => value < 0).length} declining / ${sampleMoves.filter(value => value === 0).length} unchanged in the workspace sample.`,
+        footer: `${sampleMoves.length} of ${stocks.length} tracked symbols with usable moves`,
         tone: "neutral",
       },
       {
@@ -229,4 +231,3 @@ export default function ChartsWorkspacePage({
     );
   
 }
-

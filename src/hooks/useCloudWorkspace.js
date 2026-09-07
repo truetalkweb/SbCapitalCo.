@@ -584,18 +584,19 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     };
   }, []);
 
+  const workspaceUserId = user?.id;
   useEffect(() => {
-    if (!user?.id) {
+    if (!workspaceUserId) {
       activeUserIdRef.current = null;
       remoteRevisionRef.current = 0;
       baseWorkspaceRef.current = {};
       lastPersistedFingerprintRef.current = null;
       return;
     }
-    if (activeUserIdRef.current === user.id) return;
+    if (activeUserIdRef.current === workspaceUserId) return;
     let cancelled = false;
     cloudWorkspaceReadyRef.current = false;
-    activeUserIdRef.current = user.id;
+    activeUserIdRef.current = workspaceUserId;
     updateCloudStatus("restoring", "Restoring workspace...");
     const restoreTimeoutId = window.setTimeout(() => {
       if (cancelled || cloudWorkspaceReadyRef.current) return;
@@ -603,7 +604,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       setWorkspaceReady(true);
       updateCloudStatus("error", "Cloud restore timed out; local fallback active");
     }, 7000);
-    loadWorkspaceForUser(user)
+    loadWorkspaceForUser({ id: workspaceUserId })
       .catch(() => updateCloudStatus("error", "Cloud unavailable; local fallback active"))
       .finally(() => {
         if (cancelled) return;
@@ -615,15 +616,15 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
       cancelled = true;
       window.clearTimeout(restoreTimeoutId);
     };
-  }, [loadWorkspaceForUser, updateCloudStatus, user]);
+  }, [loadWorkspaceForUser, updateCloudStatus, workspaceUserId]);
 
   useEffect(() => {
-    if (!user?.id || !cloudWorkspaceReadyRef.current) return undefined;
+    if (!user?.id || !workspaceReady || !cloudWorkspaceReadyRef.current) return undefined;
     const timeoutId = window.setTimeout(() => {
       saveWorkspaceToCloud({ quiet: true });
     }, 1800);
     return () => window.clearTimeout(timeoutId);
-  }, [saveWorkspaceToCloud, user, workspacePayload]);
+  }, [saveWorkspaceToCloud, user, workspacePayload, workspaceReady]);
 
   return {
     accountDeleteStatus,

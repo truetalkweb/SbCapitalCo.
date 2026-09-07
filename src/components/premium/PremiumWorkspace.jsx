@@ -11,6 +11,7 @@ import {
   formatMultiple,
 } from "../../utils/dashboardFormatters";
 import { saveSetting } from "../../utils/storage";
+import { replayJumpIndex, replayBookmarkIndex } from "../../utils/replayNavigation.js";
 import { DEFAULT_SCANNER_FILTERS } from "../../utils/premiumScanner";
 import {
   DEFAULT_ENTITLEMENTS,
@@ -126,10 +127,14 @@ export default function PremiumWorkspace({
   replayPlaying,
   replaySpeed,
   replayStats,
+  replayBuy,
+  replaySell,
   replayTrades,
   replayEquity = [],
   replayIndex = 0,
   replayDataLength = 0,
+  replayData = [],
+  replaySession,
   replayBookmarks = [],
   setReplayBookmarks,
   replayNotes = "",
@@ -330,35 +335,32 @@ export default function PremiumWorkspace({
   };
 
   const jumpReplay = (target) => {
-    if (!replayDataLength || !setReplayIndex) return;
-    if (target === "open") {
-      setReplayIndex(Math.min(80, replayDataLength - 1));
+    if (!replayData.length || !setReplayIndex) return;
+    setReplayIndex(current => replayJumpIndex(replayData, current, target));
+  };
+
+  const selectReplayBookmark = (bookmark) => {
+    const index = replayBookmarkIndex(bookmark, replaySession, replayData);
+    if (index === null) {
+      setReplayActionStatus("This bookmark belongs to a different or unverified historical dataset.");
       return;
     }
-    if (target === "close") {
-      setReplayIndex(replayDataLength - 1);
-      return;
-    }
-    const candleMinutes = {
-      "1m": 1,
-      "5m": 5,
-      "15m": 15,
-      "1H": 60,
-      "1D": 390,
-    }[timeframe] || 5;
-    const candleSteps = Math.max(1, Math.round(target / candleMinutes));
-    setReplayIndex((current) => Math.min(current + candleSteps, replayDataLength - 1));
+    setReplayIndex?.(index);
   };
 
   const addReplayBookmark = () => {
+    if (!replaySession?.fingerprint || !replayData[replayIndex]) return;
     const bookmark = {
-      id: `${selectedStock}-${replayIndex}-${replayBookmarks.length}`,
+      id: crypto.randomUUID(),
       symbol: selectedStock,
+      interval: timeframe,
+      fingerprint: replaySession.fingerprint,
+      time: replayData[replayIndex].time,
       index: replayIndex,
       label: `${selectedStock} step ${replayIndex + 1}`,
     };
     setReplayBookmarks((current) => {
-      const next = [bookmark, ...current.filter((item) => item.symbol !== bookmark.symbol || item.index !== bookmark.index)].slice(0, 12);
+      const next = [bookmark, ...current.filter((item) => item.fingerprint !== bookmark.fingerprint || item.time !== bookmark.time)];
       saveSetting("sb_replay_bookmarks", next);
       return next;
     });
@@ -883,6 +885,9 @@ export default function PremiumWorkspace({
           enterReplayFullscreen,
           isNarrowWorkspace,
           jumpReplay,
+          selectReplayBookmark,
+          replayData,
+          timeZone,
           openReplayJournal,
           page,
           removeReplayBookmark,
@@ -901,6 +906,10 @@ export default function PremiumWorkspace({
           replaySettingsOpen,
           replaySpeed,
           replayStats,
+          replayBuy,
+          replaySell,
+          quantity,
+          setQuantity,
           replayTrades,
           replayWinRate,
           resetReplay,

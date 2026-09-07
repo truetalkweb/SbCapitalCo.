@@ -586,7 +586,7 @@ export default function TerminalTopBar({
         )}
 
         {showAdvancedControls && (
-          <button onClick={() => setSyncCharts(!syncCharts)} style={compactButton(syncCharts)}>
+          <button aria-pressed={syncCharts} title="Synchronize chart symbols and intervals" onClick={() => setSyncCharts(!syncCharts)} style={compactButton(syncCharts)}>
             Sync {syncCharts ? "On" : "Off"}
           </button>
         )}

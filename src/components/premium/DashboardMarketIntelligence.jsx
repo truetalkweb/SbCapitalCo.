@@ -8,6 +8,7 @@ import {
 } from "../../utils/dashboardFormatters";
 import { formatPacificTime } from "../../utils/timeFormatters";
 import { createVisibilityAwarePoller } from "../../utils/visibilityScheduler";
+import { isProviderSampleRow, normalizeCandleDataset, normalizeMarketQuote } from "../../utils/marketDataContract.js";
 
 const OPPORTUNITY_TABS = [
   "Gainers",
@@ -73,17 +74,13 @@ function useMarketPulseSeries(brokerApiUrl, rows) {
         });
         if (!response.ok) return null;
         const payload = await response.json();
-        const sparkline = (Array.isArray(payload.candles) ? payload.candles : [])
-          .map((candle) => numberOrNull(candle.close))
-          .filter((value) => value !== null)
-          .slice(-36);
-        if (sparkline.length < 2 || payload.fallback || payload.degraded) return null;
+        const dataset = normalizeCandleDataset(payload, { symbol, interval: "5m" });
+        const sparkline = dataset.candles.slice(-36).map(candle => candle.close);
+        if (sparkline.length < 2) return null;
         return {
           symbol,
           sparkline,
-          source: payload.cached ? "Questrade cached" : payload.source || "Questrade",
-          updatedAt: payload.updatedAt || null,
-          cached: Boolean(payload.cached),
+          historyMetadata: { ...dataset, candles: undefined },
         };
       }));
 
@@ -107,28 +104,19 @@ function useMarketPulseSeries(brokerApiUrl, rows) {
 
   return useMemo(() => rows.map((row) => ({
     ...row,
+    sparkline: [],
     ...(seriesBySymbol[symbolOf(row)] || {}),
   })), [rows, seriesBySymbol]);
 }
 
 function dataMode(row = {}) {
-  if (!row || row.dataMode === "unavailable") return "Unavailable";
-  if (row.delayed) return "Delayed";
-  if (row.cached) return "Cached";
-  if (row.fallback || row.degraded) return "Fallback";
-  return "Live";
+  const quality = normalizeMarketQuote(row).quality;
+  return quality.charAt(0).toUpperCase() + quality.slice(1);
 }
 
 function freshnessLabel(row = {}) {
-  if (!row || row.dataMode === "unavailable") return "Unavailable";
-  if (row.delayed) return "Delayed";
-  if (row.cached) return "Cached";
-
-  const rawTimestamp = row.lastTradeTime || row.updatedAt || row.timestamp;
-  const timestamp = rawTimestamp ? new Date(rawTimestamp) : null;
-  if (!timestamp || Number.isNaN(timestamp.getTime())) return "Freshness unavailable";
-
-  return `Updated ${formatPacificTime(timestamp)} PT`;
+  const quote = normalizeMarketQuote(row, { symbol: symbolOf(row) });
+  return `${quote.quality} | ${quote.asOf === null ? "Market timestamp unavailable" : `As of ${formatPacificTime(new Date(quote.asOf * 1000))} PT`}`;
 }
 
 function Card({ theme, title, action, children, style = {} }) {
@@ -174,10 +162,10 @@ function EmptyState({ theme, children }) {
 }
 
 function Sparkline({ theme, row }) {
-  const values = (row?.sparkline || row?.intraday || row?.history || [])
+  const values = (row?.historyMetadata ? row.sparkline || [] : [])
     .map((value) => numberOrNull(typeof value === "object" ? value.close ?? value.value : value))
     .filter((value) => value !== null);
-  const move = valueFrom(row, PERIOD_FIELDS["1D"]);
+  const move = values.length >= 2 ? values.at(-1) - values[0] : null;
   const color = move === null ? theme.muted : move >= 0 ? theme.green : theme.red;
 
   if (values.length < 2) {
@@ -196,7 +184,8 @@ function Sparkline({ theme, row }) {
   }).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} aria-label={`${symbolOf(row)} intraday price series`} style={{ width: 116, height: 34, display: "block" }}>
+    <svg role="img" viewBox={`0 0 ${width} ${height}`} aria-label={`${symbolOf(row)} ${row.historyMetadata.quality} price series`} style={{ width: 116, height: 34, display: "block" }}>
+      <title>{`${row.historyMetadata.source} | ${row.historyMetadata.interval} | ${row.historyMetadata.quality} | As of ${new Date(row.historyMetadata.asOf * 1000).toISOString()}`}</title>
       <path d={path} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
     </svg>
   );
@@ -287,7 +276,7 @@ function BreadthMetric({ theme, label, positiveLabel, negativeLabel, positive, n
 }
 
 export function MarketBreadthStrip({ theme, rows = [] }) {
-  const authoritative = uniqueRows(rows).filter((row) => !row.fallback && !row.degraded);
+  const authoritative = uniqueRows(rows).filter(isProviderSampleRow);
   const moves = authoritative.map((row) => valueFrom(row, PERIOD_FIELDS["1D"])).filter((value) => value !== null);
   const highs = authoritative.filter((row) => row.newHigh === true || /new high/i.test(String(row.signal || row.category || ""))).length;
   const lows = authoritative.filter((row) => row.newLow === true || /new low/i.test(String(row.signal || row.category || ""))).length;
@@ -297,8 +286,8 @@ export function MarketBreadthStrip({ theme, rows = [] }) {
   const sma200Below = authoritative.filter((row) => row.aboveSma200 === false || (numberOrNull(row.price) !== null && numberOrNull(row.sma200) !== null && numberOrNull(row.price) < numberOrNull(row.sma200))).length;
 
   return (
-    <section aria-label="Market breadth" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(220px, 1fr))", overflow: "auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 8, background: theme.panel }}>
-      <BreadthMetric theme={theme} label="Market breadth" positiveLabel="Adv" negativeLabel="Dec" positive={moves.filter((value) => value > 0).length} negative={moves.filter((value) => value < 0).length} />
+    <section aria-label="Workspace sample breadth" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(220px, 1fr))", overflow: "auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 8, background: theme.panel }}>
+      <BreadthMetric theme={theme} label={`Sample breadth (${moves.length} symbols)`} positiveLabel="Adv" negativeLabel="Dec" positive={moves.filter((value) => value > 0).length} negative={moves.filter((value) => value < 0).length} />
       <BreadthMetric theme={theme} label="52-week range" positiveLabel="High" negativeLabel="Low" positive={highs} negative={lows} />
       <BreadthMetric theme={theme} label="SMA 50" positiveLabel="Above" negativeLabel="Below" positive={sma50Above} negative={sma50Below} />
       <BreadthMetric theme={theme} label="SMA 200" positiveLabel="Above" negativeLabel="Below" positive={sma200Above} negative={sma200Below} />
@@ -384,7 +373,7 @@ export function SectorHeatmap({ theme, rows = [], onSelect }) {
       marketCapValue: numberOrNull(row.marketCap),
       periodMove: valueFrom(row, PERIOD_FIELDS[period]),
     }))
-    .filter((row) => !row.synthetic && !row.fallback && !row.degraded && row.symbol && row.sector && !/unknown|not reported|unavailable/i.test(row.sector) && row.periodMove !== null)
+    .filter((row) => isProviderSampleRow(row) && row.symbol && row.sector && !/unknown|not reported|unavailable/i.test(row.sector) && row.periodMove !== null)
     .sort((a, b) => (b.marketCapValue || 0) - (a.marketCapValue || 0))
     .slice(0, 36), [period, rows]);
   const maxCap = Math.max(...heatmapRows.map((row) => row.marketCapValue || 0), 1);
@@ -448,11 +437,11 @@ export function SectorHeatmap({ theme, rows = [], onSelect }) {
 }
 
 export function MarketRegimeCard({ theme, rows = [], marketIndexes = [] }) {
-  const authoritative = uniqueRows(rows).filter((row) => !row.fallback && !row.degraded);
+  const authoritative = uniqueRows(rows).filter(isProviderSampleRow);
   const moves = authoritative.map((row) => valueFrom(row, PERIOD_FIELDS["1D"])).filter((value) => value !== null);
   const advancing = moves.filter((value) => value > 0).length;
   const ratio = moves.length ? advancing / moves.length : null;
-  const volatility = marketIndexes.find((row) => ["VIX", "VIXM"].includes(symbolOf(row)));
+  const volatility = marketIndexes.find((row) => isProviderSampleRow(row) && ["VIX", "VIXM"].includes(symbolOf(row)));
   const volatilityMove = valueFrom(volatility, PERIOD_FIELDS["1D"]);
   let regime = "Incomplete";
   let tone = theme.muted;
@@ -472,14 +461,14 @@ export function MarketRegimeCard({ theme, rows = [], marketIndexes = [] }) {
   const confidence = moves.length >= 40 ? "High" : moves.length >= 15 ? "Moderate" : moves.length ? "Limited" : "Unavailable";
 
   return (
-    <Card theme={theme} title="Market Regime">
+    <Card theme={theme} title="Workspace Sample Context">
       <div style={{ padding: 14, display: "grid", gap: 11 }}>
         <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ color: tone, fontSize: 20, fontWeight: 900 }}>{regime}</div>
             <div style={{ marginTop: 3, color: theme.muted, fontSize: 11 }}>Confidence: {confidence}</div>
           </div>
-          <span style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: 11 }}>{moves.length} verified rows</span>
+          <span style={{ color: theme.muted, fontFamily: terminalMonoFont, fontSize: 11 }}>{moves.length} sample symbols; not market-wide</span>
         </div>
         <div style={{ display: "grid", gap: 7, color: theme.text, fontSize: 12 }}>
           <div>• Breadth: {ratio === null ? "unavailable" : `${(ratio * 100).toFixed(1)}% advancing`}</div>

@@ -12,6 +12,12 @@ const vendorChunks = [
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    watch: {
+      // Browser downloads can remain locked on Windows; generated evidence is not app source.
+      ignored: ['**/artifacts/**', '**/test-results/**', '**/playwright*-report/**', '**/release-gate-artifacts/**'],
+    },
+  },
   build: {
     rolldownOptions: {
       output: {

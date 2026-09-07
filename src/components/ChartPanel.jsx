@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 import {
   Camera,
   Maximize2,
@@ -12,6 +12,7 @@ import {
   formatQuoteSourceStatus,
 } from "../utils/marketUtils";
 import { CHART_INDICATOR_OPTIONS, normalizeIndicatorState } from "../indicators/chartIndicators";
+import { parseNullableMarketNumber } from "../utils/marketNumbers.js";
 
 const Chart = lazy(() => import("./Chart"));
 
@@ -22,7 +23,7 @@ export default function ChartPanel({
   editableSymbol = false,
   tf,
   setTf,
-  livePrice,
+  livePrice: quotePrice,
   quoteChange,
   secondary = false,
   chartStatus = "LOADING",
@@ -44,15 +45,20 @@ export default function ChartPanel({
   initialLivePulse,
   replayMode,
   replayIndex,
+  replayCandle,
   setMainReplayData,
   replayTrades,
   brokerApiUrl,
   advancedMode = false,
   premiumShell = false,
   embedded = false,
+  hideToolbar = false,
   dense = false,
 }) {
   const isPhoneChart = viewportWidth <= 700;
+  const panelRef = useRef(null);
+  const plotRef = useRef(null);
+  const livePrice = replayMode && !secondary ? replayCandle?.close ?? null : quotePrice;
   const chartIndicators = useMemo(() => normalizeIndicatorState(indicators), [indicators]);
   const [showTrendTools, setShowTrendTools] = useState(false);
   const [trendTools, setTrendTools] = useState({ autoLevels: false });
@@ -66,7 +72,7 @@ export default function ChartPanel({
     setSymbol?.(clean);
   };
   const liveQuoteMeta = allSymbols.find((item) => item.symbol === cleanChartSymbol);
-  const quoteSourceLabel = formatQuoteSourceStatus(liveQuoteMeta);
+  const quoteSourceLabel = replayMode && !secondary ? "REPLAY MARK" : formatQuoteSourceStatus(liveQuoteMeta);
   const chartSourceLabel = formatChartSourceStatus(chartStatus);
   const quoteStatusColor =
     !liveQuoteMeta || quoteSourceLabel.includes("PENDING") || quoteSourceLabel.includes("STALE")
@@ -118,8 +124,10 @@ export default function ChartPanel({
     setShowTrendTools(false);
     setShowIndicators?.((value) => !value);
   };
-  const quoteChangeNumber = Number(String(quoteChange ?? "").replace(/[%+,]/g, "").trim());
-  const hasQuoteChange = Number.isFinite(quoteChangeNumber);
+  const quoteChangeNumber = replayMode && !secondary
+    ? replayCandle?.open > 0 ? (replayCandle.close - replayCandle.open) / replayCandle.open * 100 : null
+    : parseNullableMarketNumber(quoteChange);
+  const hasQuoteChange = quoteChangeNumber !== null;
   const quoteIsPositive = hasQuoteChange ? quoteChangeNumber >= 0 : !String(quoteChange || "").includes("-");
   const quoteChangeDisplay = hasQuoteChange
     ? `${quoteChangeNumber >= 0 ? "+" : ""}${quoteChangeNumber.toFixed(2)}%`
@@ -127,6 +135,9 @@ export default function ChartPanel({
 
   return (
     <div
+      ref={panelRef}
+      data-chart-symbol={cleanChartSymbol}
+      data-chart-interval={tf}
       style={{
         ...panelStyle({
           padding: "0px",
@@ -256,7 +267,17 @@ export default function ChartPanel({
       </div>
       )}
 
-      {!embedded && !secondary && (
+      {embedded && !hideToolbar && (
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, padding: 6, borderBottom: `1px solid ${theme.border}`, minWidth: 0 }}>
+          <ChartTickerInput value={cleanChartSymbol} onCommit={commitChartSymbol} theme={theme} label={title} compact />
+          <select aria-label={`${title} interval`} value={tf} onChange={event => setTf?.(event.target.value)} style={{ height: 28, color: theme.text, background: theme.panel, border: `1px solid ${theme.border}`, borderRadius: 4 }}>
+            {["1m", "5m", "15m", "1H", "1D"].map(interval => <option key={interval} value={interval}>{interval}</option>)}
+          </select>
+          <button type="button" aria-label={`${title} screenshot`} title="Screenshot" onClick={() => takeScreenshot?.(plotRef.current, cleanChartSymbol, tf)} style={{ ...toolButtonStyle, width: 28, padding: 0 }}><Camera size={14} /></button>
+          <button type="button" aria-label={`${title} fullscreen`} title="Fullscreen" onClick={() => toggleFullscreen?.(panelRef.current)} style={{ ...toolButtonStyle, width: 28, padding: 0 }}><Maximize2 size={14} /></button>
+        </div>
+      )}
+      {!embedded && (
         <div
           style={{
             display: "flex",
@@ -413,12 +434,12 @@ export default function ChartPanel({
             )}
           </div>
           {(advancedMode || premiumShell) && (
-          <button style={toolButtonStyle} onClick={takeScreenshot} title="Screenshot">
+          <button style={toolButtonStyle} onClick={() => takeScreenshot?.(plotRef.current, cleanChartSymbol, tf)} title="Screenshot" aria-label={`${title} screenshot`}>
             <Camera size={14} style={toolIconStyle} />
             {!isPhoneChart && "Screenshot"}
           </button>
           )}
-          <button style={toolButtonStyle} onClick={toggleFullscreen} title="Fullscreen">
+          <button style={toolButtonStyle} onClick={() => toggleFullscreen?.(panelRef.current)} title="Fullscreen" aria-label={`${title} fullscreen`}>
             <Maximize2 size={14} style={toolIconStyle} />
             {!isPhoneChart && "Fullscreen"}
           </button>
@@ -426,7 +447,10 @@ export default function ChartPanel({
       )}
 
       <div
-        ref={!secondary ? chartAreaRef : null}
+        ref={element => {
+          plotRef.current = element;
+          if (!secondary && chartAreaRef) chartAreaRef.current = element;
+        }}
         style={{
           flex: 1,
           minHeight: 0,
@@ -438,7 +462,7 @@ export default function ChartPanel({
           <Chart
             symbol={cleanChartSymbol}
             timeframe={tf}
-            livePrice={Number(livePrice || 100)}
+            livePrice={livePrice ?? null}
             livePulse={
               allSymbols.find((item) => item.symbol === cleanChartSymbol)?.lastUpdated ||
               initialLivePulse
@@ -447,7 +471,7 @@ export default function ChartPanel({
             onStatusChange={onStatusChange}
             replayMode={replayMode && !secondary}
             replayIndex={replayIndex}
-            onReplayData={setMainReplayData}
+            onReplayData={!secondary ? setMainReplayData : undefined}
             replayTrades={replayTrades}
             brokerApiUrl={brokerApiUrl}
             trendTools={trendTools}

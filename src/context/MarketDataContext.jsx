@@ -5,6 +5,8 @@ import {
   useState,
 } from "react";
 
+import { mergeQuoteSnapshot, normalizeMarketQuote } from "../utils/marketDataContract.js";
+import { createVisibilityAwarePoller } from "../utils/visibilityScheduler.js";
 import { marketDataService } from "../services/marketDataService";
 import { MarketDataContext } from "./marketDataContextValue";
 
@@ -12,74 +14,28 @@ export function MarketDataProvider({ children }) {
   const [liveQuotes, setLiveQuotes] = useState({});
   const [wsStatus, setWsStatus] = useState("DISCONNECTED");
 
+  useEffect(() => createVisibilityAwarePoller(() => {
+    setLiveQuotes(previous => {
+      let next = previous;
+      const now = Date.now();
+      for (const [symbol, quote] of Object.entries(previous)) {
+        if (quote.quality !== "live") continue;
+        const quality = normalizeMarketQuote(quote, { symbol, now }).quality;
+        if (quality === quote.quality) continue;
+        if (next === previous) next = { ...previous };
+        next[symbol] = { ...quote, quality, dataMode: quality, stale: quality === "stale" };
+      }
+      return next;
+    });
+  }, 1000), []);
+
   const updateLiveQuote = useCallback((symbol, price, extra = {}) => {
     const cleanSymbol = symbol?.trim?.().toUpperCase?.();
-    const numericPrice = Number(price);
-
-    if (!cleanSymbol || !numericPrice || Number.isNaN(numericPrice)) {
-      return;
-    }
-
-    setLiveQuotes((prev) => {
-      const previous = prev[cleanSymbol];
-
-      const oldPrice = Number(previous?.price || numericPrice);
-
-      const changePercent =
-        oldPrice > 0
-          ? (
-              ((numericPrice - oldPrice) / oldPrice) *
-              100
-            ).toFixed(2)
-          : "0.00";
-
-      return {
-        ...prev,
-
-        [cleanSymbol]: {
-          symbol: cleanSymbol,
-
-          price: numericPrice.toFixed(2),
-
-          change: `${
-            Number(changePercent) >= 0 ? "+" : ""
-          }${changePercent}%`,
-
-          volume:
-            extra.volume ||
-            previous?.volume ||
-            "LIVE",
-
-          lastUpdated: Date.now(),
-
-          source:
-            extra.source ||
-            previous?.source ||
-            "WS",
-
-          delayed:
-            typeof extra.delayed === "boolean"
-              ? extra.delayed
-              : previous?.delayed || false,
-
-          realtime:
-            typeof extra.realtime === "boolean"
-              ? extra.realtime
-              : typeof extra.delayed === "boolean"
-                ? !extra.delayed
-                : previous?.realtime ?? true,
-
-          bidPrice:
-            extra.bidPrice ?? previous?.bidPrice ?? null,
-
-          askPrice:
-            extra.askPrice ?? previous?.askPrice ?? null,
-
-          lastTradeTime:
-            extra.lastTradeTime || previous?.lastTradeTime || null,
-        },
-      };
-    });
+    if (!cleanSymbol) return;
+    setLiveQuotes(previous => ({
+      ...previous,
+      [cleanSymbol]: mergeQuoteSnapshot(previous[cleanSymbol], { ...extra, symbol: cleanSymbol, price }),
+    }));
   }, []);
 
   const subscribeToSymbols = useCallback(
@@ -102,22 +58,7 @@ export function MarketDataProvider({ children }) {
               updateLiveQuote(
                 trade.s,
                 trade.p,
-                {
-                  volume:
-                    trade.v || "LIVE",
-
-                  source: trade.source || "QTRD STREAM",
-
-                  delayed: Boolean(trade.delayed),
-
-                  realtime: trade.realtime !== false,
-
-                  bidPrice: trade.bidPrice,
-
-                  askPrice: trade.askPrice,
-
-                  lastTradeTime: trade.lastTradeTime,
-                }
+                trade
               );
             }
           )

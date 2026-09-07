@@ -1,3 +1,4 @@
+import { mergeQuoteSnapshot } from "../utils/marketDataContract.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   cryptoStocks,
@@ -24,6 +25,7 @@ import {
 const marketSnapshotSymbols = ["SPY", "QQQ", "DIA", "IWM", "VIXM"];
 
 export function useTerminalSymbols({
+  additionalCharts,
   activeWorkspace,
   fmpActive,
   fmpAiMovers,
@@ -36,7 +38,6 @@ export function useTerminalSymbols({
   marketRegion,
   scannerTab,
   setSelectedScannerStock,
-  syncCharts,
   updateContextLiveQuote,
 }) {
   const [selectedStock, setSelectedStock] = useState(() =>
@@ -93,6 +94,8 @@ export function useTerminalSymbols({
       [
         selectedStock,
         secondarySymbol,
+        additionalCharts?.third?.symbol,
+        additionalCharts?.fourth?.symbol,
         ...marketSnapshotSymbols,
         ...activeMarket.symbols,
         ...liveStocks.map((stock) => stock.symbol),
@@ -100,7 +103,7 @@ export function useTerminalSymbols({
       ]
         .filter(Boolean)
         .map((symbol) => symbol.trim().toUpperCase()),
-    [activeMarket.symbols, selectedStock, secondarySymbol, liveStocks, liveSmallCapMovers]
+    [activeMarket.symbols, selectedStock, secondarySymbol, additionalCharts, liveStocks, liveSmallCapMovers]
   );
 
   const selectedStockData =
@@ -278,10 +281,9 @@ export function useTerminalSymbols({
         ...(knownStock || liveQuote || {}),
         selectionSource: "watchlist-add",
       }));
-      if (syncCharts) setSecondarySymbol(cleanSymbol);
       setSearchSymbol("");
     },
-    [allSymbols, liveQuotes, liveStocks, syncCharts]
+    [allSymbols, liveQuotes, liveStocks]
   );
 
   const addSymbol = useCallback(() => {
@@ -324,9 +326,8 @@ export function useTerminalSymbols({
         }, previous);
       });
       if (stock) setSelectedScannerStock(stock);
-      if (syncCharts) setSecondarySymbol(cleanSymbol);
     },
-    [setSelectedScannerStock, syncCharts]
+    [setSelectedScannerStock]
   );
 
   const updateLiveQuote = useCallback(
@@ -342,19 +343,7 @@ export function useTerminalSymbols({
         prev.map((stock) => {
           if (stock.symbol !== cleanSymbol) return stock;
 
-          const oldPrice = Number(stock.price || 0);
-          const changePercent =
-            oldPrice > 0
-              ? (((numericPrice - oldPrice) / oldPrice) * 100).toFixed(2)
-              : null;
-
-          return {
-            ...stock,
-            price: numericPrice.toFixed(2),
-            change: extra.change || (changePercent ? `${Number(changePercent) >= 0 ? "+" : ""}${changePercent}%` : stock.change || null),
-            volume: extra.volume || stock.volume,
-            pendingQuote: false,
-          };
+          return mergeQuoteSnapshot(stock, { ...extra, symbol: cleanSymbol, price: numericPrice });
         })
       );
     },

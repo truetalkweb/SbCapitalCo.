@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadSetting } from "../utils/storage.js";
+import { isEligibleAlertQuote, normalizeMarketQuote } from "../utils/marketDataContract.js";
 
-export function shouldTriggerPriceAlert(alert, price, enabled = true) {
-  if (!enabled || !alert?.active || !Number.isFinite(price)) return false;
-  return alert.direction === "below" ? price <= Number(alert.trigger) : price >= Number(alert.trigger);
+export function shouldTriggerPriceAlert(alert, quote, enabled = true, now = Date.now()) {
+  if (!enabled || !alert?.active || !isEligibleAlertQuote(quote, alert.symbol, now)) return false;
+  const trigger = Number(alert.trigger);
+  if (!Number.isFinite(trigger) || trigger <= 0 || !["above", "below"].includes(alert.direction)) return false;
+  const { price } = normalizeMarketQuote(quote, { symbol: alert.symbol, now });
+  return alert.direction === "below" ? price <= trigger : price >= trigger;
 }
 
 function playTerminalAlertSound() {
@@ -116,11 +120,10 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
     const quoteMap = new Map(
       [...quotes, selectedStockData]
         .filter(Boolean)
-        .map((quote) => [
-          String(quote.symbol || "").toUpperCase(),
-          Number(quote.price ?? quote.last ?? quote.currentPrice),
-        ])
-        .filter(([symbol, price]) => symbol && Number.isFinite(price) && price > 0)
+        .map((quote) => normalizeMarketQuote(quote))
+        .filter((quote) => quote.quality === "live")
+        .sort((a, b) => a.asOf - b.asOf)
+        .map((quote) => [quote.symbol, quote])
     );
     const now = new Date().toISOString();
 
@@ -128,8 +131,9 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
       let changed = false;
       let shouldPlaySound = false;
       const nextAlerts = alerts.map((alert) => {
-        const price = quoteMap.get(String(alert.symbol || "").toUpperCase());
-        if (!shouldTriggerPriceAlert(alert, price, alertActivityEnabled)) return alert;
+        const quote = quoteMap.get(String(alert.symbol || "").toUpperCase());
+        if (!shouldTriggerPriceAlert(alert, quote, alertActivityEnabled)) return alert;
+        const price = quote.price;
 
         changed = true;
         shouldPlaySound = shouldPlaySound || soundAlertsEnabled;
@@ -156,6 +160,8 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
               trigger: alert.trigger,
               direction: alert.direction,
               occurredAt: now,
+              source: quote.source,
+              marketTimestamp: quote.asOf,
             },
             ...(Array.isArray(alert.history) ? alert.history : []),
           ].slice(0, 20),

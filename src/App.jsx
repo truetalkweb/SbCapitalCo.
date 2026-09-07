@@ -51,6 +51,7 @@ import { useCloudWorkspace } from "./hooks/useCloudWorkspace";
 import { useMarketNews } from "./hooks/useMarketNews";
 import { useOrderRisk } from "./hooks/useOrderRisk";
 import { useReplayEngine } from "./hooks/useReplayEngine";
+import { captureChartCanvas } from "./utils/chartCapture.js";
 import { useScannerData } from "./hooks/useScannerData";
 import { useTerminalAlerts } from "./hooks/useTerminalAlerts";
 import { useTerminalWorkspace } from "./hooks/useTerminalWorkspace";
@@ -287,15 +288,16 @@ export default function App() {
     replaySpeed,
     replayStats,
     replayTrades,
+    replaySession,
     replayBuy: replayBuyState,
     resetReplay: resetReplayState,
     setMainReplayData,
-    setReplayEquity,
+    setReplayContext,
+    restoreReplaySession,
     setReplayIndex,
     setReplayMode,
     setReplayPlaying,
     setReplaySpeed,
-    setReplayTrades,
     stepReplay,
   } = useReplayEngine({
     initialReplayMode: requestedPreset?.replayMode || false,
@@ -308,6 +310,8 @@ export default function App() {
     setLayoutMode,
     gridMode,
     setGridMode,
+    additionalCharts,
+    setAdditionalCharts,
     syncCharts,
     setSyncCharts,
     leftSectionsOpen,
@@ -330,6 +334,10 @@ export default function App() {
     setReplayMode,
     setReplayPlaying,
   });
+
+  useEffect(() => {
+    setReplayPlaying(false);
+  }, [activeWorkspace, setReplayPlaying]);
 
   const {
     brokerStatus,
@@ -582,6 +590,7 @@ export default function App() {
     trackedSymbols,
   } = useTerminalSymbols({
     activeWorkspace,
+    additionalCharts,
     fmpActive,
     fmpAiMovers,
     fmpGainers,
@@ -593,9 +602,11 @@ export default function App() {
     marketRegion,
     scannerTab,
     setSelectedScannerStock,
-    syncCharts,
     updateContextLiveQuote,
   });
+  useEffect(() => {
+    setReplayContext({ symbol: selectedStock, interval: timeframe });
+  }, [selectedStock, timeframe, setReplayContext]);
   const marketSnapshotStocks = useMemo(
     () => [...Object.values(marketSnapshotQuotes), ...allSymbols],
     [allSymbols, marketSnapshotQuotes]
@@ -645,13 +656,7 @@ export default function App() {
 
   const resetReplay = useCallback(() => {
     resetReplayState();
-    setOrders([]);
-    setPositions({});
-    setRealizedPnL(0);
-    setAlerts([]);
-    setReplayBookmarks([]);
-    setReplayNotes("");
-  }, [resetReplayState, setAlerts]);
+  }, [resetReplayState]);
 
   const {
     dailyRealizedLoss,
@@ -746,6 +751,7 @@ export default function App() {
       secondaryTimeframe,
       layoutMode,
       gridMode,
+      additionalCharts,
       quantity,
       orders,
       orderAuditTrail,
@@ -770,6 +776,7 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      replaySession,
       replayBookmarks,
       replayNotes,
       journalEntries,
@@ -788,6 +795,7 @@ export default function App() {
       secondaryTimeframe,
       layoutMode,
       gridMode,
+      additionalCharts,
       quantity,
       orders,
       orderAuditTrail,
@@ -812,6 +820,7 @@ export default function App() {
       replayIndex,
       replayTrades,
       replayEquity,
+      replaySession,
       replayBookmarks,
       replayNotes,
       journalEntries,
@@ -864,9 +873,8 @@ export default function App() {
     if (data.activeScannerPreset) setActiveScannerPreset(data.activeScannerPreset);
     if (typeof data.replayMode === "boolean") setReplayMode(data.replayMode);
     if (typeof data.replaySpeed !== "undefined") setReplaySpeed(data.replaySpeed);
-    if (typeof data.replayIndex === "number") setReplayIndex(data.replayIndex);
-    if (Array.isArray(data.replayTrades)) setReplayTrades(data.replayTrades);
-    if (Array.isArray(data.replayEquity)) setReplayEquity(data.replayEquity);
+    if (data.replaySession) restoreReplaySession(data.replaySession);
+    else if (data.replayTrades?.length) restoreReplaySession({ version: 0, events: data.replayTrades, index: data.replayIndex });
     if (Array.isArray(data.replayBookmarks)) setReplayBookmarks(data.replayBookmarks);
     if (typeof data.replayNotes === "string") setReplayNotes(data.replayNotes);
     if (Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
@@ -876,11 +884,9 @@ export default function App() {
     applySymbolWorkspace,
     applyWorkspaceLayout,
     setAlerts,
-    setReplayEquity,
-    setReplayIndex,
+    restoreReplaySession,
     setReplayMode,
     setReplaySpeed,
-    setReplayTrades,
     setSelectedScannerStock,
   ]);
 
@@ -1102,7 +1108,6 @@ export default function App() {
 
   function setMainTimeframe(value) {
     setTimeframe(value);
-    if (syncCharts) setSecondaryTimeframe(value);
   }
 
   function addJournalEntry() {
@@ -1135,13 +1140,15 @@ export default function App() {
   function openReplayJournal() {
     const closedReplayTrades = replayTrades.filter((trade) => trade.type === "SELL");
     const latestReplayTrade = closedReplayTrades[closedReplayTrades.length - 1];
-    const replayNetPnl = Number(replayStats.netPnL || 0);
+    const replayNetPnl = replayStats.candle && Number.isFinite(replayStats.netPnL) ? replayStats.netPnL : null;
+    const replayWinRate = replayStats.candle && Number.isFinite(replayStats.winRate) ? `${replayStats.winRate.toFixed(1)}%` : "Unavailable";
+    const replayMoney = (value) => Number.isFinite(value) ? `$${value.toFixed(2)}` : "Unavailable";
     const replayResult = replayNetPnl > 0 ? "Win" : replayNetPnl < 0 ? "Loss" : "Review";
 
     setJournalDraft((prev) => ({
       ...prev,
       symbol: selectedStock,
-      bias: replayNetPnl >= 0 ? "Long" : "Review",
+      bias: replayNetPnl !== null && replayNetPnl >= 0 ? "Long" : "Review",
       setup: "Replay Backtest",
       grade: replayNetPnl > 0 ? "B" : "C",
       tags: "replay,backtest",
@@ -1151,12 +1158,12 @@ export default function App() {
       result: replayResult,
       plan: `Replay review for ${selectedStock}. Candle ${replayIndex} of ${mainReplayData.length || 0}.`,
       review: [
-        `Replay net P&L: $${replayNetPnl.toFixed(2)}`,
-        `Closed trades: ${closedReplayTrades.length}`,
-        `Win rate: ${replayStats.winRate}%`,
+        `Replay net P&L: ${replayMoney(replayNetPnl)}`,
+        `Closed trades: ${replayStats.candle ? closedReplayTrades.length : "Unavailable"}`,
+        `Win rate: ${replayWinRate}`,
         replayNotes ? `Session notes: ${replayNotes}` : "Session notes: none",
         latestReplayTrade
-          ? `Last close: ${latestReplayTrade.type} ${latestReplayTrade.qty} @ $${Number(latestReplayTrade.price || 0).toFixed(2)} with P&L $${Number(latestReplayTrade.pnl || 0).toFixed(2)}`
+          ? `Last close: ${latestReplayTrade.type} ${latestReplayTrade.qty} @ ${replayMoney(latestReplayTrade.price)} with P&L ${replayMoney(latestReplayTrade.pnl)}`
           : "Last close: none yet",
       ].join("\n"),
     }));
@@ -1799,22 +1806,23 @@ export default function App() {
     }
   }
 
-  function toggleFullscreen() {
-    if (!chartAreaRef.current) return;
+  function toggleFullscreen(target = chartAreaRef.current) {
+    const element = target?.requestFullscreen ? target : chartAreaRef.current;
+    if (!element) return;
 
     if (!document.fullscreenElement) {
-      chartAreaRef.current.requestFullscreen();
+      element.requestFullscreen();
     } else {
       document.exitFullscreen();
     }
   }
 
-  function takeScreenshot() {
-    const canvas = chartAreaRef.current?.querySelector("canvas");
+  function takeScreenshot(target = chartAreaRef.current, symbol = selectedStock, interval = timeframe) {
+    const canvas = captureChartCanvas(target?.querySelector ? target : chartAreaRef.current);
     if (!canvas) return;
 
     const link = document.createElement("a");
-    link.download = `${selectedStock}-chart.png`;
+    link.download = `${symbol}-${interval}-chart.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   }
@@ -2404,18 +2412,15 @@ export default function App() {
   );
   const publicMarketDataHealth = {
     ...qtrdHealth,
-    label: formatTerminalStatusLabel(qtrdHealth.label || marketDataStatusLabel || "MARKET DATA PENDING").replace(/^QTRD\b/i, "MARKET DATA"),
+    label: formatTerminalStatusLabel(marketDataStatusLabel),
+    status: marketDataStatusLabel === "QUOTES LIVE" ? "ok" : "warn",
     message: String(qtrdHealth.message || "Market data status pending.").replace(/Questrade/gi, "Market data"),
     rawMessage: BROKER_TOOLS_ENABLED ? qtrdHealth.rawMessage : "",
     tokenPersisted: BROKER_TOOLS_ENABLED ? qtrdHealth.tokenPersisted : false,
   };
   const visibleMarketDataHealth = BROKER_TOOLS_ENABLED ? qtrdHealth : publicMarketDataHealth;
   const backendHealthLabel = platformHealth?.backend?.status === "online" ? "BACKEND LIVE" : "BACKEND PENDING";
-  const hasRenderableMarketData = allSymbols.some((stock) => Number(stock?.price || 0) > 0);
-  const pendingMarketDataLabel = /PENDING/i.test(String(visibleMarketDataHealth.label || marketDataStatusLabel || ""));
-  const resolvedMarketDataStatusLabel = pendingMarketDataLabel && hasRenderableMarketData
-    ? "PROVIDER DATA"
-    : visibleMarketDataHealth.label || marketDataStatusLabel;
+  const resolvedMarketDataStatusLabel = marketDataStatusLabel;
   const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || null;
   const aiHealthLabel = aiHealth?.source === "gemini" && (aiHealth?.live || aiHealth?.providerLabel === "LIVE")
@@ -2456,11 +2461,10 @@ export default function App() {
       buildDataConfidence({
         selectedStock,
         selectedStockData,
-        qtrdHealth: visibleMarketDataHealth,
         newsMeta,
         scannerMeta,
       }),
-    [newsMeta, scannerMeta, selectedStock, selectedStockData, visibleMarketDataHealth]
+    [newsMeta, scannerMeta, selectedStock, selectedStockData]
   );
   const visibleRightPanelTabs = useMemo(
     () => rightPanelTabs.filter((tab) => isRightTabAllowed(tab.id) && (advancedMode || coreRightTabs.has(tab.id))),
@@ -2549,9 +2553,10 @@ export default function App() {
         toggleFullscreen={toggleFullscreen}
         chartAreaRef={chartAreaRef}
         initialLivePulse={initialLivePulse}
-        replayMode={replayMode}
+        replayMode={replayMode || activeWorkspace === "replay"}
         replayIndex={replayIndex}
         setMainReplayData={setMainReplayData}
+        replayCandle={replayCandle}
         replayTrades={replayTrades}
         brokerApiUrl={BROKER_API_URL}
         advancedMode={advancedMode}
@@ -3437,6 +3442,8 @@ export default function App() {
       return (
         <>
           <WorkspaceGrid
+            additionalCharts={additionalCharts}
+            setAdditionalCharts={setAdditionalCharts}
             theme={theme}
             layoutMode={layoutMode}
             gridMode={gridMode}
@@ -3469,6 +3476,8 @@ export default function App() {
       return (
         <div style={{ display: "grid", gridTemplateRows: "minmax(0, 1fr) 116px", gap: "6px", height: "100%", minHeight: 0 }}>
           <WorkspaceGrid
+            additionalCharts={additionalCharts}
+            setAdditionalCharts={setAdditionalCharts}
             theme={theme}
             layoutMode={layoutMode}
             gridMode={gridMode}
@@ -3810,6 +3819,8 @@ export default function App() {
   function renderPremiumChartGrid({ layoutMode: layoutModeOverride = "1", gridMode: gridModeOverride = "2", compact = false, embeddedChart = false } = {}) {
     return (
       <WorkspaceGrid
+        additionalCharts={additionalCharts}
+        setAdditionalCharts={setAdditionalCharts}
         theme={theme}
         layoutMode={layoutModeOverride}
         gridMode={gridModeOverride}
@@ -3939,9 +3950,13 @@ export default function App() {
         replaySpeed={replaySpeed}
         replayStats={replayStats}
         replayTrades={replayTrades}
+        replayBuy={replayBuy}
+        replaySell={replaySell}
         replayEquity={replayEquity}
         replayIndex={replayIndex}
         replayDataLength={mainReplayData.length}
+        replayData={mainReplayData}
+        replaySession={replaySession}
         replayBookmarks={replayBookmarks}
         setReplayBookmarks={setReplayBookmarks}
         replayNotes={replayNotes}
@@ -4515,6 +4530,8 @@ export default function App() {
           ) : (
             <>
               <WorkspaceGrid
+                additionalCharts={additionalCharts}
+                setAdditionalCharts={setAdditionalCharts}
                 theme={theme}
                 layoutMode={layoutMode}
                 gridMode={gridMode}

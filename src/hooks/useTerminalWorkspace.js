@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadSetting, saveSetting } from "../utils/storage";
+import { normalizeAdditionalCharts } from "../utils/chartPanels.js";
 
 const defaultLeftSectionsOpen = {
   account: true,
@@ -34,6 +35,7 @@ export function useTerminalWorkspace({
   const [gridMode, setGridMode] = useState(() =>
     requestedPreset?.gridMode || loadSetting("sb_grid_mode", "2")
   );
+  const [additionalCharts, setAdditionalCharts] = useState(() => normalizeAdditionalCharts(loadSetting("sb_additional_charts", null)));
   const [syncCharts, setSyncCharts] = useState(() =>
     requestedPreset?.syncCharts ?? (useFocusedDefault ? false : loadSetting("sb_sync_charts", false))
   );
@@ -76,6 +78,7 @@ export function useTerminalWorkspace({
     if (data.activeWorkspace) setActiveWorkspace(data.activeWorkspace);
     if (data.layoutMode) setLayoutMode(data.layoutMode);
     if (data.gridMode) setGridMode(data.gridMode);
+    if (data.additionalCharts) setAdditionalCharts(normalizeAdditionalCharts(data.additionalCharts));
     if (typeof data.syncCharts === "boolean") setSyncCharts(data.syncCharts);
     if (data.rightTab) setRightTab(data.rightTab);
     if (data.leftSectionsOpen) {
@@ -90,6 +93,7 @@ export function useTerminalWorkspace({
     setActiveWorkspace("charts");
     setLayoutMode("1");
     setGridMode("2");
+    setAdditionalCharts(normalizeAdditionalCharts(null));
     setActivePreset("intelligence");
     setSyncCharts(false);
     setRightTab("intel");
@@ -113,6 +117,7 @@ export function useTerminalWorkspace({
     saveSetting(focusedTerminalMigrationKey, true);
     saveSetting("sb_layout_mode", layoutMode);
     saveSetting("sb_grid_mode", gridMode);
+    saveSetting("sb_additional_charts", additionalCharts);
     saveSetting("sb_active_preset", activePreset);
     saveSetting("sb_sync_charts", syncCharts);
     saveSetting("sb_active_workspace", activeWorkspace);
@@ -122,6 +127,7 @@ export function useTerminalWorkspace({
     activePreset,
     activeWorkspace,
     gridMode,
+    additionalCharts,
     layoutMode,
     leftSectionsOpen,
     rightTab,
@@ -135,6 +141,8 @@ export function useTerminalWorkspace({
     setLayoutMode,
     gridMode,
     setGridMode,
+    additionalCharts,
+    setAdditionalCharts,
     syncCharts,
     setSyncCharts,
     leftSectionsOpen,

@@ -6,6 +6,7 @@ import { CandlestickSeries, HistogramSeries, createChart } from "lightweight-cha
 import PremiumWorkspace from "/src/components/premium/PremiumWorkspace.jsx";
 import { premiumWorkspaceViews } from "/src/config/premiumNavigation.js";
 import { canUseWorkspace } from "/src/services/entitlementPolicy.js";
+import { replaySnapshot } from "/src/utils/replayLedger.js";
 
 const darkTheme = {
   mode: "dark",
@@ -243,7 +244,7 @@ function Harness() {
         exportJournalCsv={() => setOrderMessage("Journal CSV exported")}
         journalEntries={fixtureJournalEntries}
         replayTrades={[]}
-        replayStats={{}}
+        replayStats={replaySnapshot({ candles: candles.map(row => ({ ...row, time: Date.parse(row.time) / 1000 })), index: replayIndex, symbol: selectedStock })}
         replayPlaying={replayPlaying}
         setReplayPlaying={setReplayPlaying}
         replaySpeed={replaySpeed}
@@ -251,6 +252,8 @@ function Harness() {
         replayIndex={replayIndex}
         setReplayIndex={setReplayIndex}
         replayDataLength={candles.length}
+        replayData={candles.map(row => ({ ...row, time: Date.parse(row.time) / 1000 }))}
+        replaySession={{ symbol: selectedStock, interval: timeframe, fingerprint: JSON.stringify([selectedStock, timeframe, candles]) }}
         replayBookmarks={replayBookmarks}
         setReplayBookmarks={setReplayBookmarks}
         replayNotes={replayNotes}

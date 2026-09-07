@@ -1,10 +1,11 @@
 function formatMoney(value) {
-  const numericValue = Number(value || 0);
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "Unavailable";
+  const numericValue = Number(value);
   return `$${numericValue.toFixed(2)}`;
 }
 
 function formatPercent(value) {
-  return `${Number(value || 0).toFixed(1)}%`;
+  return value === null || value === undefined ? "Unavailable" : `${Number(value).toFixed(1)}%`;
 }
 
 function buildEquityPath(values, width = 220, height = 58) {
@@ -45,22 +46,17 @@ export default function ReplayPanel({
   openReplayJournal,
 }) {
   const closedTrades = replayTrades.filter((trade) => trade.type === "SELL");
-  const openBuys = replayTrades.filter((trade) => trade.type === "BUY" && !trade.closed);
   const lastClosedTrade = closedTrades[closedTrades.length - 1];
-  const currentPrice = Number(replayCandle?.close || 0);
-  const openExposure = openBuys.reduce(
-    (total, trade) => total + Number(trade.qty || 0) * Number(trade.price || 0),
-    0
-  );
-  const openQty = openBuys.reduce((total, trade) => total + Number(trade.qty || 0), 0);
-  const unrealizedPnl = openBuys.reduce(
-    (total, trade) => total + (currentPrice - Number(trade.price || 0)) * Number(trade.qty || 0),
-    0
-  );
+  const currentPrice = replayCandle?.close ?? null;
+  const ready = currentPrice !== null && mainReplayData.length > 0;
+  const openPositions = replayStats.positions || [];
+  const openExposure = currentPrice === null ? null : openPositions.reduce((total, position) => total + position.costBasis, 0);
+  const openQty = ready ? openPositions.reduce((total, position) => total + position.qty, 0) : null;
+  const unrealizedPnl = currentPrice === null ? null : replayStats.unrealizedPnl;
   const completedProgress = mainReplayData.length
     ? Math.min(100, Math.max(0, (replayIndex / Math.max(mainReplayData.length - 1, 1)) * 100))
     : 0;
-  const equityValues = replayEquity.length ? replayEquity.map((value) => Number(value || 0)) : [100000];
+  const equityValues = ready ? replayEquity.filter(value => typeof value === "number" && Number.isFinite(value)) : [];
   const equityPath = buildEquityPath(equityValues);
   const isPositive = Number(replayStats.netPnL || 0) >= 0;
 
@@ -114,10 +110,10 @@ export default function ReplayPanel({
 
       <div style={{ ...cardStyle, padding: "9px", display: "grid", gap: "8px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px" }}>
-          <button onClick={() => setReplayPlaying((prev) => !prev)} style={buttonStyle(replayPlaying)}>
+          <button disabled={!ready} onClick={() => setReplayPlaying((prev) => !prev)} style={buttonStyle(replayPlaying)}>
             {replayPlaying ? "Pause" : "Play"}
           </button>
-          <button onClick={stepReplay} style={buttonStyle(false)}>
+          <button disabled={!ready} onClick={stepReplay} style={buttonStyle(false)}>
             Step
           </button>
           <button onClick={resetReplay} style={buttonStyle(false)}>
@@ -155,10 +151,10 @@ export default function ReplayPanel({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "6px" }}>
         {[
-          ["Equity", formatMoney(replayStats.equity), theme.text],
-          ["Net P&L", formatMoney(replayStats.netPnL), isPositive ? theme.green : theme.red],
-          ["Win Rate", formatPercent(replayStats.winRate), theme.blue],
-          ["Trades", replayStats.totalTrades, theme.text],
+          ["Equity", formatMoney(ready ? replayStats.equity : null), theme.text],
+          ["Net P&L", formatMoney(ready ? replayStats.netPnL : null), !ready ? theme.muted : isPositive ? theme.green : theme.red],
+          ["Win Rate", formatPercent(ready ? replayStats.winRate : null), theme.blue],
+          ["Trades", ready ? replayStats.totalTrades : "Unavailable", theme.text],
         ].map(([label, value, color]) => (
           <div key={label} style={{ ...cardStyle, padding: "8px", minWidth: 0 }}>
             <div style={labelStyle}>{label}</div>
@@ -172,11 +168,11 @@ export default function ReplayPanel({
           <div>
             <div style={{ fontSize: "12px", fontWeight: 950 }}>Equity Curve</div>
             <div style={{ color: theme.muted, fontSize: "10px" }}>
-              {equityValues.length} points from replay fills
+              {equityValues.length} historical equity marks
             </div>
           </div>
           <div style={{ color: isPositive ? theme.green : theme.red, fontSize: "11px", fontWeight: 950 }}>
-            {formatMoney(replayStats.netPnL)}
+            {formatMoney(ready ? replayStats.netPnL : null)}
           </div>
         </div>
 
@@ -185,7 +181,7 @@ export default function ReplayPanel({
           <path d={equityPath} fill="none" stroke={isPositive ? theme.green : theme.red} strokeWidth="2.4" strokeLinecap="round" />
           {equityValues.length <= 1 && (
             <text x="110" y="30" textAnchor="middle" fill={theme.muted} fontSize="9" fontWeight="800">
-              Place replay trades to build curve
+              {ready ? "No additional equity marks" : "Historical data unavailable"}
             </text>
           )}
         </svg>
@@ -193,12 +189,14 @@ export default function ReplayPanel({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
         <button
+          disabled={!ready}
           onClick={replayBuy}
           style={{ ...buttonStyle(true), background: theme.green, border: "none" }}
         >
           Paper Buy
         </button>
         <button
+          disabled={!ready || !openQty}
           onClick={replaySell}
           style={{ ...buttonStyle(true), background: theme.red, border: "none" }}
         >
@@ -210,13 +208,13 @@ export default function ReplayPanel({
         <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
           <div style={{ fontSize: "12px", fontWeight: 950 }}>Position Context</div>
           <div style={{ color: openQty ? theme.green : theme.muted, fontSize: "10px", fontWeight: 950 }}>
-            {openQty ? "OPEN" : "FLAT"}
+            {!ready ? "UNAVAILABLE" : openQty ? "OPEN" : "FLAT"}
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "6px", fontSize: "10px" }}>
           <div>
             <div style={labelStyle}>Qty</div>
-            <div style={metricStyle}>{openQty}</div>
+            <div style={metricStyle}>{openQty ?? "Unavailable"}</div>
           </div>
           <div>
             <div style={labelStyle}>Exposure</div>
@@ -230,7 +228,7 @@ export default function ReplayPanel({
           </div>
         </div>
         <div style={{ color: theme.muted, fontSize: "10px", lineHeight: 1.45 }}>
-          Avg win {formatMoney(replayStats.avgWin)} / avg loss {formatMoney(Math.abs(Number(replayStats.avgLoss || 0)))}.
+          Avg win {formatMoney(replayStats.avgWin)} / avg loss {formatMoney(replayStats.avgLoss == null ? null : Math.abs(replayStats.avgLoss))}.
           Last close {lastClosedTrade ? `${lastClosedTrade.symbol} ${formatMoney(lastClosedTrade.pnl)}` : "none yet"}.
         </div>
       </div>

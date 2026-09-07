@@ -1,170 +1,49 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { createVisibilityAwarePoller } from "../utils/visibilityScheduler";
+import { replaySnapshot } from "../utils/replayLedger.js";
+import { createReplayState, replayReducer, serializeReplayState } from "../utils/replayState.js";
 
-export function useReplayEngine({
-  initialReplayMode = false,
-  quantity,
-}) {
+export function useReplayEngine({ initialReplayMode = false, quantity }) {
   const [replayMode, setReplayMode] = useState(initialReplayMode);
-  const [replayPlaying, setReplayPlaying] = useState(false);
-  const [replaySpeed, setReplaySpeed] = useState(1);
-  const [replayIndex, setReplayIndex] = useState(80);
-  const [mainReplayData, setMainReplayData] = useState([]);
-  const [replayTrades, setReplayTrades] = useState([]);
-  const [replayEquity, setReplayEquity] = useState([100000]);
-
-  const replayCandle = mainReplayData[replayIndex] || null;
-
-  const replayStats = useMemo(() => {
-    const closedTrades = replayTrades.filter((trade) => trade.type === "SELL");
-    const winners = closedTrades.filter((trade) => Number(trade.pnl) > 0);
-    const losers = closedTrades.filter((trade) => Number(trade.pnl) < 0);
-    const netPnL = closedTrades.reduce((total, trade) => total + Number(trade.pnl || 0), 0);
-    const winRate = closedTrades.length
-      ? ((winners.length / closedTrades.length) * 100).toFixed(1)
-      : "0.0";
-
-    const avgWin = winners.length
-      ? winners.reduce((total, trade) => total + Number(trade.pnl), 0) / winners.length
-      : 0;
-
-    const avgLoss = losers.length
-      ? losers.reduce((total, trade) => total + Number(trade.pnl), 0) / losers.length
-      : 0;
-
-    return {
-      totalTrades: closedTrades.length,
-      winners: winners.length,
-      losers: losers.length,
-      netPnL,
-      winRate,
-      avgWin,
-      avgLoss,
-      equity: replayEquity[replayEquity.length - 1] || 100000,
-    };
-  }, [replayTrades, replayEquity]);
-
-  const stepReplay = useCallback(() => {
-    setReplayIndex((prev) => {
-      if (!mainReplayData.length) return prev;
-      return Math.min(prev + 1, mainReplayData.length - 1);
-    });
-  }, [mainReplayData.length]);
-
-  const replayBuy = useCallback((symbol) => {
-    const candle = mainReplayData[replayIndex];
-    if (!candle) return;
-
-    const price = Number(candle.close);
-    const qty = Number(quantity) || 1;
-
-    setReplayTrades((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        type: "BUY",
-        symbol,
-        qty,
-        price,
-        time: candle.time,
-      },
-    ]);
-  }, [mainReplayData, quantity, replayIndex]);
-
-  const replaySell = useCallback((symbol) => {
-    const candle = mainReplayData[replayIndex];
-    if (!candle) return;
-
-    const price = Number(candle.close);
-    const requestedQty = Number(quantity) || 1;
-
-    const lastOpenBuy = [...replayTrades]
-      .reverse()
-      .find((trade) => trade.type === "BUY" && trade.symbol === symbol && !trade.closed);
-
-    if (!lastOpenBuy) return;
-
-    const sellQty = Math.min(requestedQty, Number(lastOpenBuy.qty || 0));
-
-    if (sellQty <= 0) return;
-
-    const remainingBuyQty = Number(lastOpenBuy.qty || 0) - sellQty;
-    const pnl = (price - lastOpenBuy.price) * sellQty;
-    const nextEquity = (replayEquity[replayEquity.length - 1] || 100000) + pnl;
-
-    setReplayTrades((prev) =>
-      prev
-        .map((trade) =>
-          trade.id === lastOpenBuy.id
-            ? {
-                ...trade,
-                qty: remainingBuyQty,
-                closed: remainingBuyQty <= 0,
-              }
-            : trade
-        )
-        .concat({
-          id: Date.now(),
-          type: "SELL",
-          symbol,
-          qty: sellQty,
-          price,
-          pnl,
-          matchedBuyId: lastOpenBuy.id,
-          time: candle.time,
-        })
-    );
-
-    setReplayEquity((prev) => [...prev, nextEquity]);
-  }, [mainReplayData, quantity, replayEquity, replayIndex, replayTrades]);
-
-  const resetReplay = useCallback(() => {
-    setReplayPlaying(false);
-    setReplayIndex(80);
-    setReplayTrades([]);
-    setReplayEquity([100000]);
-  }, []);
+  const [state, dispatch] = useReducer(replayReducer, undefined, createReplayState);
+  const snapshot = useMemo(() => replaySnapshot({ events: state.events, candles: state.candles,
+    index: state.index, symbol: state.symbol }), [state.events, state.candles, state.index, state.symbol]);
+  const replaySession = useMemo(() => serializeReplayState(state), [state]);
+  const replayStats = useMemo(() => ({ ...snapshot, source: state.metadata?.source || null,
+    dataQuality: state.metadata?.quality || "unavailable", message: state.message }), [snapshot, state.metadata, state.message]);
+  const setReplayContext = useCallback(context => dispatch({ type: "CONTEXT", ...context }), []);
+  const setMainReplayData = useCallback(dataset => dispatch({ type: "DATASET", dataset }), []);
+  const setReplayIndex = useCallback(index => dispatch({ type: "SEEK", index }), []);
+  const setReplayPlaying = useCallback(value => dispatch({ type: "PLAY", value }), []);
+  const setReplaySpeed = useCallback(value => dispatch({ type: "SPEED", value }), []);
+  const restoreReplaySession = useCallback(session => dispatch({ type: "RESTORE", session }), []);
+  const stepReplay = useCallback(() => dispatch({ type: "SEEK", index: current => current + 1, step: true }), []);
+  const resetReplay = useCallback(() => dispatch({ type: "RESET" }), []);
+  const fill = useCallback((side, symbol) => dispatch({ type: "FILL", side, symbol, quantity, id: crypto.randomUUID() }), [quantity]);
+  const replayBuy = useCallback(symbol => fill("BUY", symbol), [fill]);
+  const replaySell = useCallback(symbol => fill("SELL", symbol), [fill]);
 
   useEffect(() => {
-    if (!replayMode || !replayPlaying) return;
-
+    if (!state.playing) return undefined;
+    let previous = performance.now();
+    let remainder = 0;
     return createVisibilityAwarePoller(() => {
-      setReplayIndex((prev) => {
-        if (!mainReplayData.length) return prev;
-
-        if (prev >= mainReplayData.length - 1) {
-          setReplayPlaying(false);
-          return prev;
-        }
-
-        return prev + 1;
-      });
-    }, Math.max(120, 900 / replaySpeed), {
-      immediate: false,
-      resumeImmediately: false,
-    });
-  }, [mainReplayData.length, replayMode, replayPlaying, replaySpeed]);
+      const now = performance.now();
+      const elapsed = now - previous;
+      previous = now;
+      // Hidden-tab suspension is not elapsed simulation time.
+      remainder += (elapsed > 1000 ? 50 : elapsed) * state.speed / 900;
+      const steps = Math.floor(remainder);
+      remainder -= steps;
+      if (steps) dispatch({ type: "SEEK", index: current => current + steps, step: true });
+    }, 50, { immediate: false, resumeImmediately: false });
+  }, [state.playing, state.speed]);
 
   return {
-    mainReplayData,
-    replayCandle,
-    replayEquity,
-    replayIndex,
-    replayMode,
-    replayPlaying,
-    replaySell,
-    replaySpeed,
-    replayStats,
-    replayTrades,
-    replayBuy,
-    resetReplay,
-    setMainReplayData,
-    setReplayEquity,
-    setReplayIndex,
-    setReplayMode,
-    setReplayPlaying,
-    setReplaySpeed,
-    setReplayTrades,
-    stepReplay,
+    mainReplayData: state.candles, replayCandle: snapshot.candle, replayEquity: snapshot.equitySeries,
+    replayIndex: state.index, replayMode, replayPlaying: state.playing, replaySpeed: state.speed,
+    replayStats, replayTrades: snapshot.fills, replaySession,
+    replayBuy, replaySell, resetReplay, setMainReplayData, setReplayContext, restoreReplaySession,
+    setReplayIndex, setReplayMode, setReplayPlaying, setReplaySpeed, stepReplay,
   };
 }

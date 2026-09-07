@@ -33,6 +33,20 @@ function guardRuntime(page) {
   return failures;
 }
 
+async function guardReviewNetwork(page) {
+  const attempts = [];
+  await page.route("**/api/**", async route => {
+    const request = route.request();
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method())
+      || /\/(submit|execute|cancel|flatten|close)(?:[/?]|$)/i.test(new URL(request.url()).pathname)) {
+      attempts.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      return route.fulfill({ status: 409, json: { error: "Review-only test blocked a mutation" } });
+    }
+    return route.continue();
+  });
+  return attempts;
+}
+
 test.beforeAll(() => {
   fs.mkdirSync(artifactDir, { recursive: true });
 });
@@ -96,17 +110,23 @@ test("scanner, news, watchlist, and order views keep detail state aligned", asyn
 });
 
 test("public trading shortcut remains review-only", async ({ page }) => {
+  const attempts = await guardReviewNetwork(page);
   await page.goto(fixtureUrl("scanner"));
   await page.getByRole("button", { name: "Review Order", exact: true }).click();
   await expect(page.getByTestId("order-message")).toContainText("review prepared");
   await expect(page.getByTestId("order-message")).toContainText("full order ticket");
+  expect(attempts).toEqual([]);
 });
 
 test("orders page shows review-only action feedback", async ({ page }) => {
+  const attempts = await guardReviewNetwork(page);
   await page.goto(fixtureUrl("orders"));
   await page.getByRole("button", { name: "Buy", exact: true }).click();
   await expect(page.getByTestId("order-review-status")).toContainText("BUY review prepared");
   await expect(page.getByTestId("order-review-status")).toContainText("review-only");
+  await page.getByRole("button", { name: "Sell", exact: true }).click();
+  await expect(page.getByTestId("order-review-status")).toContainText("SELL review prepared");
+  expect(attempts).toEqual([]);
 });
 
 test("settings reports the actual cloud workspace state", async ({ page }) => {
@@ -305,6 +325,7 @@ test("scanner filters, presets, and table keyboard selection remain functional",
 
 test("alert lifecycle and review-only order safety actions are operational", async ({ page }) => {
   const failures = guardRuntime(page);
+  const attempts = await guardReviewNetwork(page);
 
   await page.goto(fixtureUrl("alerts"));
   await page.getByLabel("Alert trigger price").fill("225");
@@ -334,6 +355,7 @@ test("alert lifecycle and review-only order safety actions are operational", asy
     await expect(page.getByTestId("order-review-status")).toContainText(/review-?only/i);
   }
 
+  expect(attempts).toEqual([]);
   expect(failures).toEqual([]);
 });
 

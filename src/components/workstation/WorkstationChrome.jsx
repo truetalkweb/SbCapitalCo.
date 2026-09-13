@@ -7,14 +7,14 @@ export function Brand() {
   return <div className="ws-brand"><span className="ws-logo-window"><img src="/sb-terminal-logo.png" alt="SB logo" /></span><span><strong>TERMINAL</strong><small>TRADE&nbsp; ANALYZE&nbsp; EXECUTE&nbsp; EVOLVE</small></span></div>;
 }
 
-export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp }) {
+export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions = {}, setMarketRegion }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [profile, setProfile] = useState(false);
   const profileControl = useDismissPopover(profile, setProfile);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
-  const matches = quotes.filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7);
+  const matches = [...new Map(quotes.map(row => [row.symbol, row])).values()].filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7);
   const pick = symbol => { if (/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbol)) { onSymbolCommit?.(symbol, null, "global-search"); setQuery(""); setFocused(false); } };
   return <header className="ws-header terminal-top-bar" data-selected-symbol={selectedSymbolContext?.symbol || selectedSymbol} data-selection-source={selectedSymbolContext?.selectionSource || "terminal"}>
     <Brand />
@@ -28,7 +28,13 @@ export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSym
     })}</div>
     <time className="ws-clock" dateTime={now.toISOString()}>{now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}<br />{now.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/New_York" })} ET</time>
     <button className="ws-icon" aria-label="Notifications and alerts" onClick={() => setActiveWorkspace?.("alerts")}><Bell size={20} /></button>
-    <div className="ws-profile" ref={profileControl}><button aria-label="Account menu" aria-expanded={profile} onClick={() => setProfile(value => !value)}><span>SB</span><ChevronDown size={13} /></button>{profile && <div className="ws-profile-menu"><small>SB TERMINAL</small><button onClick={() => { setActiveWorkspace?.("settings"); setProfile(false); }}><Settings size={15} />Settings</button><button onClick={() => { onOpenHelp?.(); setProfile(false); }}><CircleHelp size={15} />Help & shortcuts</button>{handleLogout && <button onClick={handleLogout}><LogOut size={15} />Sign out</button>}</div>}</div>
+    <div className="ws-profile" ref={profileControl}><button aria-label="Account menu" aria-expanded={profile} onClick={() => setProfile(value => !value)}><span>SB</span><ChevronDown size={13} /></button>{profile && <div className="ws-profile-menu"><small>SB TERMINAL</small>
+      {saveWorkspaceToCloud && <button onClick={() => { saveWorkspaceToCloud(); setProfile(false); }}>Save workspace</button>}
+      {loadWorkspaceFromCloud && <button onClick={() => { loadWorkspaceFromCloud(); setProfile(false); }}>Load workspace</button>}
+      {setSyncCharts && <button aria-pressed={syncCharts} onClick={() => setSyncCharts(!syncCharts)}>Sync charts: {syncCharts ? "On" : "Off"}</button>}
+      {setAdvancedMode && <button aria-pressed={advancedMode} onClick={() => setAdvancedMode(!advancedMode)}>Advanced controls: {advancedMode ? "On" : "Off"}</button>}
+      {setMarketRegion && <label className="ws-menu-field">Market region<select aria-label="Market region" value={marketRegion} onChange={event => setMarketRegion(event.target.value)}>{Object.entries(marketRegions).map(([id, region]) => <option key={id} value={id}>{region.label || region.name || id}</option>)}</select></label>}
+      <button onClick={() => { setActiveWorkspace?.("settings"); setProfile(false); }}><Settings size={15} />Settings</button><button onClick={() => { onOpenHelp?.(); setProfile(false); }}><CircleHelp size={15} />Help & shortcuts</button>{handleLogout && <button onClick={handleLogout}><LogOut size={15} />Sign out</button>}</div>}</div>
   </header>;
 }
 
@@ -39,7 +45,7 @@ const navigation = [
   ["performance", "Performance", ChartNoAxesCombined], ["risk", "Risk Manager", ShieldCheck], ["tools", "Tools", Wrench], ["settings", "Settings", Settings],
 ];
 export function WorkstationSidebar({ activeWorkspace, setActiveWorkspace, expanded = true }) {
-  return <aside className={`ws-sidebar ${expanded ? "" : "ws-sidebar-collapsed"}`}><nav aria-label="Terminal workspaces">{navigation.map(([id, label, Icon]) => <button key={id} aria-label={label} title={id === "options" ? "Options data is not connected" : label} disabled={id === "options"} aria-current={id === activeWorkspace || id === "chart-analysis" && activeWorkspace === "charts" ? "page" : undefined} onClick={() => setActiveWorkspace(id === "tools" ? "replay" : id)}><Icon size={19} /><span>{label}</span></button>)}</nav><div className="ws-sidebar-quote">“Discipline compounds<br />faster than luck.”<small>SB TERMINAL</small></div></aside>;
+  return <aside className={`ws-sidebar ${expanded ? "" : "ws-sidebar-collapsed"}`}><nav aria-label="Terminal workspaces">{navigation.map(([id, label, Icon]) => <button key={id} aria-label={label} title={id === "options" ? "Options data is not connected" : label} disabled={id === "options"} aria-current={id === activeWorkspace || (id === "chart-analysis" && activeWorkspace === "charts" || id === "tools" && activeWorkspace === "replay") ? "page" : undefined} onClick={() => setActiveWorkspace(id === "tools" ? "replay" : id)}><Icon size={19} /><span>{label}</span></button>)}</nav><div className="ws-sidebar-quote">“Discipline compounds<br />faster than luck.”<small>SB TERMINAL</small></div></aside>;
 }
 
 export function WorkstationFooter() {

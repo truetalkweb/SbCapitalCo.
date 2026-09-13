@@ -1,4 +1,6 @@
 import "./workspaceControls.css";
+import "../workstation/workspacePages.css";
+import { workstationTheme, workstationPages } from "../workstation/workstationTheme";
 import { useWatchlistCollections } from "../../hooks/useWatchlistCollections.js";
 import { Star } from "lucide-react";
 import { buildPositionRows } from "../../utils/portfolioAccounting.js";
@@ -57,7 +59,7 @@ import ScannerWorkspacePage from "./pages/ScannerWorkspacePage";
 import SettingsWorkspacePage from "./pages/SettingsWorkspacePage";
 import WatchlistWorkspacePage from "./pages/WatchlistWorkspacePage";
 
-export default function PremiumWorkspace({
+function PremiumWorkspaceContent({
   activeWorkspace,
   setActiveWorkspace,
   viewportWidth = 1440,
@@ -458,9 +460,10 @@ export default function PremiumWorkspace({
     minHeight: 0,
     height: "100%",
     overflow: "auto",
-    padding: compactMode ? "8px" : "12px",
+    padding: compactMode ? "0 2px 10px 0" : "0 4px 14px 0",
     color: theme.text,
-    fontFamily: terminalSansFont,
+    fontFamily: 'Inter, Roboto, Arial, sans-serif',
+    fontSize: 13,
   };
   if (activeWorkspace !== "settings" && !canUseWorkspace(entitlements, activeWorkspace)) {
     return (
@@ -477,8 +480,9 @@ export default function PremiumWorkspace({
 
   const mainTwoCol = {
     display: "grid",
-    gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) 360px",
-    gap: 10,
+    gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) clamp(280px, 20.3vw, 355px)",
+    gap: 12,
+    alignItems: "start",
     minHeight: 0,
   };
   const bottomDockTabs = [
@@ -517,11 +521,11 @@ export default function PremiumWorkspace({
           keyField: "symbol",
           columns: [
             { key: "symbol", label: "Symbol", width: "1fr", mono: true, strong: true },
-            { key: "side", label: "Side", width: "80px", color: () => theme.green, mono: true },
+            { key: "side", label: "Side", width: "80px", color: row => row.side === "SHORT" ? theme.red : theme.green, mono: true },
             { key: "qty", label: "Qty", width: "80px", align: "right", mono: true },
-            { key: "avg", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => row.avg.toFixed(2) },
-            { key: "last", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => row.last.toFixed(2) },
-            { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => (row.last - row.avg) * row.qty >= 0 ? theme.green : theme.red, render: (row) => money((row.last - row.avg) * row.qty) },
+            { key: "avg", label: "Avg Price", width: "110px", align: "right", mono: true, render: (row) => hasNumericValue(row.avg) ? row.avg.toFixed(2) : "Unavailable" },
+            { key: "last", label: "Last Price", width: "110px", align: "right", mono: true, render: (row) => hasNumericValue(row.last) ? row.last.toFixed(2) : "Unavailable" },
+            { key: "pnl", label: "P&L", width: "110px", align: "right", mono: true, color: (row) => row.unrealizedPnl === null ? theme.muted : row.unrealizedPnl >= 0 ? theme.green : theme.red, render: (row) => row.unrealizedPnl === null ? "Unavailable" : money(row.unrealizedPnl) },
           ],
         };
   const bottomDock = (
@@ -544,7 +548,7 @@ export default function PremiumWorkspace({
   const quickOrder = (
     <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0, overflow: "hidden" }}>
       <div style={{ padding: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 62px 76px 82px", gap: 7, minWidth: 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7, minWidth: 0 }}>
           {["Symbol", "Shares", "Order Type", defaultOrderType === "LIMIT" ? "Limit Price" : "Review Price"].map((label, index) => (
             <label key={label} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, textTransform: "uppercase", minWidth: 0 }}>
               {label}
@@ -1011,4 +1015,14 @@ export default function PremiumWorkspace({
       />
     </div>
   );
+}
+
+export default function PremiumWorkspace(props) {
+  if (props.activeWorkspace === "dashboard") return <PremiumWorkspaceContent {...props} />;
+  const theme = workstationTheme(props.theme);
+  const [title, description] = workstationPages[props.activeWorkspace] || ["Workspace", "SB Terminal"];
+  return <div className="ws-workspace" data-workspace={props.activeWorkspace} style={{ "--ws-bg": theme.bg, "--ws-panel": theme.panel, "--ws-alt": theme.panel2, "--ws-border": theme.border, "--ws-text": theme.text, "--ws-muted": theme.muted, "--ws-green": theme.green, "--ws-red": theme.red }}>
+    <header className="ws-workspace-heading"><div><h1>{title}</h1><span>{description}</span></div><span className="ws-workspace-symbol">{props.selectedStock}</span></header>
+    <div className="ws-workspace-content"><PremiumWorkspaceContent {...props} theme={theme} /></div>
+  </div>;
 }

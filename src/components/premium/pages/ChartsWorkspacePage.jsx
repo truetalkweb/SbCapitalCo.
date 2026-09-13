@@ -20,8 +20,7 @@ export default function ChartsWorkspacePage({
   setLayoutMode,
   setOrderMessage,
   stocks,
-  theme,
-  viewportHeight
+  theme
 }) {
     const enabledIndicatorRows = CHART_INDICATOR_OPTIONS
       .filter((indicator) => Boolean(chartIndicators?.[indicator.id]))
@@ -33,15 +32,6 @@ export default function ChartsWorkspacePage({
         signal: "Not classified",
       }));
     const activeChartLayout = layoutMode === "1" ? "1" : gridMode === "4" ? "4" : gridMode === "3" ? "3" : "2";
-    const chartStageHeight = isNarrowWorkspace
-      ? "auto"
-      : Math.max(
-          activeChartLayout === "1" ? 520 : 470,
-          Math.min(
-            activeChartLayout === "1" ? 680 : 620,
-            viewportHeight - (activeChartLayout === "1" ? 300 : 190)
-          )
-        );
     const showChartIntelCards = activeChartLayout === "1" && !isNarrowWorkspace;
     const setDeskLayout = (nextLayout) => {
       setLayoutMode?.(nextLayout === "1" ? "1" : "2");
@@ -87,7 +77,7 @@ export default function ChartsWorkspacePage({
     ];
 
     return (
-      <div style={{ ...page, overflow: isNarrowWorkspace ? "auto" : "hidden" }}>
+      <div className="terminal-page ws-charts-page" style={{ ...page, overflow: isNarrowWorkspace ? "auto" : "hidden" }}>
         <div
           style={{
             height: isNarrowWorkspace ? "auto" : "100%",
@@ -97,16 +87,16 @@ export default function ChartsWorkspacePage({
             gridTemplateRows: isNarrowWorkspace
               ? "auto"
               : showChartIntelCards
-                ? `minmax(0, ${chartStageHeight}px) minmax(108px, 118px)`
-                : `minmax(0, ${chartStageHeight}px)`,
-            gap: 10,
+                ? "minmax(300px, 1fr) 112px"
+                : "minmax(300px, 1fr)",
+            gap: 12,
             overflow: "hidden",
           }}
         >
           <PremiumCard
             theme={theme}
             style={{
-              minHeight: 0,
+              minHeight: isNarrowWorkspace ? 500 : 0,
               display: "grid",
               gridTemplateRows: "auto minmax(0, 1fr)",
               gridColumn: isNarrowWorkspace ? "auto" : "1 / 2",
@@ -126,19 +116,19 @@ export default function ChartsWorkspacePage({
               }}
             >
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: theme.muted, fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Charts</div>
+                <div style={{ color: theme.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>Charts</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginTop: 3 }}>
                   <strong style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: 18 }}>{selected.symbol}</strong>
-                  <span style={{ color: hasNumericValue(selected.price) ? theme.text : theme.muted, fontFamily: terminalMonoFont, fontWeight: 900 }}>
+                  <span style={{ color: hasNumericValue(selected.price) ? theme.text : theme.muted, fontFamily: terminalMonoFont, fontWeight: 600 }}>
                     {hasNumericValue(selected.price) ? money(selected.price) : "Price pending"}
                   </span>
-                  <span style={{ color: nullableMoveOf(selected) === null ? theme.muted : toneColor(theme, nullableMoveOf(selected)), fontFamily: terminalMonoFont, fontWeight: 900 }}>
+                  <span style={{ color: nullableMoveOf(selected) === null ? theme.muted : toneColor(theme, nullableMoveOf(selected)), fontFamily: terminalMonoFont, fontWeight: 600 }}>
                     {nullableMoveOf(selected) === null ? "Move pending" : pct(nullableMoveOf(selected))}
                   </span>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <span style={{ color: theme.muted, fontSize: 11, fontWeight: 850 }}>Layout</span>
+                <span style={{ color: theme.muted, fontSize: 11, fontWeight: 600 }}>Layout</span>
                 {["1", "2", "3", "4"].map((item) => (
                   <ActionButton
                     key={item}
@@ -164,12 +154,12 @@ export default function ChartsWorkspacePage({
           <div
             style={{
               gridColumn: isNarrowWorkspace ? "auto" : "2 / 3",
-              gridRow: isNarrowWorkspace ? "auto" : "1 / 3",
+              gridRow: isNarrowWorkspace ? "auto" : showChartIntelCards ? "1 / 3" : "1 / 2",
               minHeight: 0,
               display: "grid",
               gap: 10,
               alignContent: "start",
-              overflow: "hidden",
+              overflow: "auto",
             }}
           >
             <DetailRail theme={theme} selected={selected} actions={selectedActions} compact detailStats={chartStats}>
@@ -217,9 +207,9 @@ export default function ChartsWorkspacePage({
                 return (
                   <PremiumCard key={card.title} theme={theme} style={{ overflow: "hidden" }}>
                     <div style={{ padding: 12, display: "grid", gap: 6, minHeight: 0 }}>
-                      <div style={{ color: theme.text, fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>{card.title}</div>
+                      <div style={{ color: theme.text, fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>{card.title}</div>
                       <div style={{ color: theme.muted, fontSize: 11, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{card.body}</div>
-                      <div style={{ marginTop: "auto", color: tone, fontFamily: terminalMonoFont, fontSize: 10, fontWeight: 900 }}>{card.footer}</div>
+                      <div style={{ marginTop: "auto", color: tone, fontFamily: terminalMonoFont, fontSize: 10, fontWeight: 600 }}>{card.footer}</div>
                     </div>
                   </PremiumCard>
                 );

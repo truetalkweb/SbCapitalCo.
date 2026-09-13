@@ -13,7 +13,7 @@ export default function PerformanceWorkspacePage({ exportDailyReport, exportTrad
     map.set(row.symbol, current); return map;
   }, new Map()).values()];
   const display = value => value === null ? "Unavailable" : value.toFixed(2);
-  return <div className="terminal-page" style={page}>
+  return <div className="terminal-page ws-performance-page" style={page}>
     <SectionTitle theme={theme} title="Performance" subtitle="Completed journal trades · full history · fees included when recorded" />
     <label style={{ color: theme.muted }}>Reporting currency <select aria-label="Performance currency" value={currency} onChange={event => setCurrency(event.target.value)}>{currencies.map(value => <option key={value}>{value}</option>)}</select></label>
     <p style={{ color: theme.muted, fontSize: 12 }}>{stats.total} completed trades in {currency}. {stats.excluded} notes, open trades, incomplete records, or other currencies excluded. No currency conversion is assumed.</p>

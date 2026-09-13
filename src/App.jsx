@@ -1,3 +1,4 @@
+import { workstationTheme } from "./components/workstation/workstationTheme";
 import { WorkstationSidebar, WorkstationFooter } from "./components/workstation/WorkstationChrome";
 import {
   Suspense,
@@ -2343,7 +2344,7 @@ export default function App() {
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
-  const sidebarPanelSize = usePremiumShell && activeWorkspace === "dashboard" ? (viewportWidth <= 1024 ? 56 : 190) / viewportWidth * 100 : isPhoneTerminal
+  const sidebarPanelSize = usePremiumShell ? (viewportWidth <= 1024 ? 56 : 190) / viewportWidth * 100 : isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
       ? usePremiumShell ? 11 : 3
@@ -2527,7 +2528,7 @@ export default function App() {
     return (
       <ChartPanel
         {...chartProps}
-        theme={theme}
+        theme={chartProps.workstation ? workstationTheme(theme) : theme}
         isDark={isDark}
         allSymbols={allSymbols}
         viewportWidth={viewportWidth}
@@ -3819,7 +3820,7 @@ export default function App() {
         syncCharts={syncCharts}
         compact={compact}
         embeddedChart={embeddedChart}
-        workstation={activeWorkspace === "dashboard"}
+        workstation={usePremiumShell}
         viewportWidth={viewportWidth}
       />
     );
@@ -3993,7 +3994,7 @@ export default function App() {
 
   return (
     <div
-      className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"} ${usePremiumShell && activeWorkspace === "dashboard" ? "ws-reference-shell" : ""}`}
+      className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"} ${usePremiumShell ? "ws-reference-shell" : ""}`}
       style={{
         height: "100vh",
         background: isDark
@@ -4055,7 +4056,7 @@ export default function App() {
         quotes={allSymbols}
       />
 
-      {usePremiumShell && !isCompactTerminal && !["dashboard", "replay", "journal"].includes(activeWorkspace) ? (
+      {!usePremiumShell && !isCompactTerminal && !["dashboard", "replay", "journal"].includes(activeWorkspace) ? (
         <div style={{ padding: activeWorkspace === "charts" ? "0 10px 5px" : "0 10px 8px", flexShrink: 0 }}>
           <MarketSnapshotStrip
             theme={theme}
@@ -4107,9 +4108,9 @@ export default function App() {
           order={1}
           defaultSize={sidebarPanelSize}
           minSize={sidebarPanelSize}
-          maxSize={usePremiumShell && activeWorkspace === "dashboard" ? sidebarPanelSize : isPhoneTerminal ? 12 : usePremiumShell ? 13 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
+          maxSize={usePremiumShell ? sidebarPanelSize : isPhoneTerminal ? 12 : usePremiumShell ? 13 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
         >
-          {usePremiumShell && activeWorkspace === "dashboard" ? <WorkstationSidebar activeWorkspace={activeWorkspace} setActiveWorkspace={setActiveWorkspace} expanded={viewportWidth > 1024} /> : <TradingSidebar
+          {usePremiumShell ? <WorkstationSidebar activeWorkspace={activeWorkspace} setActiveWorkspace={setActiveWorkspace} expanded={viewportWidth > 1024} /> : <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
           brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
@@ -5170,7 +5171,7 @@ export default function App() {
       />
       )}
 
-      {usePremiumShell && activeWorkspace === "dashboard" && <WorkstationFooter />}
+      {usePremiumShell && <WorkstationFooter />}
       <Suspense fallback={null}>
         <CommandPalette
           theme={theme}

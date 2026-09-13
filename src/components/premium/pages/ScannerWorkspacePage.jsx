@@ -152,7 +152,7 @@ export default function ScannerWorkspacePage({
                   </div>
                 </PremiumCard>
               )}
-              <PremiumCard theme={theme}><div style={{ padding: 16, color: theme.amber, fontWeight: 900 }}><Shield size={18} style={{ verticalAlign: "-4px", marginRight: 8 }} />RISK: {scannerSelected.risk || "Context only"} <ChevronRight size={16} style={{ float: "right" }} /></div></PremiumCard>
+              <PremiumCard theme={theme}><div style={{ padding: 16, color: theme.amber, fontWeight: 600 }}><Shield size={18} style={{ verticalAlign: "-4px", marginRight: 8 }} />RISK: {scannerSelected.risk || "Context only"} <ChevronRight size={16} style={{ float: "right" }} /></div></PremiumCard>
             </>,
             scannerSelected
           )}

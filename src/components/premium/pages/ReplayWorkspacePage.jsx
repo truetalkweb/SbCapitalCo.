@@ -95,7 +95,7 @@ export default function ReplayWorkspacePage({
     ];
     const replayMetric = (label, value) => (
       <label key={label} style={{ display: "grid", gap: 6, minWidth: 0 }}>
-        <span style={{ color: theme.muted, fontSize: 10, fontWeight: 850, letterSpacing: 0.2, textTransform: "uppercase" }}>{label}</span>
+        <span style={{ color: theme.muted, fontSize: 10, fontWeight: 600, letterSpacing: 0.2, textTransform: "uppercase" }}>{label}</span>
         <span
           style={{
             minHeight: 34,
@@ -105,7 +105,7 @@ export default function ReplayWorkspacePage({
             color: theme.text,
             fontFamily: terminalMonoFont,
             fontSize: 13,
-            fontWeight: 850,
+            fontWeight: 600,
           }}
         >
           {value}
@@ -118,7 +118,7 @@ export default function ReplayWorkspacePage({
       return (
         <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 16, color: theme.muted, fontSize: 13 }}>
           <span>{label}</span>
-          <b style={{ color, fontFamily: terminalMonoFont, fontWeight: 850 }}>{value}</b>
+          <b style={{ color, fontFamily: terminalMonoFont, fontWeight: 600 }}>{value}</b>
         </div>
       );
     };
@@ -144,7 +144,7 @@ export default function ReplayWorkspacePage({
               style={{
                 padding: 14,
                 display: "grid",
-                gridTemplateColumns: isNarrowWorkspace ? "repeat(2, minmax(0, 1fr))" : "150px 170px 140px 140px 110px minmax(220px, 1fr)",
+                gridTemplateColumns: isNarrowWorkspace ? "repeat(2, minmax(0, 1fr))" : "repeat(auto-fit, minmax(135px, 1fr))",
                 gap: 14,
                 alignItems: "end",
               }}
@@ -166,7 +166,7 @@ export default function ReplayWorkspacePage({
             </div>
           </PremiumCard>
 
-          <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "250px minmax(0, 1fr) 320px", gap: 10, alignItems: "stretch" }}>
+          <div className="ws-replay-grid" style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "220px minmax(0, 1fr) 310px", gap: 10, alignItems: "stretch" }}>
             <PremiumCard theme={theme} title="Replay Controls">
               <div style={{ padding: 14, display: "grid", gap: 20 }}>
                 <div>
@@ -249,16 +249,16 @@ export default function ReplayWorkspacePage({
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
                     <div>
                       <div style={{ display: "flex", alignItems: "baseline", gap: 14, flexWrap: "wrap" }}>
-                        <span style={{ color: theme.text, fontSize: 28, fontWeight: 950, fontFamily: terminalMonoFont }}>{selectedStock}</span>
-                        <span style={{ color: theme.text, fontSize: 16, fontWeight: 850, fontFamily: terminalMonoFont }}>{replayPrice ? money(replayPrice) : "Unavailable"}</span>
-                        <span style={{ color: replayMove === null ? theme.muted : toneColor(theme, replayMove), fontSize: 13, fontWeight: 900, fontFamily: terminalMonoFont }}>{replayMove === null ? "Unavailable" : pct(replayMove)}</span>
+                        <span style={{ color: theme.text, fontSize: 28, fontWeight: 600, fontFamily: terminalMonoFont }}>{selectedStock}</span>
+                        <span style={{ color: theme.text, fontSize: 16, fontWeight: 600, fontFamily: terminalMonoFont }}>{replayPrice ? money(replayPrice) : "Unavailable"}</span>
+                        <span style={{ color: replayMove === null ? theme.muted : toneColor(theme, replayMove), fontSize: 13, fontWeight: 600, fontFamily: terminalMonoFont }}>{replayMove === null ? "Unavailable" : pct(replayMove)}</span>
                       </div>
                       <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>{timeframe} · Historical replay · Simulated orders</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <div style={{ height: 32, minWidth: 180, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 7, background: theme.panel2, display: "flex", alignItems: "center", gap: 8, padding: "0 10px", color: theme.muted }}>
                         <Search size={14} />
-                        <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 850 }}>{selectedStock}</span>
+                        <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontWeight: 600 }}>{selectedStock}</span>
                       </div>
                       {["1m", "5m", "15m", "1H", "1D"].map((frame) => (
                         <ActionButton key={frame} theme={theme} active={frame === timeframe} onClick={() => setTimeframe?.(frame)}>{frame}</ActionButton>
@@ -270,7 +270,7 @@ export default function ReplayWorkspacePage({
                     <ActionButton theme={theme} onClick={captureReplayScreenshot}>Screenshot</ActionButton>
                     <ActionButton theme={theme} onClick={enterReplayFullscreen}>Fullscreen</ActionButton>
                     {replayActionStatus && (
-                      <span role="status" style={{ alignSelf: "center", color: theme.green, fontSize: 11, fontWeight: 800 }}>
+                      <span role="status" style={{ alignSelf: "center", color: theme.green, fontSize: 11, fontWeight: 600 }}>
                         {replayActionStatus}
                       </span>
                     )}
@@ -304,7 +304,7 @@ export default function ReplayWorkspacePage({
                     >
                       <div style={{ width: `${replayProgress}%`, height: "100%", background: `linear-gradient(90deg, ${theme.blue}, ${theme.green})` }} />
                     </div>
-                    <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont, fontWeight: 850 }}>
+                    <div style={{ color: theme.text, marginTop: 12, fontFamily: terminalMonoFont, fontWeight: 600 }}>
                       Replay {replayStatus.toLowerCase()} · Step {Math.min(replayIndex + 1, Math.max(replayDataLength, 1))} of {Math.max(replayDataLength, 1)}
                     </div>
                   </div>

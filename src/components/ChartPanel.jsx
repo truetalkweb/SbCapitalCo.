@@ -142,7 +142,7 @@ export default function ChartPanel({
       style={{
         ...panelStyle({
           padding: "0px",
-          background: isDark ? "#050b14" : "#ffffff",
+          background: workstation ? theme.panel : isDark ? "#050b14" : "#ffffff",
         }),
         overflow: "hidden",
         display: "flex",
@@ -156,7 +156,7 @@ export default function ChartPanel({
         style={{
           padding: isPhoneChart ? "10px" : dense ? "6px 8px" : premiumShell ? "9px 12px" : "10px 12px",
           marginBottom: "0px",
-          background: `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
+          background: workstation ? theme.panel : `linear-gradient(180deg, ${theme.panel2}, ${theme.panel})`,
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
         }}
       >
@@ -255,8 +255,10 @@ export default function ChartPanel({
                     ...timeframeButtonStyle(tf === item),
                     height: dense ? "22px" : "24px",
                     width: dense ? "30px" : "38px",
-                    borderColor: tf === item ? "rgba(45,140,255,0.7)" : "transparent",
-                    background: tf === item ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
+                    borderColor: workstation ? "transparent" : tf === item ? "rgba(45,140,255,0.7)" : "transparent",
+                    background: tf === item ? workstation ? `${theme.green}18` : `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
+                    color: tf === item && workstation ? theme.green : theme.text,
+                    fontWeight: workstation ? 600 : 800,
                   }}
                 >
                   {item}

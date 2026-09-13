@@ -163,7 +163,7 @@ export default function SettingsWorkspacePage({
           minHeight: 62,
         }}
       >
-        <div style={{ fontWeight: 900, color: active ? theme.blue : theme.text }}>{PLAN_LABELS[plan]}</div>
+        <div style={{ fontWeight: 600, color: active ? theme.blue : theme.text }}>{PLAN_LABELS[plan]}</div>
         <div style={{ fontSize: 11, marginTop: 5, lineHeight: 1.35 }}>
           {plan === "free" && "Core market terminal access."}
           {plan === "pro" && "AI summaries, replay, and journal."}
@@ -202,7 +202,7 @@ export default function SettingsWorkspacePage({
               <div style={{ padding: 16, display: "grid", gap: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ color: theme.text, fontSize: 15, fontWeight: 900 }}>{user?.email || "Authenticated workspace"}</div>
+                    <div style={{ color: theme.text, fontSize: 15, fontWeight: 600 }}>{user?.email || "Authenticated workspace"}</div>
                     <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>Plan source: {entitlementSource === "user_entitlements" ? "Supabase entitlement table" : entitlementSource === "app_metadata" ? "Supabase app metadata" : "Default free access"}</div>
                   </div>
                   <StatusPill theme={theme} tone={accountPlan === "free" ? "neutral" : "good"}>{PLAN_LABELS[accountPlan] || "Free"}</StatusPill>

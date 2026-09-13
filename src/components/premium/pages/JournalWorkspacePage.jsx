@@ -61,12 +61,12 @@ export default function JournalWorkspacePage({
                 {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
                 <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
               </div>
-              <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "120px 180px 100px 130px minmax(220px, 1fr)", gap: 12, alignItems: "end" }}>
+              <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "minmax(90px, .8fr) minmax(130px, 1.2fr) minmax(80px, .7fr) minmax(100px, .9fr) minmax(180px, 2fr)", gap: 12, alignItems: "end" }}>
                 {[
                   ["Symbol", "symbol", journalDraft.symbol || selectedStock],
                   ["Setup", "setup", journalDraft.setup],
                 ].map(([label, key, value]) => (
-                  <label key={key} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                  <label key={key} style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>
                     {label}
                     <input
                       aria-label={`Journal ${label.toLowerCase()}`}
@@ -76,26 +76,26 @@ export default function JournalWorkspacePage({
                     />
                   </label>
                 ))}
-                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>
                   Grade
                   <select aria-label="Journal grade" value={journalDraft.grade || "B"} onChange={(event) => setJournalDraft?.((current) => ({ ...current, grade: event.target.value }))} style={{ height: 34, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 8px" }}>
                     {["A", "B", "C", "D"].map((grade) => <option key={grade}>{grade}</option>)}
                   </select>
                 </label>
-                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>
                   Outcome
                   <select aria-label="Journal outcome" value={journalDraft.result || "Review"} onChange={(event) => setJournalDraft?.((current) => ({ ...current, result: event.target.value }))} style={{ height: 34, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 8px" }}>
                     {["Review", "Win", "Loss", "Breakeven"].map((result) => <option key={result}>{result}</option>)}
                   </select>
                 </label>
-                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 850, textTransform: "uppercase" }}>
+                <label style={{ display: "grid", gap: 5, color: theme.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase" }}>
                   Review
                   <input aria-label="Journal review" value={journalDraft.review || ""} placeholder="What happened and what will you improve?" onChange={(event) => setJournalDraft?.((current) => ({ ...current, review: event.target.value }))} style={{ height: 34, minWidth: 0, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 9px" }} />
                 </label>
               </div>
             </PremiumCard>}
             {showStatistics && <PremiumCard theme={theme}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))" }}>
                 {[
                   ["Net P&L", money(journalNet), journalNet >= 0 ? "good" : "bad"],
                   ["Total Trades", String(tradeCount), "neutral"],
@@ -112,7 +112,7 @@ export default function JournalWorkspacePage({
                 ))}
               </div>
             </PremiumCard>}
-            {showStatistics && <div style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) 300px 0.85fr", gap: 10 }}>
+            {showStatistics && <div className="ws-journal-charts" style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) 300px minmax(0, .85fr)", gap: 10 }}>
               <PremiumCard theme={theme} title="Equity Curve">
                 <div style={{ padding: 16, height: 310 }}>
                   <div style={{ width: 170, marginBottom: 12 }}>

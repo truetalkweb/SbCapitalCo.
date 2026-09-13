@@ -135,7 +135,7 @@ test("full App restores two independent named watchlists", async ({page})=>{
 test("full App saves and restores all four panel identities together", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   const evidence = await setupApp(page);
-  await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Account menu", exact: true })).toBeVisible();
   await expect(page.locator("[data-chart-panel]")).toHaveCount(4);
   const panels = [
     ["main", "Main Chart", "MSFT", "5m"], ["secondary", "Chart 2", "NVDA", "15m"],
@@ -157,8 +157,8 @@ test("full App saves and restores all four panel identities together", async ({ 
     await panel.getByLabel(`${title} interval`, { exact: true }).selectOption(interval);
   }
   await assertPanels();
-  await page.getByRole("button", { name: "Advanced Off", exact: true }).click();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await page.getByRole("button", { name: "Save workspace", exact: true }).click();
   await expect.poll(() => evidence.workspace()).toMatchObject({
     selectedStock: "MSFT", timeframe: "5m", secondarySymbol: "NVDA", secondaryTimeframe: "15m",
     additionalCharts: { third: { symbol: "AMD", interval: "1H" }, fourth: { symbol: "DIA", interval: "1D" } },
@@ -166,10 +166,8 @@ test("full App saves and restores all four panel identities together", async ({ 
   });
   await page.reload();
   await assertPanels();
-  if (await page.getByRole("button", { name: "Advanced Off", exact: true }).isVisible()) {
-    await page.getByRole("button", { name: "Advanced Off", exact: true }).click();
-  }
-  await page.getByRole("button", { name: "Load", exact: true }).click();
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await page.getByRole("button", { name: "Load workspace", exact: true }).click();
   await assertPanels();
   await page.screenshot({ path: testInfo.outputPath("full-app-four-charts-restored.png"), fullPage: true });
   expect(evidence.errors).toEqual([]);
@@ -182,10 +180,7 @@ test("full App restores Replay trades archives and notes through portable backup
   const chart = page.locator('[data-chart-panel="main"] [data-chart-canvas]');
   const navigate = async name => {
     const navigation = page.getByRole("navigation", { name: "Terminal workspaces" });
-    const target = navigation.getByRole("button", { name, exact: true });
-    if (!(await target.isVisible()) && ["Replay", "Journal", "Performance"].includes(name)) {
-      await navigation.getByRole("button", { name: "Review", exact: true }).click();
-    }
+    const target = navigation.getByRole("button", { name: name === "Replay" ? "Tools" : name === "Journal" ? "Trade Journal" : name, exact: true });
     await target.click();
   };
   const shares = page.getByLabel("Simulated order shares", { exact: true });
@@ -236,8 +231,8 @@ test("full App restores Replay trades archives and notes through portable backup
   await expect(chart).toHaveAttribute("data-visible-candle-count", "2");
   await expect(page.getByLabel("Replay session notes")).toHaveValue(backup.payload.replayNotes);
   await expect(page.getByRole("row").filter({ hasText: /AAPL.*Long.*60/ })).toHaveCount(1);
-  await page.getByRole("button", { name: "Advanced Off", exact: true }).click();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Account menu", exact: true }).click();
+  await page.getByRole("button", { name: "Save workspace", exact: true }).click();
   await expect.poll(() => evidence.workspace().replaySession?.events).toEqual(backup.payload.replaySession.events);
   expect(evidence.workspace().replaySession.archives).toEqual(expect.arrayContaining(backup.payload.replaySession.archives));
   expect(evidence.workspace().replayBookmarks).toEqual(backup.payload.replayBookmarks);
@@ -384,6 +379,74 @@ test("dashboard displays provider quote fields and dismisses overlays by keyboar
   await page.getByRole("tab", { name: "P&L", exact: true }).click();
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect.poll(() => evidence.workspace().activeWorkspace).toBe("positions");
+  expect(evidence.errors).toEqual([]);
+  expect(evidence.blocked).toEqual([]);
+});
+
+const secondaryWorkspaces = [
+  ["watchlist", "Watchlist"], ["scanner", "Market Scanner"], ["chart-analysis", "Charts"],
+  ["news", "News & Calendar"], ["alerts", "Alerts"], ["orders", "Orders"],
+  ["positions", "Positions"], ["risk", "Risk Manager"], ["performance", "Performance"],
+  ["replay", "Replay"], ["journal", "Trade Journal"], ["settings", "Settings"],
+];
+for (const width of [1536, 1280]) {
+  for (const [view, title] of secondaryWorkspaces) {
+    test(`dashboard design extends to ${view} at ${width}px with usable content`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: width === 1536 ? 1024 : 768 });
+      const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: view, layoutMode: "1", selectedStock: "NVDA",
+        positions: { NVDA: { quantity: 150, average: 117.2 } },
+        journalEntries: [{ id: "ui-history", symbol: "NVDA", pnl: 183, createdAt: "2026-09-10T14:30:00Z" }] });
+      const workspace = page.locator(`.ws-workspace[data-workspace="${view}"]`);
+      await expect(workspace.getByRole("heading", { name: title, exact: true, level: 1 })).toBeVisible();
+      await expect(page.getByAltText("SB logo")).toHaveAttribute("src", "/sb-terminal-logo.png");
+      await expect(page.locator(".ws-header")).toBeInViewport({ ratio: 1 });
+      await expect(page.locator(".ws-footer")).toBeInViewport({ ratio: 1 });
+      await expect(page.getByText("This panel is temporarily unavailable.", { exact: true })).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const sidebar = await page.locator(".ws-sidebar").boundingBox();
+      expect(sidebar.width).toBeGreaterThanOrEqual(180);
+      expect(sidebar.width).toBeLessThanOrEqual(200);
+      // Wide tables may scroll within their panel; the workspace itself must fit.
+      expect(await workspace.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+      const inputWidths = await workspace.locator('input:not([type="file"]):not([type="checkbox"]):not([type="range"])').evaluateAll(els => els.filter(el => el.getBoundingClientRect().width > 0).map(el => el.getBoundingClientRect().width));
+      expect(inputWidths.every(value => value >= 45)).toBe(true);
+      if (view === "alerts") {
+        const dock = workspace.getByRole("table").filter({ has: page.getByRole("columnheader", { name: "Avg Price", exact: true }) });
+        await expect(dock).toContainText("Unavailable");
+        await expect(dock).not.toContainText("NaN");
+      }
+      if (view === "chart-analysis") {
+        await expect(workspace.getByRole("button", { name: "Review Order", exact: true })).toBeInViewport({ ratio: 1 });
+        const rail = workspace.locator(".ws-detail-rail");
+        const context = rail.getByText("Review-only shortcuts. No live broker execution from this workspace.");
+        await context.scrollIntoViewIfNeeded();
+        await expect(context).toBeInViewport({ ratio: 1 });
+      }
+      await page.screenshot({ path: testInfo.outputPath(`${view}-${width}.png`) });
+      expect(evidence.errors).toEqual([]);
+      expect(evidence.blocked).toEqual([]);
+    });
+  }
+}
+
+test("secondary workspace navigation keeps the shared shell and light theme", async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "watchlist", themeMode: "light" });
+  await expect(page.locator('.ws-workspace[data-workspace="watchlist"]')).toHaveCSS("background-color", "rgb(244, 247, 250)");
+  const navigation = page.getByRole("navigation", { name: "Terminal workspaces" });
+  for (const label of ["Market Scanner", "Positions", "Trade Journal", "Risk Manager", "Settings", "Tools"]) {
+    await navigation.getByRole("button", { name: label, exact: true }).click();
+    await expect(navigation.getByRole("button", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".ws-workspace")).toBeVisible();
+    await expect(page.locator(".ws-workspace")).toHaveCSS("background-color", "rgb(244, 247, 250)");
+  }
+  await page.getByRole("button", { name: "Notifications and alerts" }).click();
+  await expect(page.getByRole("heading", { name: "Alerts", level: 1, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Account menu" }).click();
+  const sync = page.getByRole("button", { name: "Sync charts: Off", exact: true });
+  await sync.click();
+  await expect(page.getByRole("button", { name: "Sync charts: On", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Account menu" })).toBeFocused();
   expect(evidence.errors).toEqual([]);
   expect(evidence.blocked).toEqual([]);
 });

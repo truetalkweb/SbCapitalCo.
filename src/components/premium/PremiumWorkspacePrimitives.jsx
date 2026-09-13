@@ -1,7 +1,7 @@
 import { Lock, MoreVertical, Search, Star } from "lucide-react";
 
 import { Component } from "react";
-import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
+import { terminalMonoFont } from "../../config/terminalConfig";
 import { captureRuntimeDiagnostic } from "../../services/runtimeDiagnostics";
 import {
   PLAN_LABELS,
@@ -68,13 +68,14 @@ class CardContentErrorBoundary extends Component {
 export function PremiumCard({ theme, children, style = {}, title, action }) {
   return (
     <section
+      className="ws-card"
       style={{
         minWidth: 0,
         minHeight: 0,
-        background: `linear-gradient(180deg, ${theme.panel}, ${theme.bg})`,
+        background: theme.panel,
         border: `1px solid ${theme.borderSoft || theme.border}`,
-        borderRadius: 8,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.035)",
+        borderRadius: 6,
+        boxShadow: "none",
         overflow: "hidden",
         ...style,
       }}
@@ -82,7 +83,7 @@ export function PremiumCard({ theme, children, style = {}, title, action }) {
       {(title || action) && (
         <div
           style={{
-            minHeight: 40,
+            minHeight: 42,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -91,7 +92,7 @@ export function PremiumCard({ theme, children, style = {}, title, action }) {
             borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
           }}
         >
-          <h2 style={{ margin: 0, color: theme.text, fontSize: 13, fontWeight: 900, textTransform: "uppercase" }}>
+          <h2 style={{ margin: 0, color: theme.text, fontSize: 13, fontWeight: 600 }}>
             {title}
           </h2>
           {action}
@@ -121,7 +122,7 @@ export function LockedWorkspace({ theme, activeWorkspace, entitlements, status }
         theme={theme}
         style={{
           width: "min(560px, 100%)",
-          background: `linear-gradient(180deg, ${theme.panel}, ${theme.bg})`,
+          background: theme.panel,
         }}
       >
         <div style={{ padding: 22, display: "grid", gap: 16 }}>
@@ -205,7 +206,7 @@ export function PremiumTabs({ theme, tabs, active, onChange, ariaLabel = "Worksp
     });
     const label = typeof activeTab === "string" ? activeTab : activeTab?.label || active;
     return (
-      <div aria-label="Current view" style={{ display: "flex", alignItems: "center", minHeight: 30 }}>
+      <div className="ws-view-tabs" aria-label="Current view" style={{ display: "flex", alignItems: "center", minHeight: 30 }}>
         <span
           style={{
             display: "inline-flex",
@@ -213,11 +214,11 @@ export function PremiumTabs({ theme, tabs, active, onChange, ariaLabel = "Worksp
             minHeight: 30,
             padding: "0 13px",
             borderRadius: 6,
-            border: "1px solid rgba(45,140,255,0.75)",
-            background: "linear-gradient(180deg, #176fd7, #0c4f9e)",
+            border: "none",
+            background: theme.panel2,
             color: "#fff",
             fontSize: 12,
-            fontWeight: 800,
+            fontWeight: 500,
           }}
         >
           {label}
@@ -226,7 +227,7 @@ export function PremiumTabs({ theme, tabs, active, onChange, ariaLabel = "Worksp
     );
   }
   return (
-    <div role="tablist" aria-label={ariaLabel} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+    <div className="ws-view-tabs" role="tablist" aria-label={ariaLabel} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
       {tabs.map((tab) => {
         const id = typeof tab === "string" ? tab : tab.id;
         const label = typeof tab === "string" ? tab : tab.label;
@@ -258,11 +259,11 @@ export function PremiumTabs({ theme, tabs, active, onChange, ariaLabel = "Worksp
               height: 30,
               padding: "0 13px",
               borderRadius: 6,
-              border: `1px solid ${selected ? "rgba(45,140,255,0.75)" : theme.borderSoft || theme.border}`,
-              background: selected ? "linear-gradient(180deg, #176fd7, #0c4f9e)" : "rgba(255,255,255,0.018)",
-              color: selected ? "#fff" : theme.muted,
+              border: "none",
+              background: selected ? `${theme.green}0c` : "transparent",
+              color: selected ? theme.green : theme.muted,
               fontSize: 12,
-              fontWeight: 800,
+              fontWeight: 500,
               cursor: "pointer",
               opacity: 1,
               outlineOffset: 2,
@@ -292,7 +293,7 @@ export function StatusPill({ theme, children, tone = "neutral" }) {
         background: `${color}18`,
         color,
         fontSize: 11,
-        fontWeight: 850,
+        fontWeight: 600,
         whiteSpace: "nowrap",
       }}
     >
@@ -302,27 +303,22 @@ export function StatusPill({ theme, children, tone = "neutral" }) {
 }
 
 export function ActionButton({ theme, children, active = false, danger = false, good = false, disabled = false, style = {}, ...props }) {
-  const bg = danger
-    ? "linear-gradient(180deg, #d43f3f, #a91f1f)"
-    : good
-      ? "linear-gradient(180deg, #129b72, #087250)"
-      : active
-        ? "linear-gradient(180deg, #247ee8, #0d58b5)"
-        : "rgba(255,255,255,0.025)";
+  const bg = danger ? `${theme.red}16` : good || active ? theme.green : theme.panel2;
   return (
     <button
       type="button"
       disabled={disabled}
+      className="ws-action"
       {...props}
       style={{
         height: 34,
-        border: `1px solid ${disabled ? theme.borderSoft || theme.border : active || danger || good ? "rgba(255,255,255,0.12)" : theme.borderSoft || theme.border}`,
+        border: `1px solid ${danger ? `${theme.red}40` : active || good ? theme.green : theme.border}`,
         borderRadius: 6,
         background: disabled ? "rgba(255,255,255,0.015)" : bg,
-        color: disabled ? theme.muted : active || danger || good ? "#fff" : theme.text,
+        color: disabled ? theme.muted : danger ? theme.red : active || good ? theme.bg : theme.text,
         padding: "0 13px",
         fontSize: 12,
-        fontWeight: 850,
+        fontWeight: 600,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.62 : 1,
         outlineOffset: 2,
@@ -381,14 +377,16 @@ export function FilterBar({ theme, items = [], search = "Search...", value = "",
   );
 }
 
-export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyField = "symbol", style = {}, rowMinHeight = 42, headerMinHeight = 36, cellPadding = "0 14px", columnGap = 12, emptyMessage = "No records available" }) {
+export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyField = "symbol", style = {}, rowMinHeight = 34, headerMinHeight = 34, cellPadding = "0 14px", columnGap = 12, emptyMessage = "No records available" }) {
+  const minTableWidth = columns.reduce((total, column) => total + (/^\d+px$/.test(column.width || "") ? parseInt(column.width, 10) : column.mono ? 80 : 110), 0) + (columns.length - 1) * columnGap + 28;
   return (
-    <div role="table" aria-rowcount={rows.length + 1} aria-colcount={columns.length} style={{ minWidth: 0, overflow: "auto", ...style }}>
+    <div className="ws-data-table" role="table" aria-rowcount={rows.length + 1} aria-colcount={columns.length} style={{ minWidth: 0, overflow: "auto", ...style }}>
       <div
         role="row"
         style={{
           display: "grid",
           gridTemplateColumns: columns.map((column) => column.width || "1fr").join(" "),
+          minWidth: minTableWidth,
           gap: columnGap,
           minHeight: headerMinHeight,
           alignItems: "center",
@@ -396,7 +394,7 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
           color: theme.muted,
           borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
           fontSize: 11,
-          fontWeight: 800,
+          fontWeight: 500,
         }}
       >
         {columns.map((column) => (
@@ -434,6 +432,7 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
             }}
             style={{
               width: "100%",
+              minWidth: minTableWidth,
               display: "grid",
               gridTemplateColumns: columns.map((column) => column.width || "1fr").join(" "),
               gap: columnGap,
@@ -442,7 +441,7 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
               padding: cellPadding,
               border: "none",
               borderBottom: `1px solid ${theme.borderSoft || theme.border}`,
-              background: selected ? "linear-gradient(90deg, rgba(45,140,255,0.30), rgba(45,140,255,0.04))" : "transparent",
+              background: selected ? `${theme.green}0c` : "transparent",
               color: theme.text,
               cursor: onSelect ? "pointer" : "default",
               textAlign: "left",
@@ -456,9 +455,10 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
                 style={{
                   minWidth: 0,
                   textAlign: column.align || "left",
-                  fontFamily: column.mono ? terminalMonoFont : terminalSansFont,
+                  fontFamily: 'Inter, "Roboto", Arial, sans-serif',
+                  fontVariantNumeric: "tabular-nums",
                   fontSize: 12,
-                  fontWeight: column.strong ? 850 : 650,
+                  fontWeight: column.strong ? 600 : 400,
                   color: column.color ? column.color(row) : theme.text,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -477,14 +477,14 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
 
 export function MetricTile({ theme, label, value, tone = "neutral", detail }) {
   return (
-    <div style={{ padding: "13px 14px", borderRight: `1px solid ${theme.borderSoft || theme.border}`, minWidth: 0 }}>
+    <div className="ws-metric-tile" style={{ padding: "13px 14px", borderRight: `1px solid ${theme.borderSoft || theme.border}`, minWidth: 0 }}>
       <div style={{ color: theme.muted, fontSize: 11, marginBottom: 7 }}>{label}</div>
       <div
         style={{
           color: tone === "good" ? theme.green : tone === "bad" ? theme.red : tone === "warn" ? theme.amber : theme.text,
           fontFamily: terminalMonoFont,
           fontSize: 16,
-          fontWeight: 900,
+          fontWeight: 600,
         }}
       >
         {value}
@@ -496,11 +496,9 @@ export function MetricTile({ theme, label, value, tone = "neutral", detail }) {
 
 export function SectionTitle({ theme, title, subtitle, action }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+    <div className="ws-section-intro" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
       <div>
-        <h1 style={{ margin: 0, color: theme.text, fontSize: 24, letterSpacing: 0, fontWeight: 900, textTransform: "uppercase" }}>
-          {title}
-        </h1>
+        {!theme.workstation && <h1 style={{ margin: 0, color: theme.text, fontSize: 22, fontWeight: 600 }}>{title}</h1>}
         {subtitle && <div style={{ color: theme.muted, fontSize: 13, marginTop: 4 }}>{subtitle}</div>}
       </div>
       {action}
@@ -535,7 +533,7 @@ export function SymbolBadge({ theme, symbol }) {
           display: "grid",
           placeItems: "center",
           fontFamily: terminalMonoFont,
-          fontWeight: 900,
+          fontWeight: 600,
         }}
       >
         {String(symbol || "S").slice(0, 1)}
@@ -555,14 +553,13 @@ export function DetailRail({ theme, selected, children, title = "Selected Symbol
   ];
 
   return (
-    <div style={{ display: "grid", gap: compact ? 9 : 10, minWidth: 0, minHeight: 0, alignContent: compact ? "start" : "stretch" }}>
+    <div className="ws-detail-rail" style={{ display: "grid", gridAutoRows: "max-content", gap: compact ? 9 : 10, minWidth: 0, minHeight: 0, alignContent: "start" }}>
       <PremiumCard theme={theme} title={title} action={<MoreVertical size={16} color={theme.muted} />}>
         <div style={{ padding: compact ? 10 : 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12 }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
-              <SymbolBadge theme={theme} symbol={selected.symbol} />
               <div>
-                <div style={{ fontSize: compact ? 21 : 22, fontWeight: 900, color: theme.text, fontFamily: terminalMonoFont }}>
+                <div style={{ fontSize: compact ? 21 : 22, fontWeight: 600, color: theme.text, fontFamily: terminalMonoFont }}>
                   {selected.symbol}
                 </div>
                 <div style={{ color: theme.muted, fontSize: compact ? 11 : 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -573,12 +570,12 @@ export function DetailRail({ theme, selected, children, title = "Selected Symbol
             <Star size={18} color={theme.blue} fill={theme.blue} />
           </div>
           <div style={{ marginTop: compact ? 8 : 12, display: "flex", alignItems: "baseline", gap: 12 }}>
-            <span style={{ color: theme.text, fontSize: compact ? 24 : 30, fontWeight: 900, fontFamily: terminalMonoFont }}>{hasNumericValue(selected.price) ? num(selected.price).toFixed(2) : "Unavailable"}</span>
-            <span style={{ color: nullableMoveOf(selected) === null ? theme.muted : toneColor(theme, nullableMoveOf(selected)), fontSize: compact ? 12 : 16, fontWeight: 900, fontFamily: terminalMonoFont }}>
+            <span style={{ color: theme.text, fontSize: compact ? 24 : 30, fontWeight: 600, fontFamily: terminalMonoFont }}>{hasNumericValue(selected.price) ? num(selected.price).toFixed(2) : "Unavailable"}</span>
+            <span style={{ color: nullableMoveOf(selected) === null ? theme.muted : toneColor(theme, nullableMoveOf(selected)), fontSize: compact ? 12 : 16, fontWeight: 600, fontFamily: terminalMonoFont }}>
               {nullableMoveOf(selected) === null ? "Unavailable" : pct(nullableMoveOf(selected))}
             </span>
           </div>
-          <div style={{ color: selected.dataMode === "provider" ? theme.green : theme.muted, fontSize: compact ? 10 : 12, fontWeight: 850, marginTop: compact ? 4 : 6 }}>
+          <div style={{ color: selected.dataMode === "provider" ? theme.green : theme.muted, fontSize: compact ? 10 : 12, fontWeight: 600, marginTop: compact ? 4 : 6 }}>
             {selected.dataMode === "provider" ? "Provider data" : selected.dataMode === "cached" ? "Cached data" : selected.dataMode === "fallback" || selected.dataMode === "degraded" ? "Fallback context" : "Market data unavailable"}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(3, minmax(0, 1fr))" : "1fr 1fr", gap: compact ? 5 : 9, marginTop: compact ? 8 : 14 }}>
@@ -586,7 +583,7 @@ export function DetailRail({ theme, selected, children, title = "Selected Symbol
               <div
                 key={label}
                 style={{
-                  display: compact ? "grid" : "flex",
+                  display: "grid",
                   justifyContent: compact ? "initial" : "space-between",
                   gap: compact ? 4 : 8,
                   color: theme.muted,
@@ -599,7 +596,7 @@ export function DetailRail({ theme, selected, children, title = "Selected Symbol
                 }}
               >
                 <span>{label}</span>
-                <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: compact ? 10 : 12, fontWeight: compact ? 850 : 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ color: theme.text, fontFamily: terminalMonoFont, fontSize: compact ? 10 : 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {formatDetailValue(label, value)}
                 </span>
               </div>

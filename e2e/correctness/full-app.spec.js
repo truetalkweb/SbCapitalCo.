@@ -19,7 +19,7 @@ function candles(symbol, timeframe) {
       open: base + index, high: base + index + 2, low: base + index - 1, close: base + index + 1, volume: 1000 })) };
 }
 
-async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false } = {}) {
+async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [] } = {}) {
   const errors = [];
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
@@ -45,6 +45,8 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
         plan: "premium", status: "active", source: "isolated-test",
         capabilities: { replay: true, journal: true, risk: true, performance: true, brokerDiagnostics: false },
       } });
+      if (url.pathname === "/api/questrade/quotes") return route.fulfill({ json: { quotes: providerQuotes, source: "Isolated provider-shape test", realtime: true } });
+      if (url.pathname.startsWith("/api/news")) return route.fulfill({ json: { news: providerNews } });
       if (url.pathname.includes("/candles/")) return route.fulfill(unavailableHistory
         ? { status: 503, json: { error: "History unavailable in this test" } }
         : { json: candles(url.pathname.split("/").at(-1), url.searchParams.get("timeframe")) });
@@ -65,6 +67,70 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
   await page.goto("/");
   return { errors, blocked, workspace: () => row.data };
 }
+
+test("full App keeps 60 trades when saving a note and restores full-history statistics", async ({ page }) => {
+  const journalEntries = Array.from({length:60},(_,id)=>({id:`old-${id}`,symbol:"AAPL",pnl:100,createdAt:new Date(Date.UTC(2026,0,id+1)).toISOString()}));
+  const evidence = await setupApp(page,{...initialWorkspace,activeWorkspace:"journal",journalEntries});
+  await page.getByLabel("Journal setup",{exact:true}).fill("Preserved note");
+  await page.getByRole("button",{name:"Save Record",exact:true}).click();
+  await expect.poll(()=>evidence.workspace().journalEntries?.length).toBe(61);
+  expect(evidence.workspace().journalEntries.find(row=>row.id==="old-59")).toBeTruthy();
+  expect(evidence.workspace().journalEntries[0].pnl).toBeNull();
+  await expect(page.getByText("$6,000.00",{exact:true}).first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("$6,000.00",{exact:true}).first()).toBeVisible();
+  await expect(page.getByRole("navigation",{name:"journal records pagination"})).toContainText("of 61");
+  await page.getByRole("navigation",{name:"journal records pagination"}).getByRole("button",{name:"Next"}).click();
+  await expect(page.getByRole("navigation",{name:"journal records pagination"})).toContainText("26–50");
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test("full App saves a short journal trade after fees with matching CSV", async ({page})=>{
+  const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:"journal",journalEntries:[]});
+  await page.getByLabel("Journal record type",{exact:true}).selectOption("trade");
+  await page.getByLabel("Journal side",{exact:true}).selectOption("Short");
+  await page.getByLabel("Journal setup",{exact:true}).fill("Short review");
+  for(const [label,value] of [["quantity","10"],["entry price","100"],["exit price","90"],["total fees","2"]]) await page.getByLabel(`Journal ${label}`,{exact:true}).fill(value);
+  await page.getByRole("button",{name:"Save Record",exact:true}).click();
+  await expect.poll(()=>evidence.workspace().journalEntries?.[0]?.pnl).toBe(98);
+  await expect(page.getByText("$98.00",{exact:true}).first()).toBeVisible();
+  await page.getByRole("tab",{name:"Exports",exact:true}).click();
+  const download=page.waitForEvent("download"); await page.getByRole("button",{name:"Journal CSV",exact:true}).click();
+  const file=await download; const stream=await file.createReadStream(); let csv=""; for await(const chunk of stream)csv+=chunk;
+  expect(csv).toContain("pnl"); expect(csv).toContain("98"); expect(csv).toContain("Short review");
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test("full App adding alert 106 preserves every existing alert after reload", async ({page})=>{
+  const alerts=Array.from({length:105},(_,id)=>({id:`existing-${id}`,symbol:"AAPL",trigger:100+id,direction:"above",active:true,history:[]}));
+  const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:"alerts",alerts});
+  await page.getByLabel("Alert trigger price").fill("999");
+  await page.getByRole("button",{name:"Create",exact:true}).click();
+  await expect.poll(()=>evidence.workspace().alerts?.length).toBe(106);
+  expect(evidence.workspace().alerts.find(row=>row.id==="existing-104")).toBeTruthy();
+  await page.reload();
+  await expect(page.getByRole("button",{name:"Create",exact:true})).toBeVisible();
+  expect(evidence.workspace().alerts).toHaveLength(106);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test("full App restores two independent named watchlists", async ({page})=>{
+  const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:"watchlist",liveStocks:[{symbol:"AAPL"}],premiumPreferences:{watchlists:[{id:"main",name:"Main",symbols:["AAPL"]}],activeWatchlistId:"main"}});
+  await page.getByLabel("Watchlist name",{exact:true}).fill("Swing trades");
+  await page.getByRole("button",{name:"New List",exact:true}).click();
+  await page.getByLabel("Watchlist symbol",{exact:true}).fill("AAPL");
+  await page.getByRole("button",{name:"Add Symbol",exact:true}).click();
+  await expect.poll(()=>evidence.workspace().premiumPreferences?.watchlists?.length).toBe(2);
+  await expect.poll(()=>evidence.workspace().premiumPreferences?.watchlists?.[1]?.symbols).toEqual(["AAPL"]);
+  await page.getByRole("button",{name:"Remove AAPL from watchlist",exact:true}).click();
+  await expect.poll(()=>evidence.workspace().premiumPreferences?.watchlists?.[1]?.symbols).toEqual([]);
+  expect(evidence.workspace().premiumPreferences.watchlists[0].symbols).toEqual(["AAPL"]);
+  await page.reload();
+  await expect(page.getByLabel("Active watchlist").locator("option:checked")).toHaveText("Swing trades");
+  await page.getByLabel("Active watchlist").selectOption("main");
+  await expect(page.getByRole("button",{name:"Remove AAPL from watchlist",exact:true})).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
 
 test("full App saves and restores all four panel identities together", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -114,7 +180,14 @@ test("full App restores Replay trades archives and notes through portable backup
   await page.setViewportSize({ width: 1920, height: 1080 });
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "replay", replayMode: true, layoutMode: "1" });
   const chart = page.locator('[data-chart-panel="main"] [data-chart-canvas]');
-  const navigate = name => page.getByRole("navigation", { name: "Terminal workspaces" }).getByRole("button", { name, exact: true }).click();
+  const navigate = async name => {
+    const navigation = page.getByRole("navigation", { name: "Terminal workspaces" });
+    const target = navigation.getByRole("button", { name, exact: true });
+    if (!(await target.isVisible()) && ["Replay", "Journal", "Performance"].includes(name)) {
+      await navigation.getByRole("button", { name: "Review", exact: true }).click();
+    }
+    await target.click();
+  };
   const shares = page.getByLabel("Simulated order shares", { exact: true });
   await expect(chart).toHaveAttribute("data-visible-candle-count", "1");
   await shares.fill("0");
@@ -217,6 +290,100 @@ test("full App order and safety actions remain review-only with no execution req
     await page.getByRole("button", { name: action, exact: true }).click();
     await expect(page.getByTestId("order-review-status")).toContainText(message);
   }
+  expect(evidence.errors).toEqual([]);
+  expect(evidence.blocked).toEqual([]);
+});
+
+
+for (const width of [1920, 1536, 1440, 1366, 1280]) {
+  test(`main dashboard matches reference geometry at ${width}px without changing providers`, async ({ page }) => {
+    const height = width === 1920 ? 1080 : width === 1536 ? 1024 : width < 1440 ? 768 : 900;
+    await page.setViewportSize({ width, height });
+    const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "dashboard", selectedStock: "NVDA", timeframe: "5m", layoutMode: "1",
+      positions: { NVDA: { quantity: 150, average: 117.2 }, TSLA: { quantity: 50, average: 240.15 }, PLTR: { quantity: 500, average: 35.1 }, SPY: { quantity: 20, average: 556.3 } },
+      chartIndicators: { ema9: true, ema20: true, vwap: true, volume: true } });
+    await expect(page.getByTestId("sb-main-dashboard")).toBeVisible();
+    await expect(page.locator('[data-chart-panel="main"] [data-chart-canvas]')).toHaveAttribute("data-visible-candle-count", "50");
+    const logo = page.getByAltText("SB logo");
+    await expect(logo).toHaveAttribute("src", "/sb-terminal-logo.png");
+    const metrics = await page.locator(".ws-account-strip").boundingBox();
+    const chart = await page.getByRole("region", { name: "Primary trading chart", exact: true }).boundingBox();
+    const book = await page.getByRole("region", { name: "Order book", exact: true }).boundingBox();
+    const bottom = await page.getByRole("region", { name: "Portfolio records", exact: true }).boundingBox();
+    expect(chart.y).toBeGreaterThanOrEqual(metrics.y + metrics.height);
+    expect(book.x).toBeGreaterThanOrEqual(chart.x + chart.width);
+    expect(chart.width).toBeGreaterThan(book.width * (width < 1440 ? 2 : 2.5));
+    expect(bottom.y).toBeGreaterThanOrEqual(chart.y + chart.height);
+    expect(bottom.y + bottom.height).toBeLessThanOrEqual(height);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const button = page.getByRole("button", { name: "Review Buy Order", exact: true });
+    await expect(button).toBeInViewport({ ratio: 1 });
+    const ticket = await page.getByRole("region", { name: "Trade ticket", exact: true }).boundingBox();
+    const reviewButton = await button.boundingBox();
+    expect(reviewButton.y + reviewButton.height).toBeLessThanOrEqual(ticket.y + ticket.height);
+    const chartTools = await page.getByRole("button", { name: "Fullscreen dashboard chart" }).boundingBox();
+    expect(chartTools.x + chartTools.width).toBeLessThanOrEqual(chart.x + chart.width);
+    await expect(page.getByRole("region", { name: "Order book", exact: true }).getByRole("columnheader", { name: "Bid", exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByText("No order is submitted from this ticket.", { exact: true })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByText("No provider headlines available.", { exact: true })).toBeVisible();
+    await expect(page.locator(".ws-portfolio tbody tr").last()).toBeInViewport({ ratio: 1 });
+    await page.getByRole("button", { name: "Indicators", exact: true }).click();
+    await page.getByLabel("EMA 20", { exact: true }).uncheck();
+    await page.getByRole("button", { name: "Indicators", exact: true }).click();
+    await page.getByRole("tab", { name: "Time & Sales", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Order book", exact: true })).toContainText("Time & sales not connected");
+    await page.getByRole("tab", { name: "Order Book", exact: true }).click();
+    await page.getByRole("tab", { name: "Notes", exact: true }).click();
+    await page.getByLabel("Dashboard notes").fill("Reference dashboard verification");
+    await page.getByRole("tab", { name: "Positions (4)", exact: true }).click();
+    await page.screenshot({ path: `artifacts/dashboard/verified-${width}.png` });
+    await page.getByLabel("Dashboard order quantity").fill("25");
+    await page.getByLabel("Dashboard order type").selectOption("MARKET");
+    await page.getByRole("button", { name: "Sell", exact: true }).click();
+    await page.getByRole("button", { name: "Review Sell Order", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Action review preview" })).toContainText("SELL MARKET order review");
+    await expect(page.getByRole("region", { name: "Action review preview" })).toContainText("25");
+    expect(evidence.errors).toEqual([]);
+    expect(evidence.blocked).toEqual([]);
+  });
+}
+
+
+test("dashboard displays provider quote fields and dismisses overlays by keyboard", async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "dashboard", selectedStock: "NVDA", layoutMode: "1" }, {
+    providerQuotes: [{ symbol: "NVDA", price: 118.42, bidPrice: 118.41, bidSize: 1200, askPrice: 118.43, askSize: 800,
+      openPrice: 116.21, highPrice: 118.76, lowPrice: 115.98, volume: 42300000, changePercent: 1.59,
+      source: "Isolated provider-shape test", realtime: true, lastTradeTime: new Date().toISOString() }],
+    providerNews: [{ id: "dashboard-news", title: "Provider headline for keyboard review", symbol: "NVDA", source: "Isolated test news",
+      summary: "Test article summary", publishedAt: new Date().toISOString(), url: "https://example.test/article" }],
+  });
+  const book = page.getByRole("region", { name: "Order book", exact: true });
+  for (const value of ["118.41", "118.43", "1200", "800"]) await expect(book.getByRole("cell", { name: value, exact: true })).toBeVisible();
+  const stats = page.locator(".ws-symbol-stats");
+  for (const value of ["116.21", "118.76", "115.98"]) await expect(stats.getByText(value, { exact: true })).toBeVisible();
+  const profile = page.getByRole("button", { name: "Account menu" });
+  await profile.click();
+  await page.getByRole("button", { name: "Help & shortcuts", exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(profile).toHaveAttribute("aria-expanded", "false");
+  await expect(profile).toBeFocused();
+  const indicators = page.getByRole("button", { name: "Indicators", exact: true });
+  await indicators.click();
+  await page.keyboard.press("Escape");
+  await expect(indicators).toHaveAttribute("aria-expanded", "false");
+  const headline = page.getByRole("button", { name: /Provider headline for keyboard review/ });
+  await headline.click();
+  const dialog = page.getByRole("dialog", { name: "News preview" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("link", { name: "Read source article" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Close news preview" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(headline).toBeFocused();
+  await page.getByRole("tab", { name: "P&L", exact: true }).click();
+  await page.getByRole("button", { name: "Open workspace" }).click();
+  await expect.poll(() => evidence.workspace().activeWorkspace).toBe("positions");
   expect(evidence.errors).toEqual([]);
   expect(evidence.blocked).toEqual([]);
 });

@@ -12,7 +12,7 @@ import {
   Newspaper,
   Activity,
 } from "lucide-react";
-import { premiumWorkspaceViews } from "../config/premiumNavigation";
+import { premiumWorkspaceViews, premiumNavigationGroups } from "../config/premiumNavigation";
 
 const NAV_ICONS = {
   dashboard: BarChart3,
@@ -30,7 +30,7 @@ const NAV_ICONS = {
   settings: Settings,
 };
 
-const PREMIUM_NAV_ITEMS = premiumWorkspaceViews.map((item) => ({
+const PREMIUM_NAV_ITEMS = premiumNavigationGroups.map((item) => ({
   ...item,
   icon: NAV_ICONS[item.id],
   advanced: item.group === "Advanced",
@@ -150,7 +150,7 @@ export default function Tradingsidebar({
       >
         {visibleItems.map((item) => {
           const Icon = item.icon;
-          const active = activeWorkspace === item.id;
+          const active = item.children.includes(activeWorkspace);
 
           return (
             <div key={`${item.id}-${item.label}`} style={{ display: "contents" }}>
@@ -214,6 +214,17 @@ export default function Tradingsidebar({
                 </span>
               )}
             </button>
+            {active && item.children.length > 1 && item.children.map(id => {
+              const child = premiumWorkspaceViews.find(view => view.id === id);
+              return <button key={id} type="button" title={child.label} aria-label={child.label}
+                aria-current={activeWorkspace === id ? "page" : undefined}
+                onClick={event => switchWorkspace(event,id)}
+                style={{ border:0, borderLeft:`2px solid ${activeWorkspace === id ? activeIconColor : sidebarBorder}`,
+                  background:"transparent",color:activeWorkspace===id?activeButtonColor:inactiveIconColor,
+                  minHeight:32,padding:expanded?"4px 12px 4px 22px":"4px 1px",fontSize:expanded?12:9,cursor:"pointer",textAlign:expanded?"left":"center" }}>
+                {expanded ? child.label : child.label.slice(0,3)}
+              </button>;
+            })}
             </div>
           );
         })}

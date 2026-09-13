@@ -8,7 +8,7 @@ export default function WorkspaceGrid({
   selectedStockData, secondaryStockData, allSymbols = [],
   mainChartStatus, secondaryChartStatus, setMainChartStatus, setSecondaryChartStatus,
   syncCharts, additionalCharts, setAdditionalCharts,
-  compact = false, embeddedChart = false, viewportWidth = 1920,
+  compact = false, embeddedChart = false, viewportWidth = 1920, workstation = false,
 }) {
   const count = compact || layoutMode === "1" ? 1 : gridMode === "4" ? 4 : gridMode === "3" ? 3 : 2;
   const narrow = viewportWidth <= 760 && count > 1;
@@ -55,7 +55,7 @@ export default function WorkspaceGrid({
                 tf: syncCharts ? timeframe : panel.tf, setTf: syncCharts ? setMainTimeframe : panel.setTf,
                 livePrice: quote.price ?? null, quoteChange: quote.change ?? quote.changePercent ?? null,
                 secondary: index !== 0, chartStatus: panel.chartStatus, onStatusChange: panel.onStatusChange,
-                embedded: embeddedChart || count >= 3, hideToolbar: embeddedChart, dense: count === 2 && viewportWidth < 1800,
+                workstation, embedded: embeddedChart || count >= 3, hideToolbar: embeddedChart, dense: count === 2 && viewportWidth < 1800,
               })}
             </div>
           );

@@ -9,13 +9,15 @@ import {
   rankScannerRows,
 } from "../../utils/scannerNewsAdapters.js";
 import { formatPacificDateTime } from "../../utils/timeFormatters.js";
+import { parseNullableMarketNumber } from "../../utils/marketNumbers.js";
+import { normalizeJournalRecord } from "../../utils/journalAccounting.js";
 
 export function num(value, fallback = 0) {
-  const parsed = Number(String(value ?? "").replace(/[$,%+,]/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return parseNullableMarketNumber(value) ?? fallback;
 }
 
 export function money(value, digits = 2) {
+  if (parseNullableMarketNumber(value) === null) return "Unavailable";
   return `$${num(value).toLocaleString(undefined, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
@@ -23,6 +25,7 @@ export function money(value, digits = 2) {
 }
 
 export function pct(value, digits = 2) {
+  if (parseNullableMarketNumber(value) === null) return "Unavailable";
   const parsed = num(value);
   return `${parsed >= 0 ? "+" : ""}${parsed.toFixed(digits)}%`;
 }
@@ -42,6 +45,7 @@ export function nullableMoveOf(row) {
 }
 
 export function toneColor(theme, value) {
+  if (parseNullableMarketNumber(value) === null) return theme.muted;
   return num(value) >= 0 ? theme.green : theme.red;
 }
 
@@ -137,7 +141,7 @@ export function buildStocks(liveStocks, scannerStocks, selectedStockData, select
     });
   }
 
-  return Array.from(bySymbol.values()).slice(0, 16);
+  return Array.from(bySymbol.values());
 }
 
 export function makeNews(news, selectedSymbol) {
@@ -145,13 +149,14 @@ export function makeNews(news, selectedSymbol) {
     .map((item, index) => normalizeNewsRow(item, index, selectedSymbol))
     .filter((item) => item?.headline);
   const fallback = createNormalizedNewsFallback(selectedSymbol);
-  return (real.length ? real : fallback).slice(0, 12);
+  return real.length ? real : fallback;
 }
 
 export function makeJournalTrades(entries) {
   return (entries || []).map((entry) => {
-    const pnl = num(entry.pnl ?? entry.netPnl ?? entry.resultAmount, 0);
+    const record = normalizeJournalRecord(entry);
     return {
+      ...record,
       id: entry.id,
       date: entry.createdAt
         ? formatPacificDateTime(entry.createdAt, { fallback: "Not recorded" })
@@ -159,18 +164,18 @@ export function makeJournalTrades(entries) {
       symbol: entry.symbol || "Unspecified",
       setup: entry.setup || entry.tags || "Review",
       side: entry.bias || entry.side || "Long",
-      qty: entry.quantity || entry.qty || 0,
-      entry: entry.entryPrice || entry.entry || "Not recorded",
-      exit: entry.exitPrice || entry.exit || "Not recorded",
-      pnl,
-      pnlPct: entry.pnlPct || "Not recorded",
-      r: entry.rMultiple || entry.r || "Not recorded",
+      qty: entry.quantity ?? entry.qty ?? "Not recorded",
+      entry: entry.entryPrice ?? entry.entry ?? "Not recorded",
+      exit: entry.exitPrice ?? entry.exit ?? "Not recorded",
+      pnl: record.pnl,
+      pnlPct: entry.pnlPct ?? "Not recorded",
+      r: entry.rMultiple ?? entry.r ?? "Not recorded",
       hold: entry.holdTime || "Not recorded",
-      outcome: entry.result || entry.outcome || "Review",
+      outcome: record.eligible ? record.pnl > 0 ? "Win" : record.pnl < 0 ? "Loss" : "Breakeven" : record.recordType === "note" ? "Note" : record.status === "open" ? "Open" : "Incomplete",
       tag: entry.tags || entry.setup || "Review",
       notes: entry.notes || entry.review || "No notes",
     };
-  }).slice(0, 12);
+  });
 }
 
 export function makeReplayTrades(replayTrades, selectedSymbol) {

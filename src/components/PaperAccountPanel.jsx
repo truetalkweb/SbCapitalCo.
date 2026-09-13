@@ -1,3 +1,4 @@
+import { money } from "./premium/premiumWorkspaceData.js";
 export default function PaperAccountPanel({
   theme,
   selectedStock,
@@ -76,7 +77,7 @@ export default function PaperAccountPanel({
                 fontWeight: 900,
               }}
             >
-              ${Number(totalUnrealizedPnL).toFixed(2)}
+              {money(totalUnrealizedPnL)}
             </span>
           </div>
         </div>

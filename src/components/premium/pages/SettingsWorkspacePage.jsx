@@ -193,7 +193,7 @@ export default function SettingsWorkspacePage({
     const showSecondaryColumn = ["General", "Notifications", "Data & Connections", "Security"].includes(settingsTab);
     const useSplitColumns = settingsTab === "General" && !isNarrowWorkspace;
     return (
-      <div style={page}>
+      <div className="terminal-page" style={page}>
         <SectionTitle theme={theme} title="Settings" />
         <PremiumTabs theme={theme} tabs={["General", "Trading", "Layout", "Notifications", "Data & Connections", "Security"]} active={settingsTab} onChange={setSettingsTab} />
         <div style={{ display: "grid", gridTemplateColumns: useSplitColumns ? "minmax(0, 1.05fr) minmax(360px, 0.9fr)" : "minmax(0, 1fr)", gap: 10, marginTop: 12 }}>

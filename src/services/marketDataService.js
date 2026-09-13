@@ -41,6 +41,8 @@ class MarketDataService {
     this.status = "BACKEND";
     this.handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
         clearTimeout(this.connectTimer);
         this.connectTimer = null;
         this.closeEventSource();
@@ -114,7 +116,7 @@ class MarketDataService {
 
     const streamKey = symbols.join(",");
 
-    if (!ENABLE_QUOTE_SSE) {
+    if (!ENABLE_QUOTE_SSE || symbols.length > 20) {
       this.activeStreamKey = streamKey;
       this.closeEventSource();
 
@@ -130,6 +132,7 @@ class MarketDataService {
     }
 
     clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.clearPollTimer();
     this.closeEventSource();
     this.activeStreamKey = streamKey;
@@ -175,11 +178,16 @@ class MarketDataService {
   }
 
   startRestFallback(delayMs = 0) {
-    clearTimeout(this.reconnectTimer);
-    this.setStatus("BACKEND");
+    this.setStatus(this.reconnectAttempt ? "RECONNECTING" : "BACKEND");
 
     clearTimeout(this.pollTimer);
     if (document.visibilityState === "hidden") return;
+    if (ENABLE_QUOTE_SSE && this.subscribedSymbols.size <= 20 && !this.reconnectTimer) {
+      this.reconnectTimer = window.setTimeout(() => {
+        this.reconnectTimer = null;
+        this.connect();
+      }, STREAM_RECONNECT_MAX_MS);
+    }
     this.pollTimer = window.setTimeout(() => {
       this.pollQuotes();
     }, delayMs);
@@ -193,35 +201,45 @@ class MarketDataService {
     this.pollInFlight = true;
     const controller = new AbortController();
     this.pollAbortController = controller;
+    const batches = Array.from({ length: Math.ceil(symbols.length / 20) }, (_, index) => symbols.slice(index * 20, (index + 1) * 20));
+    let timedOut = false;
+    const deadline = window.setTimeout(() => { timedOut = true; controller.abort(); }, 8000 * Math.ceil(batches.length / 3));
 
     try {
-      const url = new URL(`${DEFAULT_BROKER_API_URL}/api/questrade/quotes`);
-      url.searchParams.set("symbols", symbols.join(","));
-      const response = await fetch(url.toString(), { signal: controller.signal });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const payload = await response.json();
-      this.handleQuotePayload({
-        ...payload,
-        stream: {
-          transport: "rest",
-          mode: "backend-poll",
-        },
-      });
-      this.setStatus(payload.delayed ? "DELAYED" : "BACKEND");
+      let nextBatch = 0;
+      let delayed = false;
+      let failed = false;
+      const worker = async () => {
+        while (nextBatch < batches.length && !controller.signal.aborted) {
+          const batch = batches[nextBatch++];
+          try {
+            const url = new URL(`${DEFAULT_BROKER_API_URL}/api/questrade/quotes`);
+            url.searchParams.set("symbols", batch.join(","));
+            const response = await fetch(url.toString(), { signal: controller.signal });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const payload = await response.json();
+            if (controller.signal.aborted) return;
+            delayed ||= Boolean(payload.delayed);
+            this.handleQuotePayload({ ...payload, stream: { transport: "rest", mode: "backend-poll" } });
+          } catch {
+            failed = true;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(3, batches.length) }, worker));
+      if (failed || controller.signal.aborted) throw new Error("Quote batch failed");
+      this.setStatus(delayed ? "DELAYED" : "BACKEND");
       this.reconnectAttempt = 0;
     } catch {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted && !timedOut) return;
       const attempt = Math.min(this.reconnectAttempt + 1, 8);
       this.reconnectAttempt = attempt;
       this.setStatus("RECONNECTING");
     } finally {
+      window.clearTimeout(deadline);
       const isCurrentRequest = this.pollAbortController === controller;
       if (isCurrentRequest) this.pollAbortController = null;
-      this.pollInFlight = false;
+      if (isCurrentRequest) this.pollInFlight = false;
 
       if (isCurrentRequest && document.visibilityState !== "hidden") {
         const retryDelay = Math.min(
@@ -247,7 +265,7 @@ class MarketDataService {
     if (!quotes.length) return;
 
     this.reconnectAttempt = 0;
-    this.setStatus(payload.delayed ? "DELAYED" : "STREAM");
+    this.setStatus(payload.delayed ? "DELAYED" : payload.stream?.transport === "rest" ? "BACKEND" : "STREAM");
 
     quotes.forEach((quote) => this.emitQuote(quote, payload));
   }

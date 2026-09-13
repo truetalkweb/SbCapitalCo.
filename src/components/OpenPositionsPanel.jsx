@@ -1,3 +1,5 @@
+import { buildPositionRows } from "../utils/portfolioAccounting.js";
+import { money } from "./premium/premiumWorkspaceData.js";
 export default function OpenPositionsPanel({
   theme,
   positions,
@@ -27,15 +29,9 @@ export default function OpenPositionsPanel({
           <div>New paper fills will appear here with quantity, average cost, and unrealized P&L.</div>
         </div>
       ) : (
-        Object.entries(positions).map(([symbol, pos]) => {
-          const live =
-            Number(
-              allSymbols.find((s) => s.symbol === symbol)?.price || 0
-            );
-
-          const unrealized =
-            (live - pos.average) * pos.quantity;
-
+        buildPositionRows(positions, allSymbols).map((pos) => {
+          const symbol = pos.symbol;
+          const unrealized = pos.unrealizedPnl;
           return (
             <div
               key={symbol}
@@ -48,11 +44,11 @@ export default function OpenPositionsPanel({
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
                 <span style={{ fontWeight: 900 }}>{symbol}</span>
-                <span style={{ color: theme.muted }}>Qty {pos.quantity}</span>
+                <span style={{ color: theme.muted }}>Qty {pos.qty}</span>
               </div>
 
               <div>
-                Avg ${pos.average.toFixed(2)} / Unrealized{" "}
+                Avg {money(pos.avg)} / Unrealized{" "}
                 <span
                   style={{
                     color:
@@ -62,7 +58,7 @@ export default function OpenPositionsPanel({
                     fontWeight: 900,
                   }}
                 >
-                  ${unrealized.toFixed(2)}
+                  {money(unrealized)}
                 </span>
               </div>
             </div>

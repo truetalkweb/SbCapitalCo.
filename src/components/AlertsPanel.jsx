@@ -31,9 +31,9 @@ export default function AlertsPanel({
         }}
       >
         <span>
-          <b>{alert.symbol}</b> {alert.direction} ${alert.trigger.toFixed(2)}{" "}
+          <b>{alert.symbol}</b> {alert.direction} ${Number(alert.trigger).toFixed(2)}{" "}
           <b style={{ color: alert.active ? theme.green : theme.red }}>
-            {alert.active ? "ACTIVE" : `TRIGGERED ${alert.triggeredAt || ""}`}
+            {alert.active ? "ACTIVE" : alert.triggeredAt ? `TRIGGERED ${alert.triggeredAt}` : "PAUSED"}
           </b>
         </span>
 
@@ -50,6 +50,7 @@ export default function AlertsPanel({
         Price Alerts
       </h3>
 
+      <p style={{color:theme.muted,fontSize:12}}>Monitoring requires this terminal to remain open and visible. Conditions evaluate at or above/below the target.</p>
       <div
         style={{
           display: "grid",

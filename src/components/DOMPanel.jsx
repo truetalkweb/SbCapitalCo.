@@ -26,6 +26,7 @@ export default function DOMPanel({
         <span style={{ textAlign: "right" }}>Ask</span>
       </div>
 
+      {!level2.length && <p style={{color:theme.muted}}>Market depth is not connected. No order book is inferred from last price.</p>}
       {ladderRows.map((row) => (
         <div
           key={row.price}
@@ -94,11 +95,11 @@ export default function DOMPanel({
         <div>Volume: {selectedStockData?.volume}</div>
         <div>
           Bid: $
-          {(Number(selectedStockData?.price || 0) - 0.05).toFixed(2)}
+          {selectedStockData?.bid ?? "Unavailable"}
         </div>
         <div>
           Ask: $
-          {(Number(selectedStockData?.price || 0) + 0.05).toFixed(2)}
+          {selectedStockData?.ask ?? "Unavailable"}
         </div>
       </div>
 

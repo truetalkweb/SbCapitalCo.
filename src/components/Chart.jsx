@@ -97,15 +97,16 @@ function Chart({
   brokerApiUrl = DEFAULT_BROKER_API_URL,
   trendTools = {},
   isDark = true,
+  workstation = false,
 }) {
   const chartSymbol = String(symbol || "").trim().toUpperCase() || "SPY";
   const chartTheme = isDark
     ? {
-        background: "#050b14",
+        background: workstation ? "#060c10" : "#050b14",
         text: "#d1d4dc",
         muted: "#8a94a6",
         faint: "#5f6b7a",
-        grid: "rgba(31,41,55,0.55)",
+        grid: workstation ? "rgba(23,36,43,0.38)" : "rgba(31,41,55,0.55)",
         border: "#1f2937",
         overlay: "rgba(5,11,20,0.76)",
         overlayStrong: "rgba(5,11,20,0.92)",
@@ -684,12 +685,12 @@ function Chart({
           zIndex: 5,
           padding: "6px 8px",
           borderRadius: "6px",
-          background: chartTheme.overlay,
-          border: `1px solid ${chartTheme.overlayBorder}`,
+          background: workstation ? "transparent" : chartTheme.overlay,
+          border: workstation ? "0" : `1px solid ${chartTheme.overlayBorder}`,
           color: chartTheme.text,
           fontSize: "11px",
           lineHeight: "1.35",
-          backdropFilter: "blur(8px)",
+          backdropFilter: workstation ? "none" : "blur(8px)",
           pointerEvents: "none",
         }}
       >

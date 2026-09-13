@@ -10,6 +10,14 @@ export function shouldTriggerPriceAlert(alert, quote, enabled = true, now = Date
   return alert.direction === "below" ? price <= trigger : price >= trigger;
 }
 
+export function makePriceAlert({ symbol, trigger, direction = "above" }) {
+  const cleanSymbol = String(symbol || "").trim().toUpperCase();
+  const price = Number(trigger);
+  if (!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(cleanSymbol) || !Number.isFinite(price) || price <= 0 || !["above", "below"].includes(direction)) return null;
+  return { id: crypto.randomUUID(), symbol: cleanSymbol, trigger: price, direction,
+    active: true, createdAt: new Date().toISOString(), triggeredAt: null, history: [] };
+}
+
 function playTerminalAlertSound() {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -38,42 +46,16 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
   const [alertDirection, setAlertDirection] = useState("above");
   const [alertNotifications, setAlertNotifications] = useState(false);
 
-  const addPriceAlert = useCallback(() => {
-    const trigger = Number(alertInput);
-
-    if (!trigger || trigger <= 0) return;
-
-    const nextAlert = {
-      id: Date.now(),
-      symbol: selectedStock,
-      trigger,
-      direction: alertDirection,
-      active: true,
-      createdAt: new Date().toISOString(),
-      triggeredAt: null,
-      history: [],
-    };
-
-    setAlerts((prev) => [nextAlert, ...prev.slice(0, 8)]);
-    setAlertInput("");
-  }, [alertDirection, alertInput, selectedStock]);
-
   const createPriceAlert = useCallback(({ symbol = selectedStock, trigger, direction = "above" }) => {
-    const cleanTrigger = Number(trigger);
-    const cleanSymbol = String(symbol || "").trim().toUpperCase();
-    if (!cleanSymbol || !Number.isFinite(cleanTrigger) || cleanTrigger <= 0) return false;
-    setAlerts((prev) => [{
-      id: crypto.randomUUID(),
-      symbol: cleanSymbol,
-      trigger: cleanTrigger,
-      direction: direction === "below" ? "below" : "above",
-      active: true,
-      createdAt: new Date().toISOString(),
-      triggeredAt: null,
-      history: [],
-    }, ...prev].slice(0, 100));
+    const next = makePriceAlert({ symbol, trigger, direction });
+    if (!next) return false;
+    setAlerts(prev => [next, ...prev]);
     return true;
   }, [selectedStock]);
+
+  const addPriceAlert = useCallback(() => {
+    if (createPriceAlert({ symbol: selectedStock, trigger: alertInput, direction: alertDirection })) setAlertInput("");
+  }, [alertDirection, alertInput, createPriceAlert, selectedStock]);
 
   const updateAlert = useCallback((id, updates) => {
     setAlerts((prev) => prev.map((alert) => {
@@ -164,7 +146,7 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
               marketTimestamp: quote.asOf,
             },
             ...(Array.isArray(alert.history) ? alert.history : []),
-          ].slice(0, 20),
+          ],
         };
       });
 

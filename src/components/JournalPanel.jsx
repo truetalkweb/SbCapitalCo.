@@ -1,3 +1,4 @@
+import { money } from "./premium/premiumWorkspaceData.js";
 const gradeColors = {
   A: "#00c896",
   B: "#22c55e",
@@ -159,7 +160,7 @@ export default function JournalPanel({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: "6px" }}>
         {[
           ["Realized", `$${Number(realizedPnL || 0).toFixed(2)}`, Number(realizedPnL) >= 0 ? theme.green : theme.red],
-          ["Open P&L", `$${Number(totalUnrealizedPnL || 0).toFixed(2)}`, Number(totalUnrealizedPnL) >= 0 ? theme.green : theme.red],
+          ["Open P&L", money(totalUnrealizedPnL), Number(totalUnrealizedPnL) >= 0 ? theme.green : theme.red],
           ["Win Rate", `${winRate}%`, theme.blue],
           ["Daily Score", `${dailyScore}/100`, dailyScore >= 70 ? theme.green : dailyScore >= 45 ? theme.amber : theme.red],
         ].map(([label, value, color]) => (

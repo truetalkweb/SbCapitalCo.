@@ -158,6 +158,13 @@ export const layoutPresets = {
 };
 
 export const defaultJournalDraft = {
+  recordType: "note",
+  status: "note",
+  currency: "USD",
+  quantity: "",
+  entryPrice: "",
+  exitPrice: "",
+  fees: "",
   symbol: "NVDA",
   bias: "Long",
   setup: "Breakout",

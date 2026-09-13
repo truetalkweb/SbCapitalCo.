@@ -18,9 +18,9 @@ import {
   toneColor,
 } from "./premiumWorkspaceData";
 
-export function SeriesSparkline({ theme, values = [], height = 240 }) {
+export function SeriesSparkline({ theme, values = [], height = 240, cumulative = false }) {
   if (!values.length) return <div style={{ height, display: "grid", placeItems: "center", color: theme.muted }}>No recorded series</div>;
-  const points = [0, ...values.reduce((series, value) => [...series, series[series.length - 1] + Number(value || 0)], [0]).slice(1)];
+  const points = cumulative ? values : [0, ...values.reduce((series, value) => [...series, series[series.length - 1] + Number(value || 0)], [0]).slice(1)];
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;

@@ -1,11 +1,15 @@
+import "./workspaceControls.css";
+import { useWatchlistCollections } from "../../hooks/useWatchlistCollections.js";
 import { Star } from "lucide-react";
+import { buildPositionRows } from "../../utils/portfolioAccounting.js";
+import { journalStatistics } from "../../utils/journalAccounting.js";
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { usePremiumScannerRows } from "../../hooks/usePremiumScannerRows";
 import { usePremiumWorkspaceActions } from "../../hooks/usePremiumWorkspaceActions";
 import { usePremiumWorkspaceState } from "../../hooks/usePremiumWorkspaceState";
 import { usePremiumWorkspaceViews } from "../../hooks/usePremiumWorkspaceViews";
-import DashboardMarketIntelligence from "./DashboardMarketIntelligence";
+import WorkstationDashboard from "../workstation/WorkstationDashboard";
 import {
   formatCompactNumber,
   formatMultiple,
@@ -67,7 +71,6 @@ export default function PremiumWorkspace({
   scannerGroups = {},
   scannerMeta = {},
   news,
-  newsMeta = {},
   marketIndexes = [],
   brokerApiUrl = "",
   alerts,
@@ -86,11 +89,13 @@ export default function PremiumWorkspace({
   setOrderSide,
   setOrderConfirmed,
   orderMessage,
+  workspaceOrderReview,
+  setWorkspaceOrderReview,
   setOrderMessage,
   setPremiumDockTab,
   selectMainSymbol,
-  addSymbolToWatchlist,
-  removeWatchlistSymbol,
+  addSymbolToWatchlist: addGlobalWatchlistSymbol,
+  removeWatchlistSymbol: removeGlobalWatchlistSymbol,
   scannerTab,
   setScannerTab,
   scannerPresets = [],
@@ -160,6 +165,10 @@ export default function PremiumWorkspace({
   onOpenHelp,
   onOpenIssueReport,
 }) {
+  const collections = useWatchlistCollections({ preferences: premiumPreferences, setPreferences: setPremiumPreferences, liveStocks,
+    addGlobal: addGlobalWatchlistSymbol, removeGlobal: removeGlobalWatchlistSymbol });
+  const addSymbolToWatchlist = collections.add;
+  const removeWatchlistSymbol = collections.remove;
   const isNarrowWorkspace = viewportWidth <= 900;
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock);
   const selected = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
@@ -167,7 +176,7 @@ export default function PremiumWorkspace({
   const dashboard = useDashboardData({
     selectedStock,
     selectedStockData,
-    liveStocks,
+    liveStocks: collections.rows,
     scannerStocks,
     news,
     positions,
@@ -183,29 +192,16 @@ export default function PremiumWorkspace({
     symbol: order.symbol || selectedStock,
     side: order.side || order.orderSide || "BUY",
     type: order.type || order.orderType || "LIMIT",
-    qty: order.qty || order.quantity || quantity,
-    price: order.price || order.limitPrice || num(selected.price).toFixed(2),
+    qty: num(order.qty ?? order.quantity, null),
+    price: num(order.price ?? order.limitPrice, null),
     status: order.status || "REVIEW",
-    filled: order.filled || 0,
-    remaining: order.remaining || 0,
+    filled: num(order.filled, null),
+    remaining: num(order.remaining, null),
+    source: order.source || "Workspace / paper",
     tif: order.tif || "DAY",
     id: order.id || `LOCAL-${index + 1}`,
   }));
-  const positionRows = Object.keys(positions || {}).length
-    ? Object.entries(positions).map(([symbol, pos]) => ({
-        symbol,
-        side: Number(pos.quantity || 0) >= 0 ? "LONG" : "SHORT",
-        qty: Math.abs(Number(pos.quantity || 0)),
-        avg: Number(pos.average || pos.avgPrice || 0),
-        last: num(allSymbols?.find((row) => row.symbol === symbol)?.price, Number(pos.average || 0)),
-        exposure: "Not calculated",
-        risk: pos.riskScore || "Context",
-        beta: pos.beta ?? null,
-        var1d: pos.var1d ?? null,
-        dayPnl: Number(pos.dayPnl ?? pos.unrealizedPnl ?? 0),
-        totalPnl: Number(pos.totalPnl ?? pos.unrealizedPnl ?? 0),
-      }))
-    : [];
+  const positionRows = buildPositionRows(positions, allSymbols);
   const alertRows = alerts?.length
     ? alerts.map((alert) => ({
         id: alert.id,
@@ -222,7 +218,7 @@ export default function PremiumWorkspace({
     : [];
   const journalRows = makeJournalTrades(journalEntries);
   const replayRows = makeReplayTrades(replayTrades, selectedStock);
-  const journalNet = journalRows.reduce((total, row) => total + num(row.pnl), 0);
+  const journalNet = journalStatistics(journalRows).net;
   const replayNet = num(replayStats?.netPnL, 0);
   const replayWinRate = replayStats?.winRate || "0.00";
   const workspaceState = usePremiumWorkspaceState();
@@ -443,8 +439,12 @@ export default function PremiumWorkspace({
     openChart,
     prepareOrderReview,
     prepareReviewAction,
+    review, dismissReview,
   } = usePremiumWorkspaceActions({
+    review: workspaceOrderReview,
+    setReview: setWorkspaceOrderReview,
     selectedSymbol: selected.symbol,
+    orderRows, positionRows, quantity, referencePrice: selected.price,
     selectMainSymbol,
     setActiveWorkspace,
     setOrderConfirmed,
@@ -454,6 +454,7 @@ export default function PremiumWorkspace({
   });
 
   const page = {
+    "--control-bg": theme.panel2, "--control-text": theme.text, "--control-border": theme.border, "--control-focus": theme.blue,
     minHeight: 0,
     height: "100%",
     overflow: "auto",
@@ -686,6 +687,7 @@ export default function PremiumWorkspace({
     return (
       <WatchlistWorkspacePage
         {...{
+          collections,
           addSymbolToWatchlist,
           alertRows,
           journalRows,
@@ -718,7 +720,7 @@ export default function PremiumWorkspace({
           newsView,
           page,
           prepareReviewAction,
-          scannerTable,
+          watchlistHeadlines: headlines.filter(row => dashboard.watchlistRows.some(stock => stock.symbol === row.symbol)),
           selectMainSymbol,
           selected,
           selectedStory,
@@ -726,7 +728,7 @@ export default function PremiumWorkspace({
           setNewsSearch,
           setNewsView,
           setSelectedNewsId,
-          stocks,
+
           theme,
         }}
       />
@@ -771,6 +773,7 @@ export default function PremiumWorkspace({
       <OrdersWorkspacePage
         {...{
           mainTwoCol,
+          review, dismissReview,
           orderMessage,
           orderSearch,
           orderView,
@@ -990,49 +993,13 @@ export default function PremiumWorkspace({
 
 
   if (activeWorkspace === "dashboard") {
-    return (
-      <div
-        onWheelCapture={(event) => {
-          const target = event.target;
-          if (
-            target instanceof Element &&
-            target.closest("canvas") &&
-            Math.abs(event.deltaY) > Math.abs(event.deltaX)
-          ) {
-            event.preventDefault();
-            event.currentTarget.scrollTop += event.deltaY;
-          }
-        }}
-        style={{
-          ...page,
-          overscrollBehavior: "contain",
-          WebkitOverflowScrolling: "touch",
-        }}
-      >
-        <DashboardMarketIntelligence
-          theme={theme}
-          viewportWidth={viewportWidth}
-          chart={renderChartGrid?.({ layoutMode: "1" })}
-          marketIndexes={marketIndexes}
-          brokerApiUrl={brokerApiUrl}
-          breadthRows={allSymbols}
-          scannerGroups={scannerGroups}
-          scannerMeta={scannerMeta}
-          news={dashboard.newsRows.length ? dashboard.newsRows : headlines}
-          newsMeta={newsMeta}
-          selected={dashboard.selected}
-          watchlist={dashboard.watchlistRows}
-          onSelect={(symbol, row) =>
-            selectMainSymbol?.(symbol, row || null, "dashboard-intelligence")
-          }
-          onOpenChart={(symbol) => {
-            selectMainSymbol?.(symbol);
-            setActiveWorkspace?.("charts");
-          }}
-          onAddWatch={addSymbolToWatchlist}
-        />
-      </div>
-    );
+    return <WorkstationDashboard selected={dashboard.selected} chart={renderChartGrid?.({ layoutMode: "1", embeddedChart: true })}
+      account={accountSummary} marketIndexes={marketIndexes} positions={positionRows} orders={orderRows} rawOrders={orders}
+      news={dashboard.newsRows.filter(row => !row.fallback && !row.isSynthetic)} alerts={alerts} quantity={quantity} setQuantity={setQuantity}
+      onReview={prepareOrderReview} onSelect={selectMainSymbol} onNavigate={setActiveWorkspace} onAddWatch={addSymbolToWatchlist}
+      watched={collections.active.symbols.includes(selectedStock)} timeframe={timeframe} setTimeframe={setTimeframe}
+      indicators={chartIndicators} setIndicators={setChartIndicators} takeScreenshot={takeScreenshot} toggleAlert={toggleAlert}
+      preferences={premiumPreferences} setPreference={updatePremiumPreference} />;
   }
 
   return (

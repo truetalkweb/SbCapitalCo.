@@ -1,3 +1,4 @@
+import { buildPositionRows, sumKnown } from "../utils/portfolioAccounting.js";
 import { useMemo } from "react";
 import { dashboardMockMarketIndexes } from "../mocks/dashboardMockData";
 import {
@@ -146,44 +147,25 @@ function normalizeNews(news = [], selectedSymbol) {
     impact: item.impact || "Not classified",
     summary: item.summary || item.description || "",
     url: item.url || item.link,
+    fallback: Boolean(item.fallback),
+    isSynthetic: Boolean(item.isSynthetic || item.synthetic),
   }));
-  return realRows.slice(0, 12);
+  return realRows;
 }
 
 function normalizePositions(positions, allRows) {
-  const quoteBySymbol = new Map(allRows.map((row) => [row.symbol, row]));
-  const objectRows = Object.keys(positions || {}).length
-    ? Object.entries(positions).map(([symbol, pos]) => {
-        const quote = quoteBySymbol.get(cleanSymbol(symbol)) || {};
-        const quantity = Math.abs(asNumber(pos.quantity ?? pos.qty, 0));
-        const averagePrice = asNumber(pos.average ?? pos.avgPrice ?? pos.averagePrice, quote.price || 0);
-        const lastPrice = asNumber(quote.price ?? pos.lastPrice, averagePrice);
-        const direction = asNumber(pos.quantity ?? pos.qty, 0) >= 0 ? "LONG" : "SHORT";
-        const pnl = asNumber(pos.pnl ?? pos.unrealizedPnl, (lastPrice - averagePrice) * quantity);
-        return {
-          symbol: cleanSymbol(symbol),
-          side: direction,
-          quantity,
-          averagePrice,
-          lastPrice,
-          pnl,
-          pnlPercent: averagePrice ? ((lastPrice - averagePrice) / averagePrice) * 100 : 0,
-          dayPnl: asNumber(pos.dayPnl, pnl),
-        };
-      })
-    : [];
-
-  return objectRows;
+  return buildPositionRows(positions, allRows).map(row => ({ ...row, quantity: row.qty, averagePrice: row.avg, lastPrice: row.last, pnl: row.unrealizedPnl,
+    pnlPercent: row.avg > 0 && row.last !== null ? ((row.last - row.avg) / row.avg) * (row.qty < 0 ? -100 : 100) : null }));
 }
 
 function parseAccountSummary(accountSummary, realizedPnL, totalUnrealizedPnL) {
   const rowMap = new Map((accountSummary?.rows || []).map((row) => [row.label, row.value]));
-  const dailyPnl = asNumber(realizedPnL, 0) + asNumber(totalUnrealizedPnL, 0);
+  const dailyPnl = sumKnown([asNumber(realizedPnL, 0), totalUnrealizedPnL]);
   const buyingPower = positiveNumberOrNull(rowMap.get("Buying Power"));
   const netLiquidation = positiveNumberOrNull(rowMap.get("Net Liquidation"));
   return {
     buyingPower,
-    dailyPnl: dailyPnl || null,
+    dailyPnl,
     dailyPnlPercent: null,
     netLiquidation,
     marginUsed: positiveNumberOrNull(rowMap.get("Margin Used")),

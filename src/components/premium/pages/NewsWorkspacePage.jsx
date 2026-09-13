@@ -1,3 +1,6 @@
+import { useState } from "react";
+import RecordPagination from "../RecordPagination";
+import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { Star } from "lucide-react";
 import { ActionButton, FilterBar, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
 
@@ -10,26 +13,35 @@ export default function NewsWorkspacePage({
       newsView,
       page,
       prepareReviewAction,
-      scannerTable,
+      watchlistHeadlines = [],
       selectMainSymbol,
       selected,
-      selectedStory,
+      selectedStory: inputStory,
       setActiveWorkspace,
       setNewsSearch,
       setNewsView,
       setSelectedNewsId,
-      stocks,
+
       theme
 }) {
+    const [source, setSource] = useState("all");
+    const [impact, setImpact] = useState("all");
+    const filtered = newsRows.filter(row => (source === "all" || row.source === source) && (impact === "all" || row.impact === impact));
+    const selectedStory = filtered.find(row=>row.id===inputStory?.id) || filtered[0] || null;
+    const pagination = useRecordPage(filtered, 25, newsSearch + newsView + source + impact);
     return (
-      <div style={page}>
+      <div className="terminal-page" style={page}>
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
                 <SectionTitle theme={theme} title="News" subtitle="Track market-moving headlines, catalysts, and company news." action={newsCatalystHighlights ? <StatusPill theme={theme} tone="good">Catalyst highlights on</StatusPill> : null} />
                 <PremiumTabs theme={theme} tabs={["Top News", "Market", "Stocks", "Earnings", "Macro", "Analyst", "Crypto", "Watchlist"]} active={newsView} onChange={setNewsView} />
-                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." value={newsSearch} onSearchChange={setNewsSearch} items={["Impact: All", "Source: All", "Sector: All", "Time: Today"]} /></div>
+                <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search news..." value={newsSearch} onSearchChange={setNewsSearch} items={[]} /></div>
+              </div>
+              <div style={{padding:12,display:"flex",gap:12,color:theme.muted}}>
+                <label>Source <select aria-label="News source" value={source} onChange={event=>setSource(event.target.value)}><option value="all">All sources</option>{[...new Set(newsRows.map(row=>row.source))].map(value=><option key={value}>{value}</option>)}</select></label>
+                <label>Impact <select aria-label="News impact" value={impact} onChange={event=>setImpact(event.target.value)}><option value="all">All impact</option>{[...new Set(newsRows.map(row=>row.impact))].map(value=><option key={value}>{value}</option>)}</select></label>
               </div>
               <PremiumTable
                 theme={theme}
@@ -67,18 +79,21 @@ export default function NewsWorkspacePage({
                   { key: "impact", label: "Impact", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.impact === "High" ? "bad" : "warn"}>{row.impact}</StatusPill> },
                   { key: "sentiment", label: "Sentiment", width: "100px", color: (row) => row.sentiment === "Bearish" ? theme.red : theme.green },
                 ]}
-                rows={newsRows}
+                rows={pagination.rows}
                 selectedKey={selectedStory?.id}
                 keyField="id"
                 emptyMessage={`No ${newsView.toLowerCase()} headlines match the current search.`}
                 onSelect={(row) => {
                   setSelectedNewsId(row.id);
                   if (row.symbol) selectMainSymbol?.(row.symbol, row, "news-row");
-                  if (row.url) window.open(row.url, "_blank", "noopener,noreferrer");
+
                 }}
               />
             </PremiumCard>
-            <PremiumCard theme={theme} title="Watchlist News">{scannerTable(stocks.slice(0, 4))}</PremiumCard>
+            <RecordPagination theme={theme} state={pagination} label="headlines" />
+            <PremiumCard theme={theme} title="Watchlist News"><PremiumTable theme={theme} keyField="id" columns={[
+              {key:"symbol",label:"Symbol",width:"90px"},{key:"headline",label:"Headline",width:"2fr"},{key:"source",label:"Source",width:"120px"},
+            ]} rows={watchlistHeadlines} onSelect={row=>{ setNewsView("Watchlist"); setNewsSearch(""); setSource("all"); setImpact("all"); setSelectedNewsId(row.id); if(row.symbol)selectMainSymbol?.(row.symbol,row,"news-row"); }} emptyMessage="No articles for this watchlist" /></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme} title="Selected Story" action={<Star size={18} color={newsCatalystHighlights ? theme.blue : theme.muted} fill={newsCatalystHighlights ? theme.blue : "none"} />}>
@@ -97,7 +112,7 @@ export default function NewsWorkspacePage({
               </div>
             </PremiumCard>
             <PremiumCard theme={theme} title="News Classification"><div style={{ padding: 14, display: "grid", gap: 9 }}>{[["Impact", selectedStory?.impact || "Not classified"], ["Sentiment", selectedStory?.sentiment || "Not classified"], ["Source", selectedStory?.source || "Unavailable"], ["Data mode", selectedStory?.fallback ? "Fallback context" : selectedStory ? "Provider article" : "Unavailable"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b>{b}</b></div>)}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Upcoming Events"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "90px" }, { key: "event", label: "Event", width: "1fr" }, { key: "impact", label: "Impact", width: "70px" }]} rows={[]} emptyMessage="Economic calendar is not connected" /></PremiumCard>
+
           </div>
         </div>
       </div>

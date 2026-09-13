@@ -1,11 +1,13 @@
+import { buildPositionRows, sumKnown } from "../utils/portfolioAccounting.js";
+import { parseNullableMarketNumber } from "../utils/marketNumbers.js";
 import { formatPacificTime } from "../utils/timeFormatters";
 
 const PAPER_STARTING_EQUITY = 100000;
 
-function money(value, fallback = "$0.00") {
-  const number = Number(value);
+function money(value, fallback = "Unavailable") {
+  const number = parseNullableMarketNumber(value);
 
-  if (!Number.isFinite(number)) return fallback;
+  if (number === null || !Number.isFinite(number)) return fallback;
 
   return number.toLocaleString(undefined, {
     style: "currency",
@@ -18,7 +20,7 @@ function money(value, fallback = "$0.00") {
 function percent(value) {
   const number = Number(value);
 
-  if (!Number.isFinite(number)) return "0.0%";
+  if (number === null || !Number.isFinite(number)) return "0.0%";
 
   return `${number.toFixed(1)}%`;
 }
@@ -56,18 +58,14 @@ export default function RiskDashboard({
   const maxOrder = Number(maxOrderValue || 0);
   const riskCap = Number(riskPerTrade || 0);
   const lossLimit = Number(dailyLossLimit || 0);
-  const paperPositions = Object.entries(positions).map(([symbol, position]) => {
-    const livePrice = Number(allSymbols.find((item) => item.symbol === symbol)?.price || position.average || 0);
-    const quantity = Number(position.quantity || 0);
-    const average = Number(position.average || 0);
-    const exposure = livePrice * quantity;
-    const costBasis = average * quantity;
-    const unrealized = (livePrice - average) * quantity;
+  const paperPositions = buildPositionRows(positions, allSymbols).map(row => {
+    const { symbol, qty: quantity, avg: average, last: livePrice, grossExposure: exposure, unrealizedPnl: unrealized } = row;
+    const costBasis = average === null || quantity === null ? null : average * quantity;
     const stopOrder = orders.find(
       (order) => order.symbol === symbol && Number(order.stopLoss || 0) > 0
     );
     const stopLoss = Number(stopOrder?.stopLoss || 0);
-    const openRisk = stopLoss > 0 ? Math.abs(livePrice - stopLoss) * quantity : 0;
+    const openRisk = stopLoss > 0 && livePrice !== null && quantity !== null ? Math.abs(livePrice - stopLoss) * Math.abs(quantity) : null;
     const limitUsage = maxOrder > 0 ? (exposure / maxOrder) * 100 : 0;
     const riskUsage = riskCap > 0 ? (openRisk / riskCap) * 100 : 0;
 
@@ -85,15 +83,13 @@ export default function RiskDashboard({
       riskUsage,
     };
   });
-  const paperCostBasis = paperPositions.reduce((total, item) => total + item.costBasis, 0);
-  const paperExposure = paperPositions.reduce((total, item) => total + item.exposure, 0);
-  const paperOpenRisk = paperPositions.reduce((total, item) => total + item.openRisk, 0);
-  const paperUnrealized = Number.isFinite(Number(totalUnrealizedPnL))
-    ? Number(totalUnrealizedPnL)
-    : paperPositions.reduce((total, item) => total + item.unrealized, 0);
+  const paperCostBasis = sumKnown(paperPositions.map(item=>item.costBasis));
+  const paperExposure = sumKnown(paperPositions.map(item=>item.exposure));
+  const paperOpenRisk = sumKnown(paperPositions.map(item=>item.openRisk));
+  const paperUnrealized = totalUnrealizedPnL;
   const paperRealized = Number(realizedPnL || 0);
-  const paperEquity = PAPER_STARTING_EQUITY + paperRealized + paperUnrealized;
-  const paperCash = PAPER_STARTING_EQUITY + paperRealized - paperCostBasis;
+  const paperEquity = sumKnown([PAPER_STARTING_EQUITY, paperRealized, paperUnrealized]);
+  const paperCash = paperCostBasis === null ? null : PAPER_STARTING_EQUITY + paperRealized - paperCostBasis;
   const paperBuyingPower = paperCash;
   const dailyLoss = Math.max(0, -paperRealized);
   const lossProgress = lossLimit > 0 ? Math.min(100, (dailyLoss / lossLimit) * 100) : 0;

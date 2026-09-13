@@ -123,7 +123,7 @@ export default function ReplayWorkspacePage({
       );
     };
     return (
-      <div style={page}>
+      <div className="terminal-page" style={page}>
         <div style={{ display: "grid", gap: 12, minHeight: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
             <SectionTitle theme={theme} title="REPLAY" subtitle="Practice trading with historical market data. All orders are simulated." />

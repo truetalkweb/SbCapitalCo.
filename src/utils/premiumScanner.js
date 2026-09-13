@@ -25,8 +25,6 @@ export function selectScannerUniverse({
   scannerTab,
   scannerGroups = {},
   scannerStocks = [],
-  selectedStockData,
-  selectedStock,
   fallbackStocks = [],
 }) {
   const rowsByTab = {
@@ -43,8 +41,8 @@ export function selectScannerUniverse({
     Premarket: scannerGroups.premarket,
   };
   const activeRows = rowsByTab[scannerTab] || scannerGroups.gainers || scannerStocks;
-  if (activeRows?.length) return buildStocks([], activeRows, selectedStockData, selectedStock);
-  if (scannerStocks?.length) return buildStocks([], scannerStocks, selectedStockData, selectedStock);
+  if (activeRows?.length) return buildStocks([], activeRows, null, activeRows[0].symbol);
+  if (scannerStocks?.length) return buildStocks([], scannerStocks, null, scannerStocks[0].symbol);
   return fallbackStocks;
 }
 

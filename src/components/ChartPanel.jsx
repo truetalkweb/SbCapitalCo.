@@ -52,6 +52,7 @@ export default function ChartPanel({
   advancedMode = false,
   premiumShell = false,
   embedded = false,
+  workstation = false,
   hideToolbar = false,
   dense = false,
 }) {
@@ -476,6 +477,7 @@ export default function ChartPanel({
             brokerApiUrl={brokerApiUrl}
             trendTools={trendTools}
             isDark={isDark}
+            workstation={workstation}
           />
         </Suspense>
       </div>

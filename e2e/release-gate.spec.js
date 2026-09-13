@@ -8,9 +8,39 @@ import { expect, test } from "@playwright/test";
 const fixtureUrl = (view, extra = "") => `/e2e/fixture/index.html?view=${view}${extra}`;
 const artifactDir = path.resolve("release-gate-artifacts");
 
+test("scanner pagination and export cover all 65 results and named presets do not overwrite",async({page})=>{
+  await page.goto(fixtureUrl("scanner","&largeScanner=1"));
+  const pagination=page.getByRole("navigation",{name:"scanner results pagination"});
+  await expect(pagination).toContainText("1–30 of 65");
+  await page.getByLabel("Scanner sort",{exact:true}).selectOption("symbol");
+  await pagination.getByRole("button",{name:"Next"}).click();
+  await expect(pagination).toContainText("31–60 of 65");
+  await expect(page.getByRole("row",{name:/Select T030/})).toBeVisible();
+  await pagination.getByRole("button",{name:"Next"}).click();
+  await expect(pagination).toContainText("61–65 of 65");
+  const pending=page.waitForEvent("download");await page.getByRole("button",{name:"Export all results",exact:true}).click();
+  const stream=await (await pending).createReadStream();let csv="";for await(const chunk of stream)csv+=chunk;
+  expect(csv.trim().split(/\r?\n/)).toHaveLength(66);expect(csv).toContain("T064");
+  await page.getByLabel("Scanner preset name",{exact:true}).fill("Morning");
+  await page.getByRole("button",{name:"Save Preset",exact:true}).click();
+  await page.getByLabel("Scanner preset name",{exact:true}).fill("Afternoon");
+  await page.getByRole("button",{name:"Save Preset",exact:true}).click();
+  await expect(page.getByLabel("Scanner preset",{exact:true}).locator("option")).toHaveText(["Default Scan","Morning","Afternoon"]);
+});
+
+test("news preview does not open a tab and watchlist news contains articles",async({page,context})=>{
+  await page.goto(fixtureUrl("news"));
+  await page.getByRole("row",{name:/Select AAPL/}).first().getByRole("cell").first().click();
+  await expect(page.getByRole("heading",{name:"Apple receives analyst upgrade before earnings",exact:true})).toBeVisible();
+  expect(context.pages()).toHaveLength(1);
+  const card=page.getByRole("heading",{name:"Watchlist News",exact:true}).locator("xpath=ancestor::section[1]");
+  await expect(card.getByRole("columnheader",{name:"Headline",exact:true})).toBeVisible();
+  await expect(card).toContainText("Nvidia extends AI infrastructure partnership");
+});
+
 const workspaces = {
-  dashboard: "Opportunity Board",
-  scanner: "Why Ranked",
+  dashboard: "Account Equity",
+  scanner: "Heuristic Ranking",
   "chart-analysis": "Chart Context",
   watchlist: "Watchlist Notes",
   news: "Selected Story",
@@ -18,9 +48,9 @@ const workspaces = {
   orders: "Order Summary",
   positions: "Position Activity",
   risk: "Risk Events",
-  performance: "Performance Summary",
+  performance: "Export Reports",
   replay: "Replay Controls",
-  journal: "Recent Trades",
+  journal: "Journal Records",
   settings: "Workspace Preferences",
 };
 
@@ -91,9 +121,9 @@ test("charts render nonblank canvases at usable dimensions", async ({ page }) =>
 test("scanner, news, watchlist, and order views keep detail state aligned", async ({ page }) => {
   const failures = guardRuntime(page);
 
-  await page.goto(fixtureUrl("dashboard"));
+  await page.goto(fixtureUrl("scanner"));
   await page.getByRole("tab", { name: "Losers", exact: true }).click();
-  await expect(page.getByRole("button", { name: "TSLA 186.32 -0.58%", exact: true })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Select TSLA/ })).toBeVisible();
 
   await page.goto(fixtureUrl("news"));
   await page.getByRole("tab", { name: "Earnings", exact: true }).click();
@@ -114,7 +144,8 @@ test("public trading shortcut remains review-only", async ({ page }) => {
   await page.goto(fixtureUrl("scanner"));
   await page.getByRole("button", { name: "Review Order", exact: true }).click();
   await expect(page.getByTestId("order-message")).toContainText("review prepared");
-  await expect(page.getByTestId("order-message")).toContainText("full order ticket");
+  await expect(page.getByTestId("order-message")).toContainText("review-only");
+  await expect(page.getByRole("region", { name: "Action review preview" })).toContainText("BUY draft");
   expect(attempts).toEqual([]);
 });
 
@@ -208,15 +239,14 @@ test("positions, risk, and journal secondary tabs expose real views", async ({ p
 
   await page.goto(fixtureUrl("positions"));
   await page.getByRole("tab", { name: "Allocations", exact: true }).click();
-  await expect(page.getByRole("columnheader", { name: "Portfolio %", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Gross weight %", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Closed Positions", exact: true }).click();
   await expect(page.getByText("No closed-position history", { exact: true })).toBeVisible();
 
   await page.goto(fixtureUrl("risk"));
   await page.getByRole("tab", { name: "Exposure", exact: true }).click();
   await expect(page.getByRole("columnheader", { name: "Portfolio Weight", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Stress Test", exact: true }).click();
-  await expect(page.getByText("Stress model unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Stress Test", exact: true })).toHaveCount(0);
 
   await page.goto(fixtureUrl("journal"));
   await page.getByRole("tab", { name: "Exports", exact: true }).click();
@@ -269,7 +299,7 @@ test("stateful workspace controls mutate watchlist, alerts, journal, replay, and
   await page.goto(fixtureUrl("journal"));
   await page.getByLabel("Journal setup").fill("Opening range breakout");
   await page.getByLabel("Journal review").fill("Held the planned stop and reviewed execution.");
-  await page.getByRole("button", { name: "Save Trade", exact: true }).click();
+  await page.getByRole("button", { name: "Save Record", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Opening range breakout", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Delete journal entry NVDA", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Opening range breakout", exact: true })).toHaveCount(0);
@@ -305,7 +335,8 @@ test("scanner filters, presets, and table keyboard selection remain functional",
   await page.getByLabel("Risk filter").selectOption("controlled");
   await page.getByRole("button", { name: "Save Preset", exact: true }).click();
   await expect(page.getByTestId("order-message")).toContainText("Scanner preset saved");
-  await expect(page.getByLabel("Scanner preset")).toHaveValue("custom");
+  const savedPresetId = await page.getByLabel("Scanner preset", { exact: true }).inputValue();
+  expect(savedPresetId).not.toBe("default");
 
   await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.getByLabel("Filter scanner by symbol or company")).toHaveValue("");
@@ -318,7 +349,7 @@ test("scanner filters, presets, and table keyboard selection remain functional",
   await page.getByRole("button", { name: /Auto Refresh/i }).click();
   await expect(page.getByRole("button", { name: /Auto Refresh/i })).toHaveAttribute("aria-pressed", "false");
   await page.getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(page.getByLabel("Scanner preset")).toHaveValue("default");
+  await expect(page.getByLabel("Scanner preset", { exact: true })).toHaveValue("default");
 
   expect(failures).toEqual([]);
 });
@@ -425,10 +456,10 @@ test("every workspace renders in the complete light theme", async ({ page }) => 
 test("tabs support arrow keys, controls retain focus, and reduced motion is honored", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(fixtureUrl("dashboard"));
-  const gainers = page.getByRole("tab", { name: "Gainers", exact: true });
+  const gainers = page.getByRole("tab", { name: "Order Book", exact: true });
   await gainers.focus();
   await gainers.press("ArrowRight");
-  const losers = page.getByRole("tab", { name: "Losers", exact: true });
+  const losers = page.getByRole("tab", { name: "Time & Sales", exact: true });
   await expect(losers).toHaveAttribute("aria-selected", "true");
   await expect(losers).toBeFocused();
   const accessibilityStyle = await losers.evaluate((node) => {

@@ -1,3 +1,4 @@
+import { WorkstationSidebar, WorkstationFooter } from "./components/workstation/WorkstationChrome";
 import {
   Suspense,
   lazy,
@@ -80,10 +81,12 @@ import {
   serializeWorkspaceBackup,
 } from "./services/workspaceBackupPolicy";
 import { buildCsv } from "./utils/csvExport";
+import { buildPositionRows, summarizePositions, sumKnown } from "./utils/portfolioAccounting.js";
+import { journalStatistics, normalizeJournalRecord } from "./utils/journalAccounting.js";
+import { money } from "./components/premium/premiumWorkspaceData.js";
 import { createVisibilityAwarePoller } from "./utils/visibilityScheduler";
 import {
   formatPacificDate,
-  formatPacificDateTime,
   formatPacificTime,
 } from "./utils/timeFormatters";
 import {
@@ -179,6 +182,7 @@ export default function App() {
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [orderMessage, setOrderMessage] = useState("");
+  const [workspaceOrderReview, setWorkspaceOrderReview] = useState(null);
   const [tradingMode, setTradingMode] = useState(() =>
     LIVE_TRADING_ENABLED ? loadSetting("sb_trading_mode", "paper") : "paper"
   );
@@ -700,13 +704,7 @@ export default function App() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [setGridMode, setLayoutMode]);
-  const totalUnrealizedPnL = Object.entries(positions).reduce(
-    (total, [symbol, pos]) => {
-      const live = Number(allSymbols.find((s) => s.symbol === symbol)?.price || 0);
-      return total + (live - pos.average) * pos.quantity;
-    },
-    0
-  );
+  const totalUnrealizedPnL = summarizePositions(buildPositionRows(positions, allSymbols)).unrealizedPnl;
 
   const basePrice = Number(selectedStockData?.price);
 
@@ -1114,14 +1112,14 @@ export default function App() {
     const symbol = journalDraft.symbol.trim().toUpperCase() || selectedStock;
     const entry = {
       ...journalDraft,
-      id: Date.now(),
+      id: crypto.randomUUID(),
       symbol,
-      createdAt: formatPacificDateTime(new Date()),
-      linkedPrice: Number(selectedStockData?.price || 0).toFixed(2),
+      createdAt: new Date().toISOString(),
+      linkedPrice: selectedStockData?.symbol === symbol ? selectedStockData?.price ?? null : null,
       linkedRealizedPnL: Number(realizedPnL || 0).toFixed(2),
     };
 
-    setJournalEntries((prev) => [entry, ...prev.slice(0, 49)]);
+    setJournalEntries((prev) => [normalizeJournalRecord(entry), ...prev]);
     setJournalDraft({
       ...defaultJournalDraft,
       symbol,
@@ -1288,6 +1286,7 @@ export default function App() {
   ]);
 
   function resetWorkspace() {
+    setWorkspaceOrderReview(null);
     const keysToReset = [
       "sb_selected_stock",
       "sb_secondary_symbol",
@@ -1456,7 +1455,7 @@ export default function App() {
       time: formatPacificTime(new Date(), { second: "2-digit" }),
     };
 
-    setOrders((prev) => [order, ...prev.slice(0, 20)]);
+    setOrders((prev) => [order, ...prev]);
     return {
       filledQty,
       requestedQty: qty,
@@ -1879,6 +1878,7 @@ export default function App() {
   function exportJournalCsv() {
     const headers = [
       "createdAt",
+      "recordType", "status", "currency", "source", "quantity", "entryPrice", "exitPrice", "fees", "pnl",
       "symbol",
       "bias",
       "setup",
@@ -1894,28 +1894,16 @@ export default function App() {
     ];
     downloadFile(
       `journal-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(headers, journalEntries),
+      buildCsv(headers, journalEntries.map(normalizeJournalRecord)),
       "text/csv;charset=utf-8"
     );
   }
 
   function exportTradeSummaryCsv() {
-    const headers = [
-      "time",
-      "symbol",
-      "side",
-      "quantity",
-      "price",
-      "value",
-      "realizedPnL",
-      "stopLoss",
-      "takeProfit",
-      "riskReward",
-      "status",
-    ];
+    const headers = ["createdAt", "symbol", "source", "currency", "status", "quantity", "entryPrice", "exitPrice", "fees", "pnl"];
     downloadFile(
       `trade-summary-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(headers, orders),
+      buildCsv(headers, journalEntries.map(normalizeJournalRecord).filter(row => row.eligible)),
       "text/csv;charset=utf-8"
     );
   }
@@ -1926,18 +1914,14 @@ export default function App() {
 
     if (Number.isNaN(parsed.getTime())) return false;
 
-    return parsed.toDateString() === new Date().toDateString();
+    return formatPacificDate(parsed) === formatPacificDate(new Date());
   }
 
   function buildDailyReportText() {
     const today = formatPacificDate(new Date());
     const todaysOrders = orders.filter((order) => isTodayRecord(order.time));
     const todaysJournal = journalEntries.filter((entry) => isTodayRecord(entry.createdAt));
-    const closedToday = todaysOrders.filter((order) => order.realizedPnL !== null);
-    const dailyPnl = closedToday.reduce(
-      (total, order) => total + Number(order.realizedPnL || 0),
-      0
-    );
+    const dailyStats = journalStatistics(todaysJournal);
     const latestJournal = todaysJournal.find((entry) => entry.symbol === selectedStock) || todaysJournal[0];
 
     return [
@@ -1945,8 +1929,9 @@ export default function App() {
       "",
       "## Account",
       `- Realized P&L: $${Number(realizedPnL || 0).toFixed(2)}`,
-      `- Unrealized P&L: $${Number(totalUnrealizedPnL || 0).toFixed(2)}`,
-      `- Today's closed P&L: $${dailyPnl.toFixed(2)}`,
+      `- Workspace unrealized P&L: ${money(totalUnrealizedPnL)}`,
+      `- Completed journal P&L (USD): ${money(dailyStats.net)}`,
+      `- Included completed journal trades: ${dailyStats.total}; excluded records: ${dailyStats.excluded}`,
       `- Orders today: ${todaysOrders.length}`,
       `- Active symbol: ${selectedStock}`,
       "",
@@ -1992,10 +1977,7 @@ export default function App() {
       const parsed = new Date(entry.createdAt);
       return !Number.isNaN(parsed.getTime()) && parsed.getTime() >= weekAgo;
     });
-    const weeklyPnl = weeklyOrders.reduce(
-      (total, order) => total + Number(order.realizedPnL || 0),
-      0
-    );
+    const weeklyStats = journalStatistics(weeklyJournal);
     const mistakeCounts = weeklyJournal.reduce((stats, entry) => {
       String(entry.mistakeTags || entry.tags || "")
         .split(",")
@@ -2014,7 +1996,8 @@ export default function App() {
         "",
         `- Closed/order records: ${weeklyOrders.length}`,
         `- Journal reviews: ${weeklyJournal.length}`,
-        `- Weekly realized P&L: $${weeklyPnl.toFixed(2)}`,
+        `- Completed journal P&L (USD): ${money(weeklyStats.net)}`,
+        `- Included completed trades: ${weeklyStats.total}; excluded records: ${weeklyStats.excluded}`,
         "",
         "## Setup Performance",
         ...Object.entries(
@@ -2277,9 +2260,15 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleHotkeys);
   }, [premiumPreferences.hotkeysEnabled, setGridMode, setLayoutMode]);
 
+  const monitoredSymbols = useMemo(() => [...new Set([
+    ...trackedSymbols,
+    ...alerts.filter(alert => alert.active).map(alert => alert.symbol),
+    ...Object.keys(positions),
+  ].filter(Boolean))], [trackedSymbols, alerts, positions]);
+
   useEffect(() => {
-    return subscribeToSymbols(trackedSymbols);
-  }, [subscribeToSymbols, trackedSymbols]);
+    return subscribeToSymbols(monitoredSymbols);
+  }, [subscribeToSymbols, monitoredSymbols]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2354,7 +2343,7 @@ export default function App() {
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
-  const sidebarPanelSize = isPhoneTerminal
+  const sidebarPanelSize = usePremiumShell && activeWorkspace === "dashboard" ? (viewportWidth <= 1024 ? 56 : 190) / viewportWidth * 100 : isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
       ? usePremiumShell ? 11 : 3
@@ -2493,12 +2482,12 @@ export default function App() {
   const premiumAccountSummary = useMemo(() => {
     const buyingPower = Number(primaryBrokerBalance?.buyingPower || primaryBrokerBalance?.cash || 0);
     const netLiquidation = Number(primaryBrokerBalance?.totalEquity || primaryBrokerBalance?.marketValue || 0);
-    const dailyPnl = Number(realizedPnL || 0) + Number(totalUnrealizedPnL || 0);
+    const dailyPnl = sumKnown([Number(realizedPnL || 0), totalUnrealizedPnL]);
 
     return {
       rows: [
         ["Buying Power", buyingPower > 0 ? `$${buyingPower.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Paper Mode", "neutral"],
-        ["Daily P&L", `${dailyPnl >= 0 ? "+" : "-"}$${Math.abs(dailyPnl).toFixed(2)}`, dailyPnl >= 0 ? "positive" : "negative"],
+        ["Workspace P&L", money(dailyPnl), dailyPnl >= 0 ? "positive" : "negative"],
         ["Net Liquidation", netLiquidation > 0 ? `$${netLiquidation.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Local Account", "neutral"],
       ].map(([label, value, tone]) => ({ label, value, tone })),
     };
@@ -2561,6 +2550,7 @@ export default function App() {
         brokerApiUrl={BROKER_API_URL}
         advancedMode={advancedMode}
         premiumShell={usePremiumShell}
+        quotes={allSymbols}
       />
     );
   }
@@ -2905,21 +2895,7 @@ export default function App() {
   }
 
   function renderPremiumBottomDock() {
-    const positionRows = Object.entries(positions || {}).map(([symbol, position]) => {
-      const lastPrice = Number(allSymbols.find((stock) => stock.symbol === symbol)?.price || selectedStockData?.price || position.avgPrice || 0);
-      const qty = Number(position.quantity || position.qty || 0);
-      const avgPrice = Number(position.avgPrice || position.averagePrice || 0);
-      const pnl = Number.isFinite(lastPrice) && Number.isFinite(avgPrice) ? (lastPrice - avgPrice) * qty : 0;
-
-      return {
-        symbol,
-        side: qty >= 0 ? "LONG" : "SHORT",
-        qty,
-        avgPrice,
-        lastPrice,
-        pnl,
-      };
-    });
+    const positionRows = buildPositionRows(positions, allSymbols).map(row => ({ ...row, avgPrice: row.avg, lastPrice: row.last, pnl: row.unrealizedPnl }));
     const recentOrders = [...orders].slice(-4).reverse();
     const visibleAlerts = alerts.slice(0, 4);
     const tabs = [
@@ -2951,9 +2927,9 @@ export default function App() {
           row.symbol,
           row.side,
           Math.abs(row.qty),
-          row.avgPrice ? `$${row.avgPrice.toFixed(2)}` : "-",
-          row.lastPrice ? `$${row.lastPrice.toFixed(2)}` : "-",
-          `${row.pnl >= 0 ? "+" : "-"}$${Math.abs(row.pnl).toFixed(2)}`,
+          row.avgPrice ? `$${row.avgPrice === null ? "Unavailable" : row.avgPrice.toFixed(2)}` : "-",
+          row.lastPrice ? `$${row.lastPrice === null ? "Unavailable" : row.lastPrice.toFixed(2)}` : "-",
+          money(row.pnl),
         ]);
       }
 
@@ -3684,13 +3660,13 @@ export default function App() {
     }
 
     if (activeWorkspace === "performance") {
-      const dailyPnl = Number(realizedPnL || 0) + Number(totalUnrealizedPnL || 0);
+      const dailyPnl = sumKnown([Number(realizedPnL || 0), totalUnrealizedPnL]);
       return pagePanel(
         "Performance",
         "Trading account summary and execution quality",
         <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "10px", height: "100%" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "10px" }}>
-            {metricCard("Daily P&L", `${dailyPnl >= 0 ? "+" : "-"}$${Math.abs(dailyPnl).toFixed(2)}`, dailyPnl >= 0 ? "positive" : "negative")}
+            {metricCard("Workspace P&L", money(dailyPnl), dailyPnl >= 0 ? "positive" : "negative")}
             {metricCard("Realized P&L", `$${Number(realizedPnL || 0).toFixed(2)}`, Number(realizedPnL || 0) >= 0 ? "positive" : "negative")}
             {metricCard("Orders", orders.length, "neutral")}
             {metricCard("Alerts", alerts.length, "neutral")}
@@ -3843,6 +3819,7 @@ export default function App() {
         syncCharts={syncCharts}
         compact={compact}
         embeddedChart={embeddedChart}
+        workstation={activeWorkspace === "dashboard"}
         viewportWidth={viewportWidth}
       />
     );
@@ -3906,6 +3883,8 @@ export default function App() {
         setOrderSide={setOrderSide}
         setOrderConfirmed={setOrderConfirmed}
         orderMessage={orderMessage}
+        workspaceOrderReview={workspaceOrderReview}
+        setWorkspaceOrderReview={setWorkspaceOrderReview}
         setOrderMessage={setOrderMessage}
         setPremiumDockTab={setPremiumDockTab}
         selectMainSymbol={selectMainSymbol}
@@ -4014,7 +3993,7 @@ export default function App() {
 
   return (
     <div
-      className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"}`}
+      className={`sb-terminal ${isDark ? "theme-dark" : "theme-light"} ${usePremiumShell && activeWorkspace === "dashboard" ? "ws-reference-shell" : ""}`}
       style={{
         height: "100vh",
         background: isDark
@@ -4073,6 +4052,7 @@ export default function App() {
         onSymbolCommit={selectMainSymbol}
         onOpenHelp={!BROKER_TOOLS_ENABLED ? openPublicOnboarding : undefined}
         premiumShell={usePremiumShell}
+        quotes={allSymbols}
       />
 
       {usePremiumShell && !isCompactTerminal && !["dashboard", "replay", "journal"].includes(activeWorkspace) ? (
@@ -4127,9 +4107,9 @@ export default function App() {
           order={1}
           defaultSize={sidebarPanelSize}
           minSize={sidebarPanelSize}
-          maxSize={isPhoneTerminal ? 12 : usePremiumShell ? 13 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
+          maxSize={usePremiumShell && activeWorkspace === "dashboard" ? sidebarPanelSize : isPhoneTerminal ? 12 : usePremiumShell ? 13 : viewportWidth >= 1600 ? 3.3 : isCompactTerminal ? 6 : 4.6}
         >
-          <TradingSidebar
+          {usePremiumShell && activeWorkspace === "dashboard" ? <WorkstationSidebar activeWorkspace={activeWorkspace} setActiveWorkspace={setActiveWorkspace} expanded={viewportWidth > 1024} /> : <TradingSidebar
           activeWorkspace={activeWorkspace}
           setActiveWorkspace={setActiveWorkspace}
           brokerConnected={BROKER_TOOLS_ENABLED && brokerConnected}
@@ -4140,7 +4120,7 @@ export default function App() {
           isDark={isDark}
           expanded={usePremiumShell && !isCompactTerminal}
           accountSummary={usePremiumShell && !isCompactTerminal ? premiumAccountSummary : null}
-        />
+        />}
         </Panel>
 
         <PanelResizeHandle id="sidebar-resize-handle" style={verticalResizeHandleStyle} />
@@ -5190,6 +5170,7 @@ export default function App() {
       />
       )}
 
+      {usePremiumShell && activeWorkspace === "dashboard" && <WorkstationFooter />}
       <Suspense fallback={null}>
         <CommandPalette
           theme={theme}

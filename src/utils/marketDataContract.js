@@ -86,6 +86,24 @@ export function isProviderSampleRow(row) {
     && ["live", "cached", "delayed", "historical", "stale"].includes(quote.quality));
 }
 
+function quoteDetails(raw) {
+  const positive = value => {
+    const parsed = parseNullableMarketNumber(value);
+    return parsed > 0 ? parsed : null;
+  };
+  const size = value => {
+    const parsed = parseNullableMarketNumber(value);
+    return parsed !== null && parsed >= 0 ? parsed : null;
+  };
+  return {
+    bidPrice: positive(raw.bidPrice ?? raw.bid), askPrice: positive(raw.askPrice ?? raw.ask),
+    bidSize: size(raw.bidSize), askSize: size(raw.askSize),
+    open: positive(raw.openPrice ?? raw.open), high: positive(raw.highPrice ?? raw.high ?? raw.dayHigh),
+    low: positive(raw.lowPrice ?? raw.low ?? raw.dayLow),
+    lastTradeSize: size(raw.lastTradeSize),
+  };
+}
+
 export function normalizeQuoteEvent(quote, payload = {}, now = Date.now()) {
   const normalized = normalizeMarketQuote({ ...payload, ...quote,
     symbol: quote.symbol || quote.s,
@@ -101,8 +119,7 @@ export function normalizeQuoteEvent(quote, payload = {}, now = Date.now()) {
     t: normalized.asOf, sourceTimestamp: normalized.asOf,
     timestampSource: normalized.asOf === null ? "unavailable" : "provider",
     realtime: quote.realtime ?? payload.realtime ?? null, transport: payload.stream?.transport || null,
-    bidPrice: parseNullableMarketNumber(quote.bidPrice), askPrice: parseNullableMarketNumber(quote.askPrice),
-    lastTradeSize: parseNullableMarketNumber(quote.lastTradeSize) };
+    ...quoteDetails(quote) };
 }
 
 export function mergeQuoteSnapshot(previous, incoming, now = Date.now()) {
@@ -116,7 +133,7 @@ export function mergeQuoteSnapshot(previous, incoming, now = Date.now()) {
     changePercent: quote.change, timestamp: quote.asOf, t: quote.asOf,
     lastTradeTime: incoming.lastTradeTime ?? null,
     timestampSource: quote.asOf === null ? "unavailable" : "provider",
-    v: quote.volume, bidPrice: parseNullableMarketNumber(incoming.bidPrice), askPrice: parseNullableMarketNumber(incoming.askPrice),
+    v: quote.volume, ...quoteDetails(incoming),
     pendingQuote: quote.price === null, lastUpdated: now };
 }
 

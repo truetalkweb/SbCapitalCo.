@@ -1,3 +1,4 @@
+import { normalizeJournalRecord } from "/src/utils/journalAccounting.js";
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -122,6 +123,7 @@ function AccessProbe({ plan }) {
 
 function Harness() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
+  const scannerUniverse = params.get("largeScanner") === "1" ? Array.from({length:65},(_,index)=>({...stocks[0],symbol:`T${String(index).padStart(3,"0")}`,name:`Test company ${index}`,price:100+index})) : stocks;
   const requested = params.get("view") || "dashboard";
   const plan = params.get("plan") || "admin";
   const theme = params.get("theme") === "light" ? lightTheme : darkTheme;
@@ -175,12 +177,12 @@ function Harness() {
         selectedStock={selectedStock}
         selectedStockData={selectedStockData}
         liveStocks={watchlistStocks}
-        scannerStocks={stocks}
+        scannerStocks={scannerUniverse}
         scannerGroups={{
-          gainers: stocks.filter((row) => row.changePercent > 0),
+          gainers: scannerUniverse.filter((row) => row.changePercent > 0),
           losers: stocks.filter((row) => row.changePercent < 0),
-          active: stocks,
-          momentum: stocks,
+          active: scannerUniverse,
+          momentum: scannerUniverse,
           relativeVolume: stocks,
         }}
         scannerMeta={{ source: "Release fixture", degraded: false }}
@@ -264,7 +266,7 @@ function Harness() {
         setJournalDraft={setJournalDraft}
         addJournalEntry={() => {
           if (!journalDraft.setup.trim()) return;
-          setFixtureJournalEntries((current) => [...current, { id: `j${current.length + 1}`, ...journalDraft, timestamp: new Date().toISOString(), pnl: 0 }]);
+          setFixtureJournalEntries((current) => [...current, normalizeJournalRecord({ id: `j${current.length + 1}`, ...journalDraft, createdAt: new Date().toISOString() })]);
           setJournalDraft((current) => ({ ...current, setup: "", review: "" }));
         }}
         removeJournalEntry={(id) => setFixtureJournalEntries((current) => current.filter((entry) => entry.id !== id))}

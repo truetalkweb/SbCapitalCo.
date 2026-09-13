@@ -8,6 +8,21 @@ const candle = { time: 1000, open: 10, high: 12, low: 9, close: 11, volume: null
 const payload = { symbol: "AAPL", timeframe: "1m", source: "Provider", candles: [candle] };
 const quote = { symbol: "AAPL", price: 100, source: "Provider", timestamp: now / 1000 };
 
+test("provider BBO sizes and daily OHLC survive event normalization and snapshot merge", () => {
+  const event = normalizeQuoteEvent({ ...quote, bidPrice: "99.95", bidSize: "1200", askPrice: "100.05", askSize: 800,
+    openPrice: "98.5", highPrice: "101.25", lowPrice: "97.8" }, {}, now);
+  const snapshot = mergeQuoteSnapshot(null, event, now);
+  assert.deepEqual([snapshot.bidPrice, snapshot.bidSize, snapshot.askPrice, snapshot.askSize, snapshot.open, snapshot.high, snapshot.low],
+    [99.95, 1200, 100.05, 800, 98.5, 101.25, 97.8]);
+  const unavailable = mergeQuoteSnapshot(snapshot, normalizeQuoteEvent({ ...quote, timestamp: now / 1000 + 1,
+    bidPrice: 0, bidSize: 0, askPrice: -1, askSize: "bad", openPrice: null }, {}, now + 1000), now + 1000);
+  assert.equal(unavailable.bidPrice, null);
+  assert.equal(unavailable.askPrice, null);
+  assert.equal(unavailable.bidSize, 0);
+  assert.equal(unavailable.askSize, null);
+  assert.equal(unavailable.open, null);
+});
+
 test("history preserves identity, interval, source, timestamps, session and missing volume", () => {
   const result = normalizeCandleDataset({ ...payload, session: "regular" }, request);
   assert.equal(result.symbol, "AAPL");

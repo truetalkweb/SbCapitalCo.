@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldTriggerPriceAlert } from "../src/hooks/useTerminalAlerts.js";
+import { shouldTriggerPriceAlert, makePriceAlert } from "../src/hooks/useTerminalAlerts.js";
 
 const now = Date.parse("2026-09-06T15:00:00Z");
 const quote = (price, extra = {}) => ({ symbol: "AAPL", price, source: "Provider", timestamp: now / 1000, ...extra });
+
+test("both alert entry points share finite price and instrument validation",()=>{
+  assert.equal(makePriceAlert({symbol:"AAPL",trigger:Infinity}),null);
+  assert.equal(makePriceAlert({symbol:"",trigger:100}),null);
+  assert.equal(makePriceAlert({symbol:"AAPL",trigger:100,direction:"wrong"}),null);
+  const first=makePriceAlert({symbol:" aapl ",trigger:100});
+  assert.equal(first.symbol,"AAPL"); assert.notEqual(first.id,makePriceAlert({symbol:"AAPL",trigger:100}).id);
+});
 
 test("price alerts trigger only when monitoring and the rule are active", () => {
   const above = { symbol: "AAPL", active: true, direction: "above", trigger: 100 };

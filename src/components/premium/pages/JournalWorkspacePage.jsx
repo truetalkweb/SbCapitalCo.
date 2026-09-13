@@ -1,3 +1,7 @@
+import { useState } from "react";
+import { journalStatistics } from "../../../utils/journalAccounting.js";
+import RecordPagination from "../RecordPagination";
+import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { X } from "lucide-react";
 import { terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
 import { money, num } from "../premiumWorkspaceData";
@@ -10,7 +14,6 @@ export default function JournalWorkspacePage({
       exportWeeklyReport,
       isNarrowWorkspace,
       journalDraft,
-      journalNet,
       journalRows,
       journalView,
       page,
@@ -20,37 +23,44 @@ export default function JournalWorkspacePage({
       setJournalView,
       theme
 }) {
-    const wins = journalRows.filter((row) => row.outcome === "Win").length;
-    const losses = journalRows.filter((row) => row.outcome === "Loss").length;
-    const tradeCount = journalRows.length;
-    const winRate = `${((wins / Math.max(tradeCount, 1)) * 100).toFixed(2)}%`;
-    const journalPnls = journalRows.map((row) => num(row.pnl));
-    const journalGrossProfit = journalPnls.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
-    const journalGrossLoss = Math.abs(journalPnls.filter((value) => value < 0).reduce((sum, value) => sum + value, 0));
-    const journalAvgWin = wins ? journalGrossProfit / wins : 0;
-    const journalAvgLoss = losses ? journalGrossLoss / losses : 0;
-    const journalProfitFactor = journalGrossLoss ? (journalGrossProfit / journalGrossLoss).toFixed(2) : "Unavailable";
-    const breakeven = journalRows.filter((row) => num(row.pnl) === 0).length;
+    const [search, setSearch] = useState("");
+    const [kind, setKind] = useState("all");
+    const stats = journalStatistics(journalRows);
+    const { wins, losses, breakeven } = stats;
+    const tradeCount = stats.total;
+    const journalNet = stats.net;
+    const winRate = stats.winRate === null ? "Unavailable" : stats.winRate.toFixed(2) + "%";
+    const journalPnls = stats.values;
+    const journalAvgWin = stats.averageWin;
+    const journalAvgLoss = stats.averageLoss;
+    const journalProfitFactor = stats.profitFactor === null ? "Unavailable" : stats.profitFactor.toFixed(2);
+    const visibleRows = journalRows.filter(row => (kind === "all" || row.recordType === kind) && [row.symbol,row.setup,row.notes,row.tag].join(" ").toLowerCase().includes(search.toLowerCase()));
+    const pagination = useRecordPage(visibleRows, 25, search + kind);
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
     const showTrades = journalView === "Overview" || journalView === "Trades";
     return (
-      <div style={page}>
+      <div className="terminal-page" style={page}>
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
               <ActionButton theme={theme} onClick={() => setJournalDraft?.((current) => ({ ...current, symbol: selectedStock, setup: "", review: "", result: "Review", grade: "B" }))}>Clear Draft</ActionButton>
-              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Trade</ActionButton>
+              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Record</ActionButton>
             </div>
           </div>
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
             <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
-              {journalView === "Trades" && <FilterBar theme={theme} items={["All recorded dates", "All Symbols", "All Setups", "All Tags", "All Outcomes"]} />}
+              {journalView === "Trades" && <><FilterBar theme={theme} search="Search journal records" value={search} onSearchChange={setSearch} /><select aria-label="Journal record filter" value={kind} onChange={event => setKind(event.target.value)}><option value="all">All records</option><option value="note">Notes</option><option value="trade">Trades</option></select></>}
             </div>
           </PremiumCard>
           {showDraft && <PremiumCard theme={theme} title="Prepared Journal Draft">
+              <div style={{ padding: 14, display: "flex", gap: 12, flexWrap: "wrap", color: theme.muted }}>
+                <label>Record type <select aria-label="Journal record type" value={journalDraft.recordType || "note"} onChange={event => setJournalDraft(current => ({ ...current, recordType: event.target.value, status: event.target.value === "trade" ? "closed" : "note" }))}><option value="note">Note</option><option value="trade">Trade</option></select></label>
+                {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
+                <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
+              </div>
               <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "120px 180px 100px 130px minmax(220px, 1fr)", gap: 12, alignItems: "end" }}>
                 {[
                   ["Symbol", "symbol", journalDraft.symbol || selectedStock],
@@ -85,20 +95,20 @@ export default function JournalWorkspacePage({
               </div>
             </PremiumCard>}
             {showStatistics && <PremiumCard theme={theme}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(10, minmax(0, 1fr))" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
                 {[
                   ["Net P&L", money(journalNet), journalNet >= 0 ? "good" : "bad"],
                   ["Total Trades", String(tradeCount), "neutral"],
                   ["Win Rate", winRate, "good"],
                   ["Profit Factor", journalProfitFactor, "neutral"],
                   ["Avg Win", money(journalAvgWin), "good"],
-                  ["Avg Loss", money(-journalAvgLoss), "bad"],
+                  ["Avg Loss", money(journalAvgLoss === null ? null : -journalAvgLoss), "bad"],
                   ["Expectancy", tradeCount ? money(journalNet / tradeCount) : "Unavailable", "neutral"],
                   ["Best Trade", tradeCount ? money(Math.max(...journalPnls)) : "Unavailable", "good"],
                   ["Worst Trade", tradeCount ? money(Math.min(...journalPnls)) : "Unavailable", "bad"],
                   ["Avg Hold Time", "Not calculated", "neutral"],
                 ].map(([label, value, tone, detail]) => (
-                  <MetricTile key={label} theme={theme} label={label} value={value} tone={tone} detail={detail} />
+                  <MetricTile key={label} theme={theme} label={label} value={value} tone={value === "Unavailable" ? "neutral" : tone} detail={detail} />
                 ))}
               </div>
             </PremiumCard>}
@@ -109,7 +119,7 @@ export default function JournalWorkspacePage({
                     <StatusPill theme={theme} tone="neutral">Recorded Net P&amp;L</StatusPill>
                   </div>
                   <div style={{ height: 220, borderLeft: `1px solid ${theme.borderSoft || theme.border}`, borderBottom: `1px solid ${theme.borderSoft || theme.border}`, paddingTop: 12 }}>
-                    <SeriesSparkline theme={theme} values={journalPnls} height={190} />
+                    <SeriesSparkline theme={theme} values={stats.curve} cumulative height={190} />
                   </div>
                   <div style={{ textAlign: "center", color: theme.muted, fontSize: 12, marginTop: 8 }}>Cumulative recorded trade P&amp;L</div>
                 </div>
@@ -129,7 +139,7 @@ export default function JournalWorkspacePage({
                   </div>
                 </div>
               </PremiumCard>
-              <PremiumCard theme={theme} title="P&L Distribution">
+              <PremiumCard theme={theme} title="Recent Trade P&L">
                 <div style={{ padding: 18, height: 310, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", alignItems: "end", gap: 14 }}>
                   {(journalPnls.length ? journalPnls.slice(-7) : [0]).map((value, index) => {
                     const maxAbs = Math.max(1, ...journalPnls.map(Math.abs));
@@ -143,10 +153,11 @@ export default function JournalWorkspacePage({
                 </div>
               </PremiumCard>
             </div>}
-            {showTrades && <PremiumCard theme={theme} title="Recent Trades" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
+            {showTrades && <PremiumCard theme={theme} title="Journal Records" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[
+                  { key: "recordType", label: "Kind", width: "70px" },
                   { key: "date", label: "Date/Time", width: "150px" },
                   { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true },
                   { key: "setup", label: "Setup", width: "120px" },
@@ -163,12 +174,9 @@ export default function JournalWorkspacePage({
                   { key: "notes", label: "Review", width: "1fr" },
                   { key: "actions", label: "", width: "54px", align: "center", render: (row) => <button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
                 ]}
-                rows={journalRows}
+                rows={pagination.rows} keyField="id"
               />
-              <div style={{ padding: "12px 16px", color: theme.muted, fontSize: 12, display: "flex", justifyContent: "space-between" }}>
-                <span>{journalRows.length ? `Showing 1 to ${Math.min(journalRows.length, 8)} of ${journalRows.length} trades` : "No recorded trades"}</span>
-                {journalRows.length > 8 ? <span style={{ fontFamily: terminalMonoFont }}>1 2 3 4 5 ...</span> : null}
-              </div>
+              <RecordPagination theme={theme} state={pagination} label="journal records" />
             </PremiumCard>}
             {journalView === "Exports" && <PremiumCard theme={theme} title="Journal & Performance Exports">
               <div style={{ padding: 16, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 10 }}>

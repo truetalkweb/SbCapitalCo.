@@ -1,0 +1,17 @@
+.terminal-page input:not([type="checkbox"]):not([type="range"]),
+.terminal-page select {
+  box-sizing: border-box;
+  min-height: 34px;
+  max-width: 100%;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  background: var(--control-bg);
+  color: var(--control-text);
+  font: inherit;
+  font-size: 12px;
+}
+.terminal-page input:focus-visible, .terminal-page select:focus-visible,
+.terminal-page button:focus-visible { outline: 2px solid var(--control-focus); outline-offset: 2px; }
+.terminal-page button:disabled { opacity: .55; cursor: not-allowed; }
+.terminal-page label { font-size: 12px; }

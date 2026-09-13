@@ -1,3 +1,7 @@
+import { useState } from "react";
+import RecordPagination from "../RecordPagination";
+import { useRecordPage } from "../../../hooks/useRecordPage.js";
+import { buildCsv } from "../../../utils/csvExport.js";
 import { ChevronRight, Search, Shield } from "lucide-react";
 import { terminalMonoFont } from "../../../config/terminalConfig";
 import { formatCompactNumber, formatMultiple } from "../../../utils/dashboardFormatters";
@@ -32,12 +36,16 @@ export default function ScannerWorkspacePage({
       updatePremiumPreference,
       updateScannerFilter
 }) {
+    const [presetName, setPresetName] = useState("");
+    const [sort, setSort] = useState("score");
+    const sortedRows = [...scannerDisplayRows].sort((a,b) => sort === "symbol" ? a.symbol.localeCompare(b.symbol) : (Number(b[sort]) || 0) - (Number(a[sort]) || 0));
+    const pagination = useRecordPage(sortedRows, 30, JSON.stringify(scannerFilters) + scannerTab + sort);
     const scannerSelected =
       scannerUniverseRows.find((row) => row.symbol === selectedStock) ||
       scannerDisplayRows[0] ||
       selected;
     return (
-      <div style={page}>
+      <div className="terminal-page" style={page}>
         <div style={mainTwoCol}>
           <PremiumCard theme={theme}>
             <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
@@ -61,13 +69,15 @@ export default function ScannerWorkspacePage({
                 <select aria-label="Minimum relative volume" value={String(relativeVolumeThreshold)} onChange={(event) => updatePremiumPreference("relativeVolumeThreshold", event.target.value)} style={{ height: 36, minWidth: 120, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px" }}>
                   {["0", "1.25", "1.50", "2.00", "3.00"].map((value) => <option key={value} value={value}>RVOL {value === "0" ? "Any" : `>= ${value}x`}</option>)}
                 </select>
+                <input aria-label="Scanner preset name" placeholder="Name this screen" value={presetName} maxLength={80} onChange={event => setPresetName(event.target.value)} style={{height:30, maxWidth:180}} />
                 <ActionButton theme={theme} active onClick={() => {
-                  const custom = { id: "custom", name: "Custom Scan", minRvol: scannerMinimumRvol, filters: scannerFilters };
-                  setScannerPresets?.((current) => [...current.filter((preset) => preset.id !== "custom"), custom]);
-                  setActiveScannerPreset?.("custom");
+                  const custom = { id: crypto.randomUUID(), name: presetName.trim() || `Custom Scan ${scannerPresets.length + 1}`, minRvol: scannerMinimumRvol, filters: { ...scannerFilters }, userOwned: true };
+                  setScannerPresets?.((current) => [...current, custom]);
+                  setActiveScannerPreset?.(custom.id);
+                  setPresetName("");
                   setOrderMessage?.("Scanner preset saved to your workspace.");
                 }}>Save Preset</ActionButton>
-                {activeScannerPreset === "custom" && <ActionButton theme={theme} danger onClick={() => { setScannerPresets?.((current) => current.filter((preset) => preset.id !== "custom")); setActiveScannerPreset?.("default"); updatePremiumPreference("relativeVolumeThreshold", "0"); }}>Delete</ActionButton>}
+                {(activeScannerPreset === "custom" || scannerPresets.find(preset => preset.id === activeScannerPreset)?.userOwned) && <ActionButton theme={theme} danger onClick={() => { setScannerPresets?.((current) => current.filter((preset) => preset.id !== activeScannerPreset)); setActiveScannerPreset?.("default"); updatePremiumPreference("relativeVolumeThreshold", "0"); }}>Delete</ActionButton>}
               </div>
               <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr 1fr" : "minmax(180px, 1.5fr) repeat(6, minmax(88px, 1fr)) auto", gap: 8 }}>
                 <label style={{ position: "relative", minWidth: 0 }}>
@@ -92,7 +102,12 @@ export default function ScannerWorkspacePage({
                 <select aria-label="Country filter" value={scannerFilters.country} onChange={(event) => updateScannerFilter("country", event.target.value)} style={{ width: 130, height: 34, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 8px" }}><option value="all">Any country</option>{[...new Set(scannerUniverseRows.map((row) => row.country).filter(Boolean))].sort().map((value) => <option key={value} value={String(value).toUpperCase()}>{value}</option>)}</select>
               </div>
             </div>
-            {scannerTable(scannerDisplayRows.slice(0, 30))}
+            <div style={{padding:12,display:"flex",gap:12,alignItems:"center"}}><label>Sort <select aria-label="Scanner sort" value={sort} onChange={event=>setSort(event.target.value)}><option value="score">Score descending</option><option value="symbol">Symbol A–Z</option><option value="price">Price descending</option><option value="volume">Volume descending</option></select></label><ActionButton theme={theme} onClick={() => {
+              const url = URL.createObjectURL(new Blob([buildCsv(["symbol","name","price","changePercent","volume","relativeVolume","source","timestamp"], sortedRows)], {type:"text/csv;charset=utf-8"}));
+              const link = document.createElement("a"); link.href=url; link.download="scanner-results.csv"; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+            }}>Export all results</ActionButton></div>
+            {scannerTable(pagination.rows)}
+            <RecordPagination theme={theme} state={pagination} label="scanner results" />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "14px 20px", color: theme.muted, fontSize: 12 }}>
               <span>
                 Results: {scannerDisplayRows.length}
@@ -113,7 +128,7 @@ export default function ScannerWorkspacePage({
           </PremiumCard>
           {selectedRail(
             <>
-              <PremiumCard theme={theme} title="Why Ranked"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{scannerSelected.whyRanked || scannerSelected.whyMoving || scannerSelected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
+              <PremiumCard theme={theme} title="Heuristic Ranking"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{scannerSelected.whyRanked || scannerSelected.whyMoving || scannerSelected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
               <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[
                 ["Trust", scannerSelected.verified ? "Verified provider" : scannerSelected.isSynthetic ? "Synthetic context" : "Calculated context"],
                 ["Freshness", scannerSelected.freshness || "Unavailable"],

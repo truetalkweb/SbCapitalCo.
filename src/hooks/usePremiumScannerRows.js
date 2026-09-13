@@ -20,7 +20,7 @@ export function usePremiumScannerRows({
 }) {
   const storedFilters = useMemo(() => loadSetting("sb_scanner_filters", {}), []);
   const scannerFilters = useMemo(
-    () => mergeScannerFilters(storedFilters, premiumPreferences.scannerFilters),
+    () => mergeScannerFilters({}, premiumPreferences.scannerFilters ?? storedFilters),
     [premiumPreferences.scannerFilters, storedFilters],
   );
   const activePreset = scannerPresets.find((preset) => preset.id === activeScannerPreset);

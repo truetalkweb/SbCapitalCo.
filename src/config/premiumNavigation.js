@@ -13,3 +13,14 @@ export const premiumWorkspaceViews = [
   { id: "journal", label: "Journal", group: "Advanced" },
   { id: "settings", label: "Settings", group: "Advanced" },
 ];
+
+// Keep every saved destination addressable while grouping the daily workflow.
+export const premiumNavigationGroups = [
+  { id: "dashboard", label: "Dashboard", children: ["dashboard"] },
+  { id: "scanner", label: "Markets", children: ["scanner", "watchlist", "news"] },
+  { id: "chart-analysis", label: "Charts", children: ["chart-analysis"] },
+  { id: "positions", label: "Portfolio", children: ["positions", "orders", "risk"] },
+  { id: "journal", label: "Review", children: ["journal", "performance", "replay"] },
+  { id: "alerts", label: "Alerts", children: ["alerts"] },
+  { id: "settings", label: "Settings", children: ["settings"] },
+];

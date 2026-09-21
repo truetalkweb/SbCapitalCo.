@@ -14,12 +14,77 @@ test('switching order type ignores prices left in inactive form fields', () => {
  const stop = submit(empty(), { type: 'STOP', limitPrice: 1, stopPrice: 105, stopLoss: 95 });
  assert.equal(stop.order.status, 'WORKING'); assert.equal(stop.order.referencePrice, 105);
 });
-test('legacy short or incomplete positions cannot corrupt paper cash or execution', () => {
- for (const position of [{ quantity: -10, average: 100 }, { quantity: 10 }, { quantity: 10, average: 'bad' }]) {
+test('incomplete positions cannot corrupt paper cash or execution', () => {
+ for (const position of [{ quantity: 10 }, { quantity: 10, average: 'bad' }]) {
   const state = { ...empty(), positions: { AAPL: position } };
   assert.ok(submit(state).error); assert.ok(submit(state, { side: 'SELL' }).error);
   assert.deepEqual(state.positions.AAPL, position);
  }
+});
+
+test('explicit short opens without owned shares and restricts proceeds and collateral', () => {
+ const short=submit(empty(),{side:'SELL_SHORT'},[quote(100,{bidPrice:99.9,askPrice:100.1})]);
+ assert.equal(short.order.status,'FILLED'); assert.equal(short.order.action,'SELL_SHORT');
+ assert.equal(short.state.positions.AAPL.quantity,-10); assert.equal(short.state.positions.AAPL.average,99.9);
+ const balances=paperBalances(short.state,[quote()],now);
+ assert.equal(balances.cash,100999); assert.equal(balances.shortCollateral,1998);
+ assert.equal(balances.buyingPower,99001); assert.equal(balances.equity,99999);
+ assert.ok(submit(short.state,{id:'buy',side:'BUY'}).error);
+ assert.ok(submit(short.state,{id:'sell',side:'SELL'}).error);
+});
+
+test('cover realizes profit on falling prices and loss on rising prices without reversing long', () => {
+ const short=submit(empty(),{side:'SELL_SHORT'}).state;
+ const cover=submit(short,{id:'cover',side:'BUY_TO_COVER',quantity:4},[quote(90,{askPrice:90.1})]);
+ assert.equal(cover.state.positions.AAPL.quantity,-6); assert.equal(cover.state.realizedPnL,39.6);
+ const closed=submit(cover.state,{id:'close',side:'BUY_TO_COVER',quantity:6},[quote(110)]);
+ assert.deepEqual(closed.state.positions,{}); assert.equal(closed.state.realizedPnL,-20.4);
+ assert.equal(paperBalances(closed.state,[],now).buyingPower,99979.6);
+ assert.ok(submit(closed.state,{id:'overcover',side:'BUY_TO_COVER',quantity:1}).error);
+});
+
+test('short entries obey limit and stop directions, cover stop-limit latches upward', () => {
+ const short=submit(empty(),{side:'SELL_SHORT',type:'LIMIT',limitPrice:105}); assert.equal(short.order.status,'WORKING');
+ const filled=processPaperOrders(short.state,[quote(106)],now+1000); assert.equal(filled.positions.AAPL.average,106);
+ const stop=submit(empty(),{side:'SELL_SHORT',type:'STOP',stopPrice:95}); assert.equal(stop.order.status,'WORKING');
+ assert.equal(processPaperOrders(stop.state,[quote(94)],now+1000).positions.AAPL.quantity,-10);
+ const cover=submit(filled,{id:'cover',side:'BUY_TO_COVER',type:'STOP_LIMIT',stopPrice:110,limitPrice:111});
+ const triggered=processPaperOrders(cover.state,[quote(112)],now+1000); assert.equal(triggered.orders[0].status,'TRIGGERED');
+ const closed=processPaperOrders(JSON.parse(JSON.stringify(triggered)),[quote(109)],now+2000); assert.equal(closed.orders[0].price,109); assert.deepEqual(closed.positions,{});
+});
+
+test('short protective exits cover in the correct direction and cancel their sibling', () => {
+ for (const [price,exit,pnl] of [[110,'stop',-100],[90,'target',100]]) {
+  const short=submit(empty(),{side:'SELL_SHORT',stopLoss:105,takeProfit:95}); assert.equal(short.state.orders.length,3);
+  assert.equal(short.state.orders.find(o=>o.id.endsWith('-stop')).action,'BUY_TO_COVER');
+  const result=processPaperOrders(short.state,[quote(price)],now+1000);
+  assert.deepEqual(result.positions,{}); assert.equal(result.realizedPnL,pnl);
+  assert.equal(result.orders.find(o=>o.id===`order-1-${exit}`).status,'FILLED');
+  assert.equal(result.orders.filter(o=>o.status==='CANCELLED').length,1);
+ }
+ assert.ok(submit(empty(),{side:'SELL_SHORT',stopLoss:95}).error);
+ assert.ok(submit(empty(),{side:'SELL_SHORT',takeProfit:105}).error);
+});
+
+test('cover reservations and partial covers cannot over-cover a short or strand its protection', () => {
+ const short=submit(empty(),{side:'SELL_SHORT',stopLoss:105,takeProfit:95}).state;
+ const partial=submit(short,{id:'partial',side:'BUY_TO_COVER',quantity:4});
+ assert.equal(partial.state.orders.find(o=>o.parentId)?.quantity,6);
+ const working=submit(partial.state,{id:'cover-limit',side:'BUY_TO_COVER',quantity:5,type:'LIMIT',limitPrice:80});
+ assert.ok(submit(working.state,{id:'duplicate-cover',side:'BUY_TO_COVER',quantity:2}).error);
+ const cancelled=cancelPaperOrder(working.state,'cover-limit',now);
+ const closed=submit(cancelled.state,{id:'close',side:'BUY_TO_COVER',quantity:6});
+ assert.deepEqual(closed.state.positions,{}); assert.equal(closed.state.orders.filter(o=>o.parentId&&o.status==='WORKING').length,0);
+});
+
+test('short exposure respects buying power, risk caps and opposite working entry restrictions', () => {
+ assert.ok(submit(empty(),{side:'SELL_SHORT',quantity:1001}).error);
+ assert.ok(submit(empty(),{side:'SELL_SHORT',quantity:20},[quote()],now,{maxOrderValue:1000}).error);
+ assert.ok(submit(empty(),{side:'SELL_SHORT',stopLoss:110},[quote()],now,{riskPerTrade:50}).error);
+ const long=submit(empty(),{type:'LIMIT',limitPrice:90}).state;
+ assert.ok(submit(long,{id:'short',side:'SELL_SHORT'}).error);
+ const short=submit(empty(),{side:'SELL_SHORT',type:'LIMIT',limitPrice:110}).state;
+ assert.ok(submit(short,{id:'long',side:'BUY'}).error);
 });
 
 test('paper market fills without a broker, uses ask/bid, and closes exact shares with realized P&L', () => {

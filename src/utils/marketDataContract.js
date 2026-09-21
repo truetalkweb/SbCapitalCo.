@@ -88,6 +88,8 @@ export function isProviderSampleRow(row) {
 }
 
 function quoteDetails(raw) {
+  const reportedRow = row => row && typeof row === 'object' && !row.isSynthetic && !row.synthetic && !row.fallback && !row.degraded
+    && !['synthetic', 'simulated', 'unavailable'].includes(row.quality || row.dataMode);
   const positive = value => {
     const parsed = parseNullableMarketNumber(value);
     return parsed > 0 ? parsed : null;
@@ -102,6 +104,10 @@ function quoteDetails(raw) {
     open: positive(raw.openPrice ?? raw.open), high: positive(raw.highPrice ?? raw.high ?? raw.dayHigh),
     low: positive(raw.lowPrice ?? raw.low ?? raw.dayLow),
     lastTradeSize: size(raw.lastTradeSize),
+    lastTradePrice: positive(raw.lastTradePrice),
+    lastTradeTime: raw.lastTradeTime || null,
+    orderBook: Array.isArray(raw.orderBook) ? raw.orderBook.slice(0, 20).filter(reportedRow).map(row => ({ bid: positive(row.bid ?? row.bidPrice), ask: positive(row.ask ?? row.askPrice), bidSize: size(row.bidSize), askSize: size(row.askSize) })).filter(row => (row.bid || row.ask) && (!row.bid || !row.ask || row.bid <= row.ask)) : [],
+    trades: Array.isArray(raw.trades) ? raw.trades.slice(0, 100).filter(reportedRow).map(row => ({ id: row.id, time: marketTimestamp(row.time ?? row.timestamp), price: positive(row.price), size: size(row.size), exchange: typeof row.exchange === 'string' ? row.exchange : null })).filter(row => row.time && row.price && row.size > 0) : [],
   };
 }
 

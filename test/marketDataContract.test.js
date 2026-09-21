@@ -8,6 +8,25 @@ const candle = { time: 1000, open: 10, high: 12, low: 9, close: 11, volume: null
 const payload = { symbol: "AAPL", timeframe: "1m", source: "Provider", candles: [candle] };
 const quote = { symbol: "AAPL", price: 100, source: "Provider", timestamp: now / 1000 };
 
+test('reported last trades and depth survive normalization without inventing missing prints', () => {
+ const event=normalizeQuoteEvent({...quote,lastTradePrice:99.99,lastTradeSize:25,lastTradeTime:new Date(now).toISOString(),
+  orderBook:[{bid:99.9,ask:100.1,bidSize:200,askSize:100},{bid:'bad',ask:0}],
+  trades:[{id:'trade-1',time:now/1000,price:99.99,size:25,exchange:'NYSE'},{time:'bad',price:5,size:10}]},{},now);
+ const snapshot=mergeQuoteSnapshot(null,event,now);
+ assert.equal(snapshot.lastTradePrice,99.99); assert.equal(snapshot.lastTradeSize,25);
+ assert.equal(snapshot.lastTradeTime,new Date(now).toISOString());
+ assert.equal(snapshot.orderBook.length,1); assert.equal(snapshot.trades.length,1);
+ const missing=mergeQuoteSnapshot(snapshot,normalizeQuoteEvent({...quote,timestamp:now/1000+1},{},now+1000),now+1000);
+ assert.equal(missing.lastTradePrice,null); assert.deepEqual(missing.trades,[]); assert.deepEqual(missing.orderBook,[]);
+});
+
+test('malformed and explicitly simulated depth or prints do not break the quote feed', () => {
+ const event=normalizeQuoteEvent({...quote,
+  orderBook:[null,5,{bid:100,ask:99},{bid:99,ask:101,isSynthetic:true},{bid:98,ask:102}],
+  trades:[null,5,{time:now/1000,price:100,size:10,isSynthetic:true},{time:now/1000,price:100,size:10}]},{},now);
+ assert.equal(event.orderBook.length,1);assert.equal(event.trades.length,1);
+});
+
 test("provider BBO sizes and daily OHLC survive event normalization and snapshot merge", () => {
   const event = normalizeQuoteEvent({ ...quote, bidPrice: "99.95", bidSize: "1200", askPrice: "100.05", askSize: 800,
     openPrice: "98.5", highPrice: "101.25", lowPrice: "97.8" }, {}, now);

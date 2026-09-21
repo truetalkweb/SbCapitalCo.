@@ -452,6 +452,72 @@ test("secondary workspace navigation keeps the shared shell and light theme", as
 const paperNow = new Date('2026-09-21T15:00:00Z');
 const paperProviderQuote = (price, symbol = 'NVDA') => ({symbol,price,bidPrice:price-0.01,askPrice:price+0.01,lastTradeTime:paperNow.toISOString(),source:'Isolated paper test provider',realtime:true});
 
+test('MSTR zero-share sell explains actions, explicit short and partial cover persist correctly', async ({page},testInfo) => {
+ await page.clock.setFixedTime(paperNow);
+ const quotes=[{...paperProviderQuote(167.94,'MSTR'),bidPrice:167.90,askPrice:167.99}];
+ const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:'dashboard',selectedStock:'MSTR',layoutMode:'1',positions:{},orders:[],realizedPnL:0},{providerQuotes:quotes});
+ const ticket=page.getByRole('region',{name:'Paper trade ticket',exact:true});
+ await ticket.getByLabel('Paper order type').selectOption('MARKET');
+ await ticket.getByLabel('Paper quantity').fill('100');
+ await ticket.getByRole('button',{name:'Sell',exact:true}).click();
+ await expect(ticket).toContainText('0 / 0 MSTR');
+ await ticket.getByRole('button',{name:'Place Paper Sell',exact:true}).click();
+ await expect(ticket.getByRole('status')).toContainText('You do not own MSTR');
+ await expect(ticket.getByRole('status')).not.toContainText('Cancel a working sell first');
+ await expect(ticket.getByRole('button',{name:'Sell Short',exact:true})).toBeInViewport({ratio:1});
+ await ticket.getByRole('button',{name:'Sell Short',exact:true}).click();
+ await ticket.getByRole('button',{name:'Place Paper Sell Short',exact:true}).click();
+ await expect(ticket.getByRole('status')).toContainText('FILLED');
+ await expect.poll(()=>evidence.workspace().paperLedger?.positions.MSTR?.quantity).toBe(-100);
+ await expect(page.locator('.ws-account-strip')).toContainText('$83,210.00');
+ quotes[0]=paperProviderQuote(160,'MSTR');
+ await expect(page.locator('.ws-symbol-price')).toContainText('160.00',{timeout:20000});
+ await ticket.getByRole('button',{name:'Buy to Cover',exact:true}).click();
+ await ticket.getByLabel('Paper quantity').fill('20');
+ await ticket.getByRole('button',{name:'Place Paper Buy to Cover',exact:true}).click();
+ await expect.poll(()=>evidence.workspace().paperLedger?.positions.MSTR?.quantity).toBe(-80);
+ expect(evidence.workspace().paperLedger.realizedPnL).toBe(157.8);
+ await page.reload();await expect(page.locator('.ws-portfolio tbody')).toContainText('-80');
+ await page.screenshot({path:testInfo.outputPath('mstr-short-cover.png')});
+ expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
+});
+
+test('short bracket buys to cover on its stop and cancels the lower profit target', async ({page}) => {
+ await page.clock.setFixedTime(paperNow);
+ const quotes=[paperProviderQuote(100)];
+ const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:'orders',selectedStock:'NVDA',positions:{},orders:[],realizedPnL:0},{providerQuotes:quotes});
+ const ticket=page.getByRole('region',{name:'Paper trade ticket',exact:true});
+ await ticket.getByRole('button',{name:'Sell Short',exact:true}).click();
+ await ticket.getByLabel('Paper order type').selectOption('MARKET');await ticket.getByLabel('Paper quantity').fill('10');
+ await ticket.locator('summary').click();await ticket.getByLabel('Stop loss',{exact:true}).fill('105');await ticket.getByLabel('Take profit',{exact:true}).fill('95');
+ await ticket.getByRole('button',{name:'Place Paper Sell Short',exact:true}).click();
+ await expect.poll(()=>evidence.workspace().paperLedger?.orders.length).toBe(3);
+ quotes[0]=paperProviderQuote(106);
+ await expect.poll(()=>evidence.workspace().paperLedger?.positions.NVDA,{timeout:25000}).toBeUndefined();
+ const ledger=evidence.workspace().paperLedger;
+ expect(ledger.realizedPnL).toBe(-60.2);expect(ledger.orders.find(o=>o.type==='STOP').action).toBe('BUY_TO_COVER');
+ expect(ledger.orders.find(o=>o.type==='LIMIT').status).toBe('CANCELLED');
+ await page.getByRole('tab',{name:'Filled',exact:true}).click();
+ await expect(page.getByRole('row',{name:'Select NVDA',exact:true}).first()).toContainText('BUY TO COVER');
+ expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
+});
+
+test('order flow shows real Level 1 and last trade snapshot with honest feed labels',async({page},testInfo)=>{
+ await page.clock.setFixedTime(paperNow);
+ const quotes=[{...paperProviderQuote(167.94,'MSTR'),lastTradePrice:167.94,lastTradeSize:37}];
+ const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:'dashboard',selectedStock:'MSTR',layoutMode:'1',positions:{},orders:[]},{providerQuotes:quotes});
+ const book=page.getByRole('region',{name:'Order book',exact:true});
+ await expect(book).toContainText('Level 1 · best bid / ask');
+ await book.getByRole('tab',{name:'Time & Sales',exact:true}).click();
+ await expect(book.getByRole('cell',{name:'167.94',exact:true})).toBeVisible();
+ await expect(book.getByRole('cell',{name:'37',exact:true})).toBeVisible();
+ await expect(book.getByRole('cell',{name:'37',exact:true})).toBeInViewport({ratio:1});
+ await expect(book).toContainText('Last trade snapshot · not full tape');
+ expect(await book.locator('tbody tr').count()).toBe(1);
+ await page.screenshot({path:testInfo.outputPath('order-flow-snapshot.png')});
+ expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
+});
+
 test('paper stop limit remains working after trigger and reload, then fills within its limit', async ({page}) => {
  test.setTimeout(70000);
  await page.clock.setFixedTime(paperNow);

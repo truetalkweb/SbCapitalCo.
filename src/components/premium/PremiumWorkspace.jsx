@@ -200,6 +200,8 @@ function PremiumWorkspaceContent({
     time: order.time || order.createdAt?.slice(11, 19) || "Pending",
     symbol: order.symbol || selectedStock,
     side: order.side || order.orderSide || "BUY",
+    action: order.action || order.side || "BUY",
+    actionLabel: (order.action || order.side || "BUY").replaceAll('_', ' '),
     type: order.type || order.orderType || "LIMIT",
     qty: num(order.qty ?? order.quantity, null),
     price: num(order.price ?? order.limitPrice ?? order.stopPrice, null),

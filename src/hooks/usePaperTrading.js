@@ -39,5 +39,5 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits }) {
     return result;
   }, [commit]);
   const balances = useMemo(() => paperBalances(state, quotes, now), [state, quotes, now]);
-  return { submit, cancel, balances, ready: enabled, session: getUsMarketStatus(new Date(now)), orders: state.orders };
+  return { submit, cancel, balances, ready: enabled, session: getUsMarketStatus(new Date(now)), orders: state.orders, positions: state.positions };
 }

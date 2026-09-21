@@ -13,6 +13,7 @@ export const PERSISTED_WORKSPACE_FIELDS = Object.freeze([
   "orders",
   "orderAuditTrail",
   "positions",
+  "paperLedger",
   "realizedPnL",
   "alerts",
   "syncCharts",

@@ -14,6 +14,7 @@ export function usePremiumWorkspaceActions({
   referencePrice,
   review: externalReview,
   setReview: externalSetReview,
+  setPaperDraft,
 }) {
   const [localReview, setLocalReview] = useState(null);
   const review = externalReview === undefined ? localReview : externalReview;
@@ -40,6 +41,7 @@ export function usePremiumWorkspaceActions({
   }, [selectedSymbol, setOrderConfirmed, setOrderMessage, setPremiumDockTab, selectMainSymbol, setActiveWorkspace, orderRows, positionRows, setReview]);
 
   const prepareOrderReview = useCallback((side, symbol = selectedSymbol, draft = {}) => {
+    setPaperDraft?.({ ...draft, side, symbol, id: crypto.randomUUID() });
     selectMainSymbol?.(symbol);
     setActiveWorkspace?.("orders");
     setReview({ label:`${side}${draft.type ? ` ${draft.type}` : ""} order review`,symbol,createdAt:new Date().toISOString(),quantity,referencePrice: typeof draft.price === "number" && draft.price > 0 ? draft.price : symbol === selectedSymbol ? referencePrice : null,
@@ -59,6 +61,7 @@ export function usePremiumWorkspaceActions({
     referencePrice,
     setActiveWorkspace,
     setReview,
+    setPaperDraft,
   ]);
 
   return { openChart, prepareOrderReview, prepareReviewAction, review, dismissReview: () => setReview(null) };

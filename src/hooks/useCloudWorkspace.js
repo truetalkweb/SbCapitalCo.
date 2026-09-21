@@ -539,6 +539,7 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
 
     let active = true;
     let initialized = false;
+    let restoredUserId = null;
     const authUrl = new URL(window.location.href);
     const authUrlError = authUrl.searchParams.get("error_description")
       || authUrl.searchParams.get("error");
@@ -548,9 +549,12 @@ export function useCloudWorkspace({ applyWorkspace, pushActivity, resetWorkspace
     }
     const finishSessionRestore = (session) => {
       if (!active) return;
+      const nextUserId = session?.user?.id || null;
+      // Refreshing the same session does not reload its workspace.
+      if (!initialized || nextUserId !== restoredUserId) setWorkspaceReady(false);
+      restoredUserId = nextUserId;
       initialized = true;
       setUser(session?.user || null);
-      setWorkspaceReady(false);
       setAuthReady(true);
     };
     const restoreTimeout = window.setTimeout(() => {

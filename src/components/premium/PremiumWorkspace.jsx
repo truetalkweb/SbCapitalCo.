@@ -12,6 +12,7 @@ import { usePremiumWorkspaceActions } from "../../hooks/usePremiumWorkspaceActio
 import { usePremiumWorkspaceState } from "../../hooks/usePremiumWorkspaceState";
 import { usePremiumWorkspaceViews } from "../../hooks/usePremiumWorkspaceViews";
 import WorkstationDashboard from "../workstation/WorkstationDashboard";
+import PaperOrderTicket from "../workstation/PaperOrderTicket";
 import {
   formatCompactNumber,
   formatMultiple,
@@ -84,6 +85,9 @@ function PremiumWorkspaceContent({
   positions,
   allSymbols,
   accountSummary,
+  paperTrading,
+  paperDraft,
+  setPaperDraft,
   realizedPnL,
   totalUnrealizedPnL,
   quantity,
@@ -190,12 +194,15 @@ function PremiumWorkspaceContent({
     totalUnrealizedPnL,
   });
   const orderRows = (orders || []).map((order, index) => ({
+    engine: order.engine,
+    reason: order.reason,
+    stopPrice: order.stopPrice,
     time: order.time || order.createdAt?.slice(11, 19) || "Pending",
     symbol: order.symbol || selectedStock,
     side: order.side || order.orderSide || "BUY",
     type: order.type || order.orderType || "LIMIT",
     qty: num(order.qty ?? order.quantity, null),
-    price: num(order.price ?? order.limitPrice, null),
+    price: num(order.price ?? order.limitPrice ?? order.stopPrice, null),
     status: order.status || "REVIEW",
     filled: num(order.filled, null),
     remaining: num(order.remaining, null),
@@ -445,6 +452,7 @@ function PremiumWorkspaceContent({
   } = usePremiumWorkspaceActions({
     review: workspaceOrderReview,
     setReview: setWorkspaceOrderReview,
+    setPaperDraft,
     selectedSymbol: selected.symbol,
     orderRows, positionRows, quantity, referencePrice: selected.price,
     selectMainSymbol,
@@ -547,6 +555,9 @@ function PremiumWorkspaceContent({
   );
   const quickOrder = (
     <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0, overflow: "hidden" }}>
+      {paperTrading ? <PaperOrderTicket key={`${selectedStock}-${paperDraft?.id || ''}`} symbol={selectedStock} quote={selectedStockData}
+        quantity={quantity} setQuantity={setQuantity} trading={paperTrading} initialDraft={paperDraft?.symbol === selectedStock ? paperDraft : {}}
+        defaultType={defaultOrderType} onMessage={setOrderMessage} /> : <>
       <div style={{ padding: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7, minWidth: 0 }}>
           {["Symbol", "Shares", "Order Type", defaultOrderType === "LIMIT" ? "Limit Price" : "Review Price"].map((label, index) => (
@@ -580,6 +591,7 @@ function PremiumWorkspaceContent({
           ))}
         </div>
       </div>
+      </>}
     </PremiumCard>
   );
   const selectedActions = (
@@ -776,6 +788,7 @@ function PremiumWorkspaceContent({
     return (
       <OrdersWorkspacePage
         {...{
+          paperTrading,
           mainTwoCol,
           review, dismissReview,
           orderMessage,
@@ -1000,7 +1013,7 @@ function PremiumWorkspaceContent({
     return <WorkstationDashboard selected={dashboard.selected} chart={renderChartGrid?.({ layoutMode: "1", embeddedChart: true })}
       account={accountSummary} marketIndexes={marketIndexes} positions={positionRows} orders={orderRows} rawOrders={orders}
       news={dashboard.newsRows.filter(row => !row.fallback && !row.isSynthetic)} alerts={alerts} quantity={quantity} setQuantity={setQuantity}
-      onReview={prepareOrderReview} onSelect={selectMainSymbol} onNavigate={setActiveWorkspace} onAddWatch={addSymbolToWatchlist}
+      onReview={prepareOrderReview} paperTrading={paperTrading} onSelect={selectMainSymbol} onNavigate={setActiveWorkspace} onAddWatch={addSymbolToWatchlist}
       watched={collections.active.symbols.includes(selectedStock)} timeframe={timeframe} setTimeframe={setTimeframe}
       indicators={chartIndicators} setIndicators={setChartIndicators} takeScreenshot={takeScreenshot} toggleAlert={toggleAlert}
       preferences={premiumPreferences} setPreference={updatePremiumPreference} />;

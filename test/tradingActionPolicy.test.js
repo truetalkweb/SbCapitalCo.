@@ -3,8 +3,8 @@ import test from "node:test";
 
 import { getTradingActionMode } from "../src/services/tradingActionPolicy.js";
 
-test("public and disconnected order controls are review-only", () => {
-  assert.equal(getTradingActionMode(), "review-only");
+test("paper execution is available without a broker; unapproved live routing remains review-only", () => {
+  assert.equal(getTradingActionMode(), "paper");
   assert.equal(getTradingActionMode({
     brokerConnected: true,
     brokerToolsEnabled: false,
@@ -19,7 +19,8 @@ test("public and disconnected order controls are review-only", () => {
   }), "review-only");
 });
 
-test("paper simulation requires connected private broker tooling", () => {
+test("paper simulation works with or without private broker tooling", () => {
+  assert.equal(getTradingActionMode({ requestedMode: "paper", brokerConnected: false }), "paper");
   assert.equal(getTradingActionMode({
     brokerConnected: true,
     brokerToolsEnabled: true,
@@ -33,7 +34,7 @@ test("live mode fails closed unless both private broker tools and live trading a
     brokerToolsEnabled: true,
     liveTradingEnabled: false,
     requestedMode: "live",
-  }), "paper");
+  }), "review-only");
   assert.equal(getTradingActionMode({
     brokerConnected: true,
     brokerToolsEnabled: true,

@@ -24,6 +24,7 @@ function provenance(payload, request) {
     cached: Boolean(payload.cached || payload.isCached || [payload.quality, payload.dataMode].includes("cached")),
     delayed: Boolean(payload.delayed || payload.isDelayed || payload.realtime === false || [payload.quality, payload.dataMode].includes("delayed")),
     degraded: Boolean(payload.degraded), fallback: Boolean(payload.fallback || payload.isFallback),
+    isHalted: Boolean(payload.isHalted),
   };
 }
 

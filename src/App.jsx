@@ -1,3 +1,5 @@
+import { usePaperTrading } from "./hooks/usePaperTrading";
+import { isWorkingPaperOrder } from "./services/paperTradingEngine";
 import { workstationTheme } from "./components/workstation/workstationTheme";
 import { WorkstationSidebar, WorkstationFooter } from "./components/workstation/WorkstationChrome";
 import {
@@ -197,17 +199,19 @@ export default function App() {
   const [riskPerTrade, setRiskPerTrade] = useState(() =>
     loadSetting("sb_risk_per_trade", 250)
   );
-  const [orders, setOrders] = useState(() => loadSetting("sb_orders", []));
+  const [paperLedger, setPaperLedger] = useState(() => loadSetting("sb_paper_ledger", null) || {
+    orders: loadSetting("sb_orders", []), positions: loadSetting("sb_positions", {}), realizedPnL: loadSetting("sb_realized_pnl", 0),
+  });
+  const { orders, positions, realizedPnL } = paperLedger;
+  const setOrders = useCallback(value => setPaperLedger(state => ({ ...state, orders: typeof value === "function" ? value(state.orders) : value })), []);
+  const setPositions = useCallback(value => setPaperLedger(state => ({ ...state, positions: typeof value === "function" ? value(state.positions) : value })), []);
+  const setRealizedPnL = useCallback(value => setPaperLedger(state => ({ ...state, realizedPnL: typeof value === "function" ? value(state.realizedPnL) : value })), []);
+  const [paperDraft, setPaperDraft] = useState(null);
+  useEffect(() => { saveSetting("sb_paper_ledger", paperLedger); }, [paperLedger]);
   const [orderAuditTrail, setOrderAuditTrail] = useState(() =>
     loadSetting("sb_order_audit_trail", [])
   );
   const [orderAuditSyncStatus, setOrderAuditSyncStatus] = useState("Local audit ready");
-  const [positions, setPositions] = useState(() =>
-    loadSetting("sb_positions", {})
-  );
-  const [realizedPnL, setRealizedPnL] = useState(() =>
-    loadSetting("sb_realized_pnl", 0)
-  );
 
   const [showIndicators, setShowIndicators] = useState(false);
   const [chartIndicators, setChartIndicators] = useState(() =>
@@ -664,14 +668,12 @@ export default function App() {
   }, [resetReplayState]);
 
   const {
-    dailyRealizedLoss,
     estimatedValue,
     orderConfirmationKey,
     orderEntryPrice,
     orderPreview,
     orderReward,
     orderRisk,
-    orderValue,
     riskGuard,
     riskReward,
     safetyIssues,
@@ -754,6 +756,7 @@ export default function App() {
       quantity,
       orders,
       orderAuditTrail,
+      paperLedger,
       positions,
       realizedPnL,
       alerts,
@@ -798,6 +801,7 @@ export default function App() {
       quantity,
       orders,
       orderAuditTrail,
+      paperLedger,
       positions,
       realizedPnL,
       alerts,
@@ -841,10 +845,13 @@ export default function App() {
     if (data.timeframe) setTimeframe(data.timeframe);
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
     if (typeof data.quantity !== "undefined") setQuantity(data.quantity);
-    if (Array.isArray(data.orders)) setOrders(data.orders);
     if (Array.isArray(data.orderAuditTrail)) setOrderAuditTrail(data.orderAuditTrail);
-    if (data.positions) setPositions(data.positions);
-    if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
+    if (data.paperLedger && Array.isArray(data.paperLedger.orders) && data.paperLedger.positions && Number.isFinite(data.paperLedger.realizedPnL)) setPaperLedger(data.paperLedger);
+    else {
+      if (Array.isArray(data.orders)) setOrders(data.orders);
+      if (data.positions) setPositions(data.positions);
+      if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
+    }
     if (Array.isArray(data.alerts)) setAlerts(data.alerts);
     if (data.tradingMode) setTradingMode(LIVE_TRADING_ENABLED ? data.tradingMode : "paper");
     if (typeof data.maxOrderValue !== "undefined") setMaxOrderValue(data.maxOrderValue);
@@ -882,6 +889,9 @@ export default function App() {
   }, [
     applySymbolWorkspace,
     applyWorkspaceLayout,
+    setOrders,
+    setPositions,
+    setRealizedPnL,
     setAlerts,
     restoreReplaySession,
     setReplayMode,
@@ -904,6 +914,7 @@ export default function App() {
     handlePasswordReset,
     handlePasswordUpdate,
     isAuthConfigured,
+    workspaceReady,
     loadWorkspaceFromCloud,
     passwordRecovery,
     saveWorkspaceToCloud,
@@ -917,6 +928,12 @@ export default function App() {
     resetWorkspace,
     workspacePayload,
   });
+  const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
+    enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
+  const paperAccountSummary = { source: "Paper account · $100,000 starting balance", rows: [
+    { label: "Account Equity", value: paperTrading.balances.equity },
+    { label: "Buying Power", value: paperTrading.balances.buyingPower },
+  ] };
   const [entitlements, setEntitlements] = useState(DEFAULT_ENTITLEMENTS);
   const [entitlementsStatus, setEntitlementsStatus] = useState("idle");
   const entitlementUserId = user?.id;
@@ -1307,6 +1324,7 @@ export default function App() {
       "sb_active_scanner_preset",
       "sb_watchlist",
       "sb_orders",
+      "sb_paper_ledger",
       "sb_order_audit_trail",
       "sb_positions",
       "sb_realized_pnl",
@@ -1375,94 +1393,6 @@ export default function App() {
     setRiskPerTrade(250);
     setSelectedScannerStock(null);
   }
-
-  const placeOrder = useCallback((side, options = {}) => {
-    if (!BROKER_TOOLS_ENABLED || !brokerConnected) return false;
-
-    const currentPrice = Number(selectedStockData?.price || 0);
-    const executionPrice = Number(options.price || currentPrice);
-    const qty = Number(quantity);
-
-    if (!qty || qty <= 0 || !executionPrice) return false;
-
-    const existing = positions[selectedStock] || {
-      quantity: 0,
-      average: 0,
-    };
-
-    let updatedPositions = { ...positions };
-    let updatedRealized = Number(realizedPnL || 0);
-    let filledQty = qty;
-    let orderRealizedPnL = null;
-
-    if (side === "BUY") {
-      const totalCost = existing.average * existing.quantity + executionPrice * qty;
-      const newQty = existing.quantity + qty;
-
-      updatedPositions[selectedStock] = {
-        quantity: newQty,
-        average: totalCost / newQty,
-      };
-    }
-
-    if (side === "SELL") {
-      const sellQty = Math.min(qty, existing.quantity);
-
-      if (sellQty <= 0) return false;
-
-      const pnl = (executionPrice - existing.average) * sellQty;
-      updatedRealized += pnl;
-      filledQty = sellQty;
-      orderRealizedPnL = pnl;
-
-      const remaining = existing.quantity - sellQty;
-
-      if (remaining <= 0) {
-        delete updatedPositions[selectedStock];
-      } else {
-        updatedPositions[selectedStock] = {
-          ...existing,
-          quantity: remaining,
-        };
-      }
-    }
-
-    setPositions(updatedPositions);
-    setRealizedPnL(updatedRealized);
-
-    const order = {
-      id: Date.now(),
-      auditId: options.auditId,
-      mode: options.mode || "paper",
-      side,
-      symbol: selectedStock,
-      quantity: filledQty,
-      requestedQuantity: qty,
-      price: executionPrice.toFixed(2),
-      value: (executionPrice * filledQty).toFixed(2),
-      orderType: options.orderType,
-      stopLoss: options.stopLoss,
-      takeProfit: options.takeProfit,
-      riskReward: options.riskReward,
-      status:
-        side === "SELL" && filledQty < qty
-          ? "Paper Partially Filled"
-          : options.status,
-      realizedPnL: orderRealizedPnL !== null ? orderRealizedPnL.toFixed(2) : null,
-      auditStatus: options.auditStatus || "Guardrails Passed",
-      guardrails: options.guardrails || null,
-      confirmationKey: options.confirmationKey,
-      submittedAt: options.submittedAt,
-      time: formatPacificTime(new Date(), { second: "2-digit" }),
-    };
-
-    setOrders((prev) => [order, ...prev]);
-    return {
-      filledQty,
-      requestedQty: qty,
-      partiallyFilled: filledQty < qty,
-    };
-  }, [brokerConnected, positions, quantity, realizedPnL, selectedStock, selectedStockData?.price]);
 
   function buildBrokerOrderPayload(sideOverride = orderSide, confirmed = false) {
     const currentPrice = Number(selectedStockData?.price || 0);
@@ -1560,6 +1490,15 @@ export default function App() {
 
   async function submitOrderTicket(sideOverride = orderSide) {
     setOrderMessage("");
+
+    if (tradingActionMode === "paper") {
+      const result = paperTrading.submit({ id: crypto.randomUUID(), symbol: selectedStock, side: sideOverride,
+        type: orderType, quantity, limitPrice, stopLoss, takeProfit, tif: "DAY" });
+      const message = result.error || `Paper ${result.order.status.toLowerCase()}: ${sideOverride} ${quantity} ${selectedStock}. ${result.order.reason || ""}`;
+      setOrderMessage(message);
+      pushOrderAudit(buildOrderAuditRecord(sideOverride, result.error ? "blocked" : result.order.status.toLowerCase(), message));
+      return;
+    }
 
     if (tradingActionMode === "review-only") {
       const reason = "Order review prepared. Execution requires an active supported broker connection.";
@@ -1694,116 +1633,6 @@ export default function App() {
       return;
     }
 
-    if (safetyIssues.length > 0) {
-      setOrderMessage(safetyIssues[0]);
-      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", safetyIssues[0], { entryPrice }));
-      pushActivity({
-        type: "risk",
-        status: "blocked",
-        title: "Risk Guardrail Blocked Order",
-        detail: safetyIssues[0],
-        symbol: selectedStock,
-        meta: {
-          orderValue,
-          orderRisk,
-          riskPerTrade: Number(riskPerTrade || 0),
-          maxOrderValue: Number(maxOrderValue || 0),
-        },
-      });
-      return;
-    }
-
-    const auditId = `SB-${Date.now().toString(36).toUpperCase()}`;
-    const submittedAt = new Date().toISOString();
-    const confirmText = [
-      `Submit PAPER ${sideOverride} ${qty} ${selectedStock}`,
-      `Entry: $${entryPrice.toFixed(2)}`,
-      `Value: $${(entryPrice * qty).toFixed(2)}`,
-      `Risk: $${orderRisk.toFixed(2)}`,
-      `Audit: ${auditId}`,
-    ].join("\n");
-
-    if (!window.confirm(confirmText)) {
-      setOrderMessage("Order submission cancelled before execution.");
-      pushOrderAudit(buildOrderAuditRecord(sideOverride, "cancelled", "User cancelled paper order before execution.", {
-        id: auditId,
-        timestamp: submittedAt,
-        entryPrice,
-      }));
-      pushActivity({
-        type: "order",
-        status: "cancelled",
-        title: "Paper Order Cancelled",
-        detail: "User cancelled the final order confirmation before execution.",
-        symbol: selectedStock,
-      });
-      return;
-    }
-
-    const result = placeOrder(sideOverride, {
-      auditId,
-      mode: "paper",
-      price: entryPrice,
-      orderType,
-      stopLoss: Number(stopLoss) > 0 ? Number(stopLoss).toFixed(2) : null,
-      takeProfit: Number(takeProfit) > 0 ? Number(takeProfit).toFixed(2) : null,
-      riskReward,
-      status: "Paper Filled",
-      auditStatus: "Guardrails Passed",
-      confirmationKey: orderConfirmationKey,
-      submittedAt,
-      guardrails: {
-        maxOrderValue: Number(maxOrderValue || 0),
-        dailyLossLimit: Number(dailyLossLimit || 0),
-        riskPerTrade: Number(riskPerTrade || 0),
-        orderRisk: Number(orderRisk || 0),
-        orderValue: Number(entryPrice * qty),
-        dailyRealizedLoss: Number(dailyRealizedLoss || 0),
-      },
-    });
-
-    if (result) {
-      const fillText = result.partiallyFilled
-        ? `${result.filledQty} of ${result.requestedQty}`
-        : result.filledQty;
-
-      setOrderMessage(`${sideOverride} ${fillText} ${selectedStock} filled as paper ${orderType.toLowerCase()} order.`);
-      setOrderConfirmed(false);
-      pushOrderAudit(buildOrderAuditRecord(sideOverride, "simulated", `Paper ${sideOverride.toLowerCase()} filled in local simulator.`, {
-        id: auditId,
-        timestamp: submittedAt,
-        entryPrice,
-        quantity: result.filledQty,
-        orderValue: Number(entryPrice * result.filledQty),
-      }));
-      pushActivity({
-        type: "order",
-        status: "filled",
-        title: `Paper ${sideOverride} Filled`,
-        detail: `${fillText} ${selectedStock} filled at $${entryPrice.toFixed(2)} as a ${orderType.toLowerCase()} order.`,
-        symbol: selectedStock,
-        meta: {
-          auditId,
-          quantity: result.filledQty,
-          value: Number(entryPrice * result.filledQty),
-          orderRisk: Number(orderRisk || 0),
-        },
-      });
-    } else {
-      setOrderMessage(`No ${selectedStock} position available to sell.`);
-      pushOrderAudit(buildOrderAuditRecord(sideOverride, "blocked", `No ${selectedStock} paper position was available to sell.`, {
-        id: auditId,
-        timestamp: submittedAt,
-        entryPrice,
-      }));
-      pushActivity({
-        type: "order",
-        status: "blocked",
-        title: "Paper Sell Blocked",
-        detail: `No ${selectedStock} paper position was available to sell.`,
-        symbol: selectedStock,
-      });
-    }
   }
 
   function toggleFullscreen(target = chartAreaRef.current) {
@@ -2265,7 +2094,8 @@ export default function App() {
     ...trackedSymbols,
     ...alerts.filter(alert => alert.active).map(alert => alert.symbol),
     ...Object.keys(positions),
-  ].filter(Boolean))], [trackedSymbols, alerts, positions]);
+    ...orders.filter(isWorkingPaperOrder).map(order => order.symbol),
+  ].filter(Boolean))], [trackedSymbols, alerts, positions, orders]);
 
   useEffect(() => {
     return subscribeToSymbols(monitoredSymbols);
@@ -3876,7 +3706,10 @@ export default function App() {
         orders={orders}
         positions={positions}
         allSymbols={allSymbols}
-        accountSummary={premiumAccountSummary}
+        accountSummary={paperAccountSummary}
+        paperTrading={paperTrading}
+        paperDraft={paperDraft}
+        setPaperDraft={setPaperDraft}
         realizedPnL={realizedPnL}
         totalUnrealizedPnL={totalUnrealizedPnL}
         quantity={quantity}

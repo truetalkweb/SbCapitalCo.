@@ -1,9 +1,11 @@
 import OrderReviewPanel from "../OrderReviewPanel";
+import { isWorkingPaperOrder } from "../../../services/paperTradingEngine.js";
 import { Lock, Shield, X } from "lucide-react";
 import { money } from "../premiumWorkspaceData";
 import { ActionButton, FilterBar, PremiumCard, PremiumTable, PremiumTabs, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function OrdersWorkspacePage({
+  paperTrading,
   mainTwoCol,
   review, dismissReview,
       orderSearch,
@@ -32,8 +34,9 @@ export default function OrdersWorkspacePage({
             <PremiumCard theme={theme} title="Order Activity"><PremiumTable theme={theme} columns={[{ key: "time", label: "Time", width: "100px" }, { key: "event", label: "Event", width: "1fr" }, { key: "status", label: "Status", width: "140px", color: () => theme.green }]} rows={visibleOrderRows.slice(0, 5).map((row) => ({ time: row.time, event: `${row.symbol} ${row.side} ${row.qty} @ ${row.price}`, status: row.status }))} emptyMessage="No order activity matches this view." /></PremiumCard>
           </div>
           <div style={{ display: "grid", gap: 10 }}>
-            <PremiumCard theme={theme} title="Order Review"><div style={{ padding: 16 }}>{quickOrder.props.children}</div></PremiumCard>
-            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(selectedOrder?.price !== null && selectedOrder?.price !== undefined && selectedOrder?.qty !== null ? selectedOrder.price * selectedOrder.qty : null)], ["Mode", "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}{orderMessage ? <div role="status" data-testid="order-review-status" style={{ marginTop: 2, padding: "9px 10px", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.muted, fontSize: 11, lineHeight: 1.45 }}>{orderMessage}</div> : null}</div></PremiumCard>
+            <PremiumCard theme={theme} title={paperTrading ? "Paper order ticket" : "Order Review"}><div style={{ padding: paperTrading ? 0 : 16 }}>{quickOrder.props.children}</div></PremiumCard>
+            <PremiumCard theme={theme} title="Order Summary"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[["Selected Order", selectedOrder ? `${selectedOrder.side} ${selectedOrder.qty} ${selectedOrder.symbol}` : "No order selected"], ["Order Value", money(selectedOrder?.price !== null && selectedOrder?.price !== undefined && selectedOrder?.qty !== null ? selectedOrder.price * selectedOrder.qty : null)], ["Mode", paperTrading ? "Paper simulation" : "Review only"], ["Status", selectedOrder?.status || "No rows yet"]].map(([a, b]) => <div key={a} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}><span>{a}</span><b style={{ textAlign: "right" }}>{b}</b></div>)}{orderMessage ? <div role="status" data-testid="order-review-status" style={{ marginTop: 2, padding: "9px 10px", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.muted, fontSize: 11, lineHeight: 1.45 }}>{orderMessage}</div> : null}</div></PremiumCard>
+            {paperTrading && selectedOrder && <PremiumCard theme={theme} title="Selected paper order"><div style={{ padding: 14, display: "grid", gap: 10 }}><span>{selectedOrder.reason || selectedOrder.status}{selectedOrder.stopPrice ? ` · Stop ${selectedOrder.stopPrice}` : ""}</span><ActionButton theme={theme} danger disabled={!isWorkingPaperOrder(selectedOrder)} onClick={() => paperTrading.cancel(selectedOrder.id)}>Cancel selected paper order</ActionButton></div></PremiumCard>}
             <OrderReviewPanel theme={theme} review={review} dismissReview={dismissReview} />
             <PremiumCard theme={theme} title="Quick Actions">
               <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>

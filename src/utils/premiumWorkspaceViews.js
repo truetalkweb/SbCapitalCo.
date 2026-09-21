@@ -53,7 +53,7 @@ export function filterOrderRows(rows = [], view = "All Orders", search = "") {
   return rows.filter((row) => {
     if (!matchesSearch(row, search, ["symbol", "side", "type", "status", "id"])) return false;
     const status = String(row?.status || "").toUpperCase();
-    if (view === "Working") return status.includes("WORK") || status.includes("OPEN") || status.includes("PENDING") || status.includes("PART");
+    if (view === "Working") return status.includes("WORK") || status.includes("OPEN") || status.includes("PENDING") || status.includes("PART") || status === "TRIGGERED";
     if (view === "Filled") return status.includes("FILL") && !status.includes("PART");
     if (view === "Cancelled") return status.includes("CANCEL");
     if (view === "Rejected") return status.includes("REJECT");

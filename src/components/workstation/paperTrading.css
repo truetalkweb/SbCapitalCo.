@@ -39,3 +39,9 @@
  .ws-dashboard .ws-paper-form .ws-side-toggle button { height:28px; min-height:28px; }
  .ws-dashboard .ws-paper-field { gap:3px; }
 }
+.ws-paper-management { padding: 14px; font-size: 12px; line-height: 1.5; }
+.ws-paper-management-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.ws-paper-management button { background: var(--ws-alt, #101a20); border: 1px solid var(--ws-border, #26343c); color: var(--ws-text, #e4edf2); border-radius: 4px; padding: 8px 10px; cursor: pointer; }
+.ws-paper-management button:disabled { opacity: .45; cursor: default; }
+.ws-paper-management-form { padding: 10px 0; border-top: 1px solid #26343c; }
+.ws-paper-management-form .ws-paper-grid { margin-bottom: 12px; }

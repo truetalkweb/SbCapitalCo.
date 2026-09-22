@@ -131,7 +131,8 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
     stopPrice: ['STOP', 'STOP_LIMIT'].includes(type) ? stopPrice : null,
     stopLoss, takeProfit, referencePrice, tif: draft.tif || 'DAY', status: 'WORKING', price: null,
     createdAt: iso(now), submittedAt: iso(now), expiresAt: (draft.tif || 'DAY') === 'DAY' ? dayExpiry(now) : null,
-    maxOrderValue: Number(limits.maxOrderValue) || 0, riskPerTrade: Number(limits.riskPerTrade) || 0 };
+    maxOrderValue: Number(limits.maxOrderValue) || 0, riskPerTrade: Number(limits.riskPerTrade) || 0,
+    dailyLossLimit: Number(limits.dailyLossLimit) || 0 };
   const next = processPaperOrders({ ...state, orders: [order, ...(state.orders || [])] }, quotes, now);
   return { state: next, order: next.orders.find(row => row.id === order.id) };
 }
@@ -178,9 +179,12 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
     let reason = '';
     if (isOpening) {
       const balances = paperBalances(next, quotes, now);
+      const todayRealized = next.orders.filter(row => row.filledAt && day(row.filledAt) === day(now))
+        .reduce((total, row) => total + (number(row.realizedPnL) || 0), 0);
       const otherReserved = next.orders.filter(other => other.id !== order.id && isWorkingPaperOrder(other) && opening(other))
         .reduce((sum, other) => sum + other.quantity * reference(other), 0);
       if (isShort ? held > 0 : held < 0) reason = 'Close the opposite position before opening this order';
+      else if (order.dailyLossLimit > 0 && todayRealized <= -order.dailyLossLimit) reason = 'Daily paper loss limit reached before execution';
       else if (balances.cash === null || fillPrice * qty > balances.cash - balances.shortCollateral - otherReserved) reason = 'Insufficient paper buying power at execution';
       else if (order.maxOrderValue > 0 && fillPrice * qty > order.maxOrderValue) reason = 'Execution exceeds maximum order value';
       else if ((order.stopLoss && (isShort ? order.stopLoss <= fillPrice : order.stopLoss >= fillPrice)) || (order.takeProfit && (isShort ? order.takeProfit >= fillPrice : order.takeProfit <= fillPrice))) reason = 'Price moved outside the attached protection levels';
@@ -199,7 +203,8 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       else next.positions[order.symbol] = { ...position, quantity: held + (isShort ? qty : -qty) };
     }
     Object.assign(order, { status: 'FILLED', filled: qty, remaining: 0, price: fillPrice, value: round(fillPrice * qty),
-      realizedPnL: realized, filledAt: iso(now), reason: `Simulated fill · ${quote.quality} quote · ${quote.basis}`,
+      realizedPnL: realized, entryPrice: isOpening ? fillPrice : Number(position.average),
+      closesPosition: !isOpening && Math.abs(held) === qty, filledAt: iso(now), reason: `Simulated fill · ${quote.quality} quote · ${quote.basis}`,
       quoteSource: quote.source, quoteAsOf: quote.asOf, quoteQuality: quote.quality });
     if (order.ocoGroup) for (const sibling of next.orders) if (sibling.id !== order.id && sibling.ocoGroup === order.ocoGroup && isWorkingPaperOrder(sibling)) {
       Object.assign(sibling, { status: 'CANCELLED', remaining: 0, reason: 'Linked exit filled', cancelledAt: iso(now) });

@@ -325,6 +325,7 @@ for (const [width, height] of [[1920,1080], [1600,900], [1366,768], [390,844]]) 
         expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
         expect(box.y + box.height).toBeLessThanOrEqual(height + 1);
         await expect.poll(() => plot.locator("canvas").first().evaluate(canvas => {
+          if (!canvas.width || !canvas.height) return 0;
           const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
           let colored = 0;
           for (let p = 0; p < data.length; p += 4) if (data[p + 3] && (data[p + 1] > data[p] * 1.4 || data[p] > data[p + 1] * 1.4)) colored++;

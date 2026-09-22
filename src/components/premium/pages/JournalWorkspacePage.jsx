@@ -172,7 +172,7 @@ export default function JournalWorkspacePage({
                   { key: "outcome", label: "Outcome", width: "80px", color: (row) => row.outcome === "Loss" ? theme.red : theme.green },
                   { key: "tag", label: "Notes", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.outcome === "Loss" ? "warn" : "neutral"}>{row.tag || row.setup}</StatusPill> },
                   { key: "notes", label: "Review", width: "1fr" },
-                  { key: "actions", label: "", width: "54px", align: "center", render: (row) => <button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
+                  { key: "actions", label: "", width: "54px", align: "center", render: (row) => row.immutable ? <span title="Execution history is retained by the paper account">Auto</span> : <button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
                 ]}
                 rows={pagination.rows} keyField="id"
               />
@@ -184,7 +184,7 @@ export default function JournalWorkspacePage({
                 <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
                 <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
               </div>
-              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports contain only locally recorded journal and review data. Daily and weekly reports are generated as portable Markdown files.</div>
+              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports include manual journal records and realized paper exits, including partial closes. Paper fees are zero in the current simulation. Daily and weekly reports are portable Markdown files.</div>
             </PremiumCard>}
         </div>
       </div>

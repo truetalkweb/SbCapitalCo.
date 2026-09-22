@@ -203,9 +203,6 @@ export default function App() {
     orders: loadSetting("sb_orders", []), positions: loadSetting("sb_positions", {}), realizedPnL: loadSetting("sb_realized_pnl", 0),
   });
   const { orders, positions, realizedPnL } = paperLedger;
-  const setOrders = useCallback(value => setPaperLedger(state => ({ ...state, orders: typeof value === "function" ? value(state.orders) : value })), []);
-  const setPositions = useCallback(value => setPaperLedger(state => ({ ...state, positions: typeof value === "function" ? value(state.positions) : value })), []);
-  const setRealizedPnL = useCallback(value => setPaperLedger(state => ({ ...state, realizedPnL: typeof value === "function" ? value(state.realizedPnL) : value })), []);
   const [paperDraft, setPaperDraft] = useState(null);
   useEffect(() => { saveSetting("sb_paper_ledger", paperLedger); }, [paperLedger]);
   const [orderAuditTrail, setOrderAuditTrail] = useState(() =>
@@ -846,12 +843,12 @@ export default function App() {
     if (data.secondaryTimeframe) setSecondaryTimeframe(data.secondaryTimeframe);
     if (typeof data.quantity !== "undefined") setQuantity(data.quantity);
     if (Array.isArray(data.orderAuditTrail)) setOrderAuditTrail(data.orderAuditTrail);
-    if (data.paperLedger && Array.isArray(data.paperLedger.orders) && data.paperLedger.positions && Number.isFinite(data.paperLedger.realizedPnL)) setPaperLedger(data.paperLedger);
-    else {
-      if (Array.isArray(data.orders)) setOrders(data.orders);
-      if (data.positions) setPositions(data.positions);
-      if (typeof data.realizedPnL === "number") setRealizedPnL(data.realizedPnL);
-    }
+    setPaperLedger(current => {
+      if (current.authority === 'server-v1') return current;
+      if (data.paperLedger && Array.isArray(data.paperLedger.orders) && data.paperLedger.positions && Number.isFinite(data.paperLedger.realizedPnL)) return data.paperLedger;
+      return { ...current, orders: Array.isArray(data.orders) ? data.orders : current.orders,
+        positions: data.positions || current.positions, realizedPnL: typeof data.realizedPnL === 'number' ? data.realizedPnL : current.realizedPnL };
+    });
     if (Array.isArray(data.alerts)) setAlerts(data.alerts);
     if (data.tradingMode) setTradingMode(LIVE_TRADING_ENABLED ? data.tradingMode : "paper");
     if (typeof data.maxOrderValue !== "undefined") setMaxOrderValue(data.maxOrderValue);
@@ -889,9 +886,6 @@ export default function App() {
   }, [
     applySymbolWorkspace,
     applyWorkspaceLayout,
-    setOrders,
-    setPositions,
-    setRealizedPnL,
     setAlerts,
     restoreReplaySession,
     setReplayMode,
@@ -929,7 +923,8 @@ export default function App() {
     workspacePayload,
   });
   const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
-    enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
+    userId: user?.id, enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
+  const accountJournalEntries = [...paperTrading.history, ...journalEntries];
   const paperAccountSummary = { source: "Paper account · $100,000 starting balance", rows: [
     { label: "Account Equity", value: paperTrading.balances.equity },
     { label: "Buying Power", value: paperTrading.balances.buyingPower },
@@ -1376,10 +1371,8 @@ export default function App() {
     setScannerTab("Gainers");
     setScannerPresets([{ id: "default", name: "All results", minRvol: 0 }]);
     setActiveScannerPreset("default");
-    setOrders([]);
+    setPaperLedger({ orders: [], positions: {}, realizedPnL: 0 });
     setOrderAuditTrail([]);
-    setPositions({});
-    setRealizedPnL(0);
     setAlerts([]);
     setReplayBookmarks([]);
     setReplayNotes("");
@@ -1492,7 +1485,7 @@ export default function App() {
     setOrderMessage("");
 
     if (tradingActionMode === "paper") {
-      const result = paperTrading.submit({ id: crypto.randomUUID(), symbol: selectedStock, side: sideOverride,
+      const result = await paperTrading.submit({ id: crypto.randomUUID(), symbol: selectedStock, side: sideOverride,
         type: orderType, quantity, limitPrice, stopLoss, takeProfit, tif: "DAY" });
       const message = result.error || `Paper ${result.order.status.toLowerCase()}: ${sideOverride} ${quantity} ${selectedStock}. ${result.order.reason || ""}`;
       setOrderMessage(message);
@@ -1724,7 +1717,7 @@ export default function App() {
     ];
     downloadFile(
       `journal-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(headers, journalEntries.map(normalizeJournalRecord)),
+      buildCsv(headers, accountJournalEntries.map(normalizeJournalRecord)),
       "text/csv;charset=utf-8"
     );
   }
@@ -1733,7 +1726,7 @@ export default function App() {
     const headers = ["createdAt", "symbol", "source", "currency", "status", "quantity", "entryPrice", "exitPrice", "fees", "pnl"];
     downloadFile(
       `trade-summary-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(headers, journalEntries.map(normalizeJournalRecord).filter(row => row.eligible)),
+      buildCsv(headers, accountJournalEntries.map(normalizeJournalRecord).filter(row => row.eligible)),
       "text/csv;charset=utf-8"
     );
   }
@@ -1749,8 +1742,8 @@ export default function App() {
 
   function buildDailyReportText() {
     const today = formatPacificDate(new Date());
-    const todaysOrders = orders.filter((order) => isTodayRecord(order.time));
-    const todaysJournal = journalEntries.filter((entry) => isTodayRecord(entry.createdAt));
+    const todaysOrders = orders.filter((order) => isTodayRecord(order.filledAt || order.createdAt || order.time));
+    const todaysJournal = accountJournalEntries.filter((entry) => isTodayRecord(entry.createdAt));
     const dailyStats = journalStatistics(todaysJournal);
     const latestJournal = todaysJournal.find((entry) => entry.symbol === selectedStock) || todaysJournal[0];
 
@@ -1800,10 +1793,10 @@ export default function App() {
   function exportWeeklyReport() {
     const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const weeklyOrders = orders.filter((order) => {
-      const parsed = new Date(order.time);
+      const parsed = new Date(order.filledAt || order.createdAt || order.time);
       return !Number.isNaN(parsed.getTime()) && parsed.getTime() >= weekAgo;
     });
-    const weeklyJournal = journalEntries.filter((entry) => {
+    const weeklyJournal = accountJournalEntries.filter((entry) => {
       const parsed = new Date(entry.createdAt);
       return !Number.isNaN(parsed.getTime()) && parsed.getTime() >= weekAgo;
     });
@@ -3758,7 +3751,7 @@ export default function App() {
         accountDeleteStatus={accountDeleteStatus}
         resetWorkspace={resetWorkspace}
         brokerConnected={brokerConnected}
-        journalEntries={journalEntries}
+        journalEntries={accountJournalEntries}
         replayPlaying={replayPlaying}
         replaySpeed={replaySpeed}
         replayStats={replayStats}

@@ -22,14 +22,14 @@ export default function WorkstationDashboard({ selected = {}, chart, account = {
   const move = number(selected.changePercent);
   const accountRows = new Map((account?.rows || []).map(row => [row.label, number(row.value)]));
   const accountEquity = accountRows.get("Net Liquidation") ?? accountRows.get("Account Equity");
-  const dayPnl = accountRows.get("Day P&L") ?? null;
+  const dayPnl = paperTrading ? (paperTrading.ready ? paperTrading.dailyRealized : null) : accountRows.get("Day P&L") ?? null;
   const today = clock.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const todaysTrades = rawOrders.filter(row => row.status?.toUpperCase() === "FILLED" && (row.filledAt || row.createdAt) && new Date(row.filledAt || row.createdAt).toLocaleDateString("en-CA", { timeZone: "America/New_York" }) === today).length;
 
   return <div className="ws-dashboard" data-testid="sb-main-dashboard">
     <div className="ws-account-strip" aria-label="Account metrics">
       <section className="ws-panel ws-metric ws-equity"><span>Account Equity</span><strong>{currency(accountEquity)}</strong><small>{account?.source || "Workspace account"}</small></section>
-      <section className="ws-panel ws-metric"><span>Day P&L</span><strong className={valueClass(dayPnl)}>{currency(dayPnl)}</strong><small>{dayPnl === null ? "Not reported" : "Reported by account"}</small></section>
+      <section className="ws-panel ws-metric"><span>{paperTrading ? 'Day Realized P&L' : 'Day P&L'}</span><strong className={valueClass(dayPnl)}>{currency(dayPnl)}</strong><small>{paperTrading ? 'Paper exits · excludes open P&L' : dayPnl === null ? "Not reported" : "Reported by account"}</small></section>
       <section className="ws-panel ws-metric"><span>Buying Power</span><strong>{currency(accountRows.get("Buying Power"))}</strong></section>
       <section className="ws-panel ws-metric"><span>Open Positions</span><strong>{positions.length}</strong></section>
       <section className="ws-panel ws-metric"><span>Today's Trades</span><strong>{todaysTrades}</strong><small>Recorded fills</small></section>
@@ -44,7 +44,7 @@ export default function WorkstationDashboard({ selected = {}, chart, account = {
       </section>
       <div className="ws-execution-stack"><OrderBook quote={selected} />{paperTrading ? <PaperOrderTicket key={selected.symbol} symbol={selected.symbol} quote={selected} quantity={quantity} setQuantity={setQuantity} trading={paperTrading} defaultType={preferences.defaultOrderType || "MARKET"} onTypeChange={value => setPreference?.("defaultOrderType", value)} /> : <TradeTicket key={selected.symbol} symbol={selected.symbol} quote={selected} quantity={quantity} setQuantity={setQuantity} onReview={onReview} defaultType={preferences.defaultOrderType || "LIMIT"} setDefaultType={value => setPreference?.("defaultOrderType", value)} />}</div>
     </div>
-    <div className="ws-bottom-grid"><PortfolioTable positions={positions} orders={orders} onSelect={onSelect} onOrders={() => onNavigate("orders")} onPositions={() => onNavigate("positions")} onJournal={() => onNavigate("journal")} notes={preferences.dashboardNotes} setNotes={value => setPreference?.("dashboardNotes", value)} /><DashboardNews news={news} alerts={alerts} toggleAlert={toggleAlert} openNews={row => setStory(row)} openAlerts={() => onNavigate("alerts")} /></div>
+    <div className="ws-bottom-grid"><PortfolioTable trading={paperTrading} positions={positions} orders={orders} onSelect={onSelect} onOrders={() => onNavigate("orders")} onPositions={() => onNavigate("positions")} onJournal={() => onNavigate("journal")} notes={preferences.dashboardNotes} setNotes={value => setPreference?.("dashboardNotes", value)} /><DashboardNews news={news} alerts={alerts} toggleAlert={toggleAlert} openNews={row => setStory(row)} openAlerts={() => onNavigate("alerts")} /></div>
     {story && <NewsPreview story={story} onClose={() => setStory(null)} />}
   </div>;
 }

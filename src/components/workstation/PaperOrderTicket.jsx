@@ -25,10 +25,10 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
   const fingerprint = JSON.stringify(draft);
   const currentOrder = feedback?.id ? trading.orders.find(order => order.id === feedback.id) : null;
   useEffect(() => { receipt.current?.scrollIntoView({ block: 'nearest' }); }, [feedback, currentOrder?.status]);
-  const submit = event => {
+  const submit = async event => {
     event.preventDefault();
     if (request.current?.fingerprint !== fingerprint) request.current = { fingerprint, id: crypto.randomUUID() };
-    const result = trading.submit({ ...draft, id: request.current.id });
+    const result = await trading.submit({ ...draft, id: request.current.id });
     setFeedback(result.error ? { error: result.error } : { id: result.order.id });
     onMessage?.(result.error || `Paper ${result.order.status.toLowerCase()}: ${symbol}. ${result.order.reason || ''}`);
   };
@@ -54,8 +54,8 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
       {(feedback?.error || currentOrder) && <div ref={receipt} role="status" className="ws-paper-feedback">{feedback?.error || <><strong>{currentOrder.status.replaceAll('_',' ')}</strong> · {(currentOrder.action || currentOrder.side).replaceAll('_',' ')} {currentOrder.filled || currentOrder.quantity} {currentOrder.symbol}{currentOrder.price ? ` @ ${currency(currentOrder.price)}` : ''}<br />{currentOrder.reason}</>}</div>}
       {currentOrder && <button type="button" className="ws-paper-new" onClick={clear}>New order</button>}
       </div>
-      <button type="submit" className={`ws-order-button ${isSell ? 'is-sell' : ''}`} disabled={!trading.ready || Boolean(currentOrder)}>Place Paper {labels[side]}</button>
-      <small className="ws-paper-note">Simulated fills · {fresh ? `${fresh.quality} quotes` : 'waiting for a fresh quote'}. Runs while this terminal is open and visible.</small>
+      <button type="submit" className={`ws-order-button ${isSell ? 'is-sell' : ''}`} disabled={!trading.ready || trading.busy || Boolean(currentOrder)}>{trading.busy ? 'Submitting…' : `Place Paper ${labels[side]}`}</button>
+      <small className="ws-paper-note" role={trading.error ? 'status' : undefined}>{trading.error || `Simulated fills · ${fresh ? `${fresh.quality} quotes` : 'waiting for a fresh quote'}. Server execution continues when you close the terminal.`}</small>
     </form>
   </section>;
 }

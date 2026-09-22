@@ -816,7 +816,8 @@ function PremiumWorkspaceContent({
   if (activeWorkspace === "positions") {
     return (
       <PositionsWorkspacePage
-        {...{
+          {...{
+            paperTrading,
           mainTwoCol,
           orderRows,
           page,

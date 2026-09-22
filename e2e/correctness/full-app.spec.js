@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { Buffer } from "node:buffer";
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { createPaperService } = require('../support/paperService.cjs');
+const { memoryRepository } = require('../support/paperMemory.cjs');
 
 const start = 1788355800;
 const user = { id: "00000000-0000-4000-8000-000000000001", email: "correctness@example.test", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {} };
@@ -23,11 +27,26 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
   const errors = [];
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
+  let serverNow = Date.now();
+  const repository = memoryRepository(() => row.data.paperLedger || { orders: row.data.orders || [], positions: row.data.positions || {}, realizedPnL: row.data.realizedPnL || 0 });
+  const paper = createPaperService({ repository, getQuotes: async () => providerQuotes, clock: () => serverNow });
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/*", async route => {
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin === "http://127.0.0.1:4175") return route.continue();
+    if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/paper/')) {
+      serverNow = await page.evaluate(() => Date.now());
+      if (request.method() === 'GET' && url.pathname === '/api/paper/account') {
+        await paper.tick();
+        return route.fulfill({ json: await paper.snapshot(user.id) });
+      }
+      if (request.method() === 'POST' && url.pathname === '/api/paper/commands') {
+        const { command, limits } = request.postDataJSON();
+        const result = await paper.transact(user.id, command, limits);
+        return route.fulfill({ status: result.error ? 422 : 200, json: result });
+      }
+    }
     if (url.origin === "http://127.0.0.1:4998") {
       if (url.pathname === "/auth/v1/user") return route.fulfill({ json: user });
       if (url.pathname === "/rest/v1/terminal_workspaces") {
@@ -65,7 +84,7 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
     localStorage.setItem("sb_focused_terminal_workspace_v1", "true");
   }, { user, token, expiry });
   await page.goto("/");
-  return { errors, blocked, workspace: () => row.data };
+  return { errors, blocked, paper, repository, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
 }
 
 test("full App keeps 60 trades when saving a note and restores full-history statistics", async ({ page }) => {
@@ -280,10 +299,7 @@ test("paper side selection and safety reviews never submit real broker orders", 
     await page.getByRole("button", { name: side, exact: true }).click();
     await expect(page.getByRole("button", { name: `Place Paper ${side}`, exact: true })).toBeVisible();
   }
-  for (const [action, message] of [["Cancel", "Cancel orders review"], ["Close", "Close positions review"], ["Flatten", "Flatten day review"]]) {
-    await page.getByRole("button", { name: action, exact: true }).click();
-    await expect(page.getByTestId("order-review-status")).toContainText(message);
-  }
+  for (const action of ['Cancel selected', 'Cancel all orders', 'Flatten paper account']) await expect(page.getByRole('button', { name: action, exact: true })).toBeDisabled();
   expect(evidence.errors).toEqual([]);
   expect(evidence.blocked).toEqual([]);
 });
@@ -375,8 +391,7 @@ test("dashboard displays provider quote fields and dismisses overlays by keyboar
   await expect(dialog).not.toBeVisible();
   await expect(headline).toBeFocused();
   await page.getByRole("tab", { name: "P&L", exact: true }).click();
-  await page.getByRole("button", { name: "Open workspace" }).click();
-  await expect.poll(() => evidence.workspace().activeWorkspace).toBe("positions");
+  await expect(page.getByRole('table', { name: 'Paper account P&L' })).toContainText('Today realized');
   expect(evidence.errors).toEqual([]);
   expect(evidence.blocked).toEqual([]);
 });
@@ -451,6 +466,56 @@ test("secondary workspace navigation keeps the shared shell and light theme", as
 
 const paperNow = new Date('2026-09-21T15:00:00Z');
 const paperProviderQuote = (price, symbol = 'NVDA') => ({symbol,price,bidPrice:price-0.01,askPrice:price+0.01,lastTradeTime:paperNow.toISOString(),source:'Isolated paper test provider',realtime:true});
+
+test('server paper management edits, protects, flattens and exports realized history', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(paperNow);
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'orders', selectedStock: 'NVDA', layoutMode: '1' }, { providerQuotes: [paperProviderQuote(100)] });
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  await ticket.getByLabel('Paper order type').selectOption('LIMIT');
+  await ticket.getByLabel('Paper quantity').fill('10');
+  await ticket.getByLabel('Limit price', { exact: true }).fill('95');
+  await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.orders[0]?.status).toBe('WORKING');
+  await page.getByRole('button', { name: 'Edit order', exact: true }).click();
+  await page.getByLabel('Edited limit price').fill('101');
+  await page.getByLabel('Edited quantity').fill('5');
+  await page.getByRole('button', { name: 'Confirm paper action' }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.positions.NVDA?.quantity).toBe(5);
+  await page.getByRole('button', { name: 'Edit protection', exact: true }).click();
+  await page.getByLabel('Position stop loss').fill('90');
+  await page.getByLabel('Position take profit').fill('110');
+  await page.getByRole('button', { name: 'Confirm paper action' }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.orders.filter(row => row.status === 'WORKING').length).toBe(2);
+  await page.getByRole('button', { name: 'Flatten paper account', exact: true }).click();
+  await expect(page.getByText('Cancel all working paper orders and submit market closes', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Confirm paper action' }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.positions).toEqual({});
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Positions', exact: true }).click();
+  await page.getByRole('tab', { name: 'Closed Positions', exact: true }).click();
+  await expect(page.getByRole('columnheader', { name: 'Realized P&L', exact: true })).toBeVisible();
+  await expect(page.getByText('Position closed', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('paper-realized-history.png') });
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Trade Journal', exact: true }).click();
+  await expect(page.getByText('Paper execution', { exact: true }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Exports', exact: true }).click();
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Journal CSV', exact: true }).click();
+  const stream = await (await pending).createReadStream(); let csv = ''; for await (const chunk of stream) csv += chunk;
+  expect(csv).toContain('Paper simulation'); expect(csv).toContain('NVDA'); expect(csv).toContain('-0.1');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('server paper snapshot refresh accepts another device trade without workspace overwrite', async ({ page }) => {
+  await page.clock.setFixedTime(paperNow);
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'NVDA', layoutMode: '1' }, { providerQuotes: [paperProviderQuote(100)] });
+  await expect(page.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeEnabled();
+  await evidence.paper.transact(user.id, { id: 'other-device', kind: 'submit', draft: { symbol: 'NVDA', side: 'SELL_SHORT', type: 'MARKET', quantity: 3, tif: 'GTC' } });
+  await expect(page.getByRole('region', { name: 'Portfolio records' })).toContainText('-3', { timeout: 15000 });
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Portfolio records' })).toContainText('-3');
+  expect(evidence.workspace().paperLedger.orders).toHaveLength(1);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
 
 test('MSTR zero-share sell explains actions, explicit short and partial cover persist correctly', async ({page},testInfo) => {
  await page.clock.setFixedTime(paperNow);
@@ -586,7 +651,8 @@ test('paper limit survives navigation and reload, fills on a fresh price update,
  await expect(ticket.getByRole('status')).toContainText('WORKING');
  await page.getByRole('tab',{name:'Working',exact:true}).click();
  await page.getByRole('row',{name:'Select NVDA',exact:true}).click();
- await page.getByRole('button',{name:'Cancel selected paper order',exact:true}).click();
+ await page.getByRole('button',{name:'Cancel selected',exact:true}).click();
+ await page.getByRole('button',{name:'Confirm paper action',exact:true}).click();
  await expect.poll(()=>evidence.workspace().paperLedger?.orders[0]?.status).toBe('CANCELLED');
  await page.getByRole('tab',{name:'Cancelled',exact:true}).click();
  await expect(page.getByRole('row',{name:'Select NVDA',exact:true})).toContainText('CANCELLED');

@@ -1,9 +1,11 @@
 import { terminalMonoFont } from "../../../config/terminalConfig";
+import PaperManagement from '../../workstation/PaperManagement.jsx';
 import { summarizePositions } from "../../../utils/portfolioAccounting.js";
 import { money } from "../premiumWorkspaceData";
 import { EmptyWorkspace, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function PositionsWorkspacePage({
+  paperTrading,
   mainTwoCol,
       orderRows,
       page,
@@ -17,7 +19,7 @@ export default function PositionsWorkspacePage({
       stocks,
       theme
 }) {
-    if (positionRows.length === 0) {
+    if (positionRows.length === 0 && !paperTrading?.history?.length) {
       return <div className="terminal-page" style={page}><SectionTitle theme={theme} title="Positions" /><EmptyWorkspace theme={theme} title="No workspace positions" detail="Workspace and paper positions appear here with their source. No broker account is implied." /></div>;
     }
     const enriched = positionRows;
@@ -54,7 +56,14 @@ export default function PositionsWorkspacePage({
       { key: "allocationBar", label: "Allocation", width: "1.4fr", render: (row) => <div style={{ height: 6, background: theme.panel2, borderRadius: 99 }}><div style={{ width: `${Math.min(row.allocation || 0, 100)}%`, height: "100%", borderRadius: 99, background: theme.blue }} /></div> },
     ];
     const positionContent = positionView === "Closed Positions"
-      ? <EmptyWorkspace theme={theme} title="No closed-position history" detail="Closed positions require authenticated realized-position history from the broker. Filled orders are not presented as closed positions." />
+      ? paperTrading ? <PremiumTable theme={theme} keyField="id" rows={paperTrading.history || []} emptyMessage="No realized paper exits yet. Partial and full closes appear here after execution." columns={[
+          { key: 'symbol', label: 'Symbol', width: '100px' }, { key: 'bias', label: 'Side', width: '80px' },
+          { key: 'quantity', label: 'Closed qty', width: '90px' }, { key: 'entryPrice', label: 'Avg entry', width: '100px', render: row => money(row.entryPrice) },
+          { key: 'exitPrice', label: 'Exit', width: '100px', render: row => money(row.exitPrice) },
+          { key: 'pnl', label: 'Realized P&L', width: '120px', render: row => money(row.pnl) },
+          { key: 'closedAt', label: 'Executed', width: '190px', render: row => new Date(row.closedAt).toLocaleString() },
+          { key: 'notes', label: 'Exit detail', width: '180px' },
+        ]} /> : <EmptyWorkspace theme={theme} title="No closed-position history" detail="Closed positions require authenticated realized-position history from the broker. Filled orders are not presented as closed positions." />
       : <PremiumTable
           theme={theme}
           columns={positionView === "Allocations" ? allocationColumns : positionView === "Holdings" ? holdingsColumns : openColumns}
@@ -66,6 +75,7 @@ export default function PositionsWorkspacePage({
       <div className="terminal-page" style={page}>
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gap: 10 }}>
+            {paperTrading && selectedPosition && <PremiumCard theme={theme} title="Manage paper position"><PaperManagement key={selectedPosition.symbol} trading={paperTrading} symbol={selectedPosition.symbol} /></PremiumCard>}
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}><SectionTitle theme={theme} title="Positions" subtitle={`Workspace / paper holdings · ${summary.currency} · ${summary.missingMarks} missing marks`} /><PremiumTabs theme={theme} tabs={["Open Positions", "Closed Positions", "Holdings", "Allocations"]} active={positionView} onChange={setPositionView} /></div>
               {positionContent}

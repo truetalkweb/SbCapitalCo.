@@ -44,6 +44,7 @@ async function main() {
   await fs.mkdir('artifacts/deployment/server-paper', { recursive: true });
   await first.screenshot({ path: 'artifacts/deployment/server-paper/dashboard-filled.png' });
   const second = await device();
+  await expect(second.getByRole('region', { name: 'Paper trade ticket', exact: true }).getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeEnabled({ timeout: 30000 });
   await second.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Orders', exact: true }).click();
   await expect(second.getByRole('button', { name: 'Close AAPL', exact: true })).toBeEnabled({ timeout: 30000 });
   await second.getByRole('button', { name: 'Close AAPL', exact: true }).click();

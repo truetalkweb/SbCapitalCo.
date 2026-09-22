@@ -6,9 +6,9 @@ const frontend = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const backend = path.resolve(frontend, '../backend');
 const check = process.argv.includes('--check');
 function sync(source, destination, transform = value => value) {
-  const expected = transform(fs.readFileSync(source, 'utf8'));
+  const expected = transform(fs.readFileSync(source, 'utf8').replaceAll('\r\n', '\n'));
   if (check) {
-    if (fs.readFileSync(destination, 'utf8') !== expected) throw new Error(`Paper source drift: ${destination}`);
+    if (fs.readFileSync(destination, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Paper source drift: ${destination}`);
   } else { fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, expected); }
 }
 for (const relative of ['services/paperTradingEngine.js', 'services/paperOrderCommands.js', 'utils/marketDataContract.js', 'utils/marketNumbers.js', 'utils/marketSession.js']) {

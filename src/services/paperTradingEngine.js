@@ -14,6 +14,15 @@ const opening = order => ['BUY', 'SELL_SHORT'].includes(actionOf(order));
 const shortAction = order => ['SELL_SHORT', 'BUY_TO_COVER'].includes(actionOf(order));
 const reference = order => order.limitPrice || order.stopPrice || order.referencePrice || 0;
 
+function reconcileProtection(state, now, symbol) {
+  for (const order of state.orders.filter(row => isWorkingPaperOrder(row) && row.parentId && (!symbol || row.symbol === symbol))) {
+    const signedHeld = Number(state.positions[order.symbol]?.quantity || 0);
+    const held = shortAction(order) ? Math.max(0, -signedHeld) : Math.max(0, signedHeld);
+    if (held <= 0) Object.assign(order, { status: 'CANCELLED', remaining: 0, reason: 'Protected position is closed', cancelledAt: iso(now) });
+    else if (order.quantity > held) { order.quantity = held; order.remaining = held; }
+  }
+}
+
 export function paperSellAvailability(state, symbol) {
   const held = Math.max(0, Number(state.positions?.[symbol]?.quantity) || 0);
   const reserved = (state.orders || []).filter(order => isWorkingPaperOrder(order) && order.symbol === symbol && actionOf(order) === 'SELL' && !order.parentId)
@@ -87,6 +96,12 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
   const stopLoss = positive(draft.stopLoss), takeProfit = positive(draft.takeProfit);
   const fail = error => ({ state, error });
   if (!draft.id || !/^[A-Z][A-Z0-9.-]{0,13}$/.test(symbol) || !['BUY', 'SELL', 'SELL_SHORT', 'BUY_TO_COVER'].includes(action)) return fail('Select a valid equity symbol and side.');
+  const childIds = [stopLoss && `${draft.id}-stop`, takeProfit && `${draft.id}-target`].filter(Boolean);
+  if ((state.orders || []).some(order => childIds.includes(order.id)
+    || (isWorkingPaperOrder(order) && opening(order)
+      && ((order.stopLoss && draft.id === `${order.id}-stop`) || (order.takeProfit && draft.id === `${order.id}-target`))))) {
+    return fail('Order ID conflicts with an existing or reserved protective exit. Use a new order ID.');
+  }
   if (!PAPER_TYPES.includes(type)) return fail('Unsupported paper order type.');
   if (!Number.isSafeInteger(qty) || qty <= 0) return fail('Quantity must be a positive whole number.');
   if (['LIMIT', 'STOP_LIMIT'].includes(type) && !limitPrice) return fail('Enter a limit price greater than zero.');
@@ -189,6 +204,8 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       else if (order.maxOrderValue > 0 && fillPrice * qty > order.maxOrderValue) reason = 'Execution exceeds maximum order value';
       else if ((order.stopLoss && (isShort ? order.stopLoss <= fillPrice : order.stopLoss >= fillPrice)) || (order.takeProfit && (isShort ? order.takeProfit >= fillPrice : order.takeProfit <= fillPrice))) reason = 'Price moved outside the attached protection levels';
       else if (order.riskPerTrade > 0 && order.stopLoss && Math.abs(fillPrice - order.stopLoss) * qty > order.riskPerTrade) reason = 'Execution exceeds risk per trade';
+      else if (next.orders.some(other => (order.stopLoss && other.id === `${order.id}-stop`)
+        || (order.takeProfit && other.id === `${order.id}-target`))) reason = 'Order ID conflicts with an existing protective exit';
     } else if (qty > available || qty <= 0) reason = 'Insufficient paper shares at execution';
     else if (number(next.positions[order.symbol]?.average) === null) reason = 'Saved paper position cost is unavailable';
     if (reason) { Object.assign(order, { status: 'REJECTED', reason, remaining: 0, updatedAt: iso(now) }); continue; }
@@ -209,6 +226,9 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
     if (order.ocoGroup) for (const sibling of next.orders) if (sibling.id !== order.id && sibling.ocoGroup === order.ocoGroup && isWorkingPaperOrder(sibling)) {
       Object.assign(sibling, { status: 'CANCELLED', remaining: 0, reason: 'Linked exit filled', cancelledAt: iso(now) });
     }
+    // Reconcile at the exit boundary, before another queued entry can reopen
+    // or add to the holding. Old exits must not inherit the new entry's size.
+    if (!isOpening) reconcileProtection(next, now, order.symbol);
     if (isOpening) for (const [suffix, type, trigger] of [['stop', 'STOP', order.stopLoss], ['target', 'LIMIT', order.takeProfit]]) {
       if (!trigger) continue;
       const child = { id: `${order.id}-${suffix}`, engine: 'paper-v1', mode: 'paper', source: 'Paper simulation', symbol: order.symbol,
@@ -218,11 +238,6 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       next.orders.unshift(child);
     }
   }
-  for (const order of next.orders.filter(order => isWorkingPaperOrder(order) && order.parentId)) {
-    const signedHeld = Number(next.positions[order.symbol]?.quantity || 0);
-    const held = shortAction(order) ? Math.max(0, -signedHeld) : Math.max(0, signedHeld);
-    if (held <= 0) Object.assign(order, { status: 'CANCELLED', remaining: 0, reason: 'Protected position is closed' });
-    else if (order.quantity > held) { order.quantity = held; order.remaining = held; }
-  }
+  reconcileProtection(next, now);
   return JSON.stringify(next) === JSON.stringify(state) ? state : next;
 }

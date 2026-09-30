@@ -126,6 +126,43 @@ test('manual sell resizes protective orders and never reverses a closed position
  assert.equal(sell.state.orders.find(o=>o.id==='order-1-stop').quantity,4);
  const exit=processPaperOrders(sell.state,[quote(94)],now+1000);assert.deepEqual(exit.positions,{});assert.equal(exit.orders.find(o=>o.id==='order-1-stop').filled,4);
 });
+
+test('closing and reopening within one quote batch cannot transfer old protection to the new position', () => {
+ for (const side of ['BUY', 'SELL_SHORT']) {
+  const short = side === 'SELL_SHORT', exitSide = short ? 'BUY_TO_COVER' : 'SELL';
+  const opened = submit(empty(), { side, stopLoss: short ? 110 : 90, takeProfit: short ? 90 : 110 }).state;
+  const closing = submit(opened, { id: 'close', side: exitSide }, []).state;
+  const reopening = submit(closing, { id: 'reopen', side }, []).state;
+  const result = processPaperOrders(reopening, [quote()], now + 1000);
+  assert.equal(result.positions.AAPL.quantity, short ? -10 : 10);
+  assert.ok(result.orders.filter(row => row.parentId === 'order-1').every(row => row.status === 'CANCELLED'));
+  const later = processPaperOrders(result, [quote(short ? 120 : 80)], now + 2000);
+  assert.equal(later.positions.AAPL.quantity, short ? -10 : 10);
+ }
+});
+
+test('partial exits resize protection before a later entry in the same batch adds shares', () => {
+ for (const side of ['BUY', 'SELL_SHORT']) {
+  const short = side === 'SELL_SHORT';
+  const opened = submit(empty(), { side, stopLoss: short ? 110 : 90, takeProfit: short ? 90 : 110 }).state;
+  const closing = submit(opened, { id: 'partial', side: short ? 'BUY_TO_COVER' : 'SELL', quantity: 6 }, []).state;
+  const adding = submit(closing, { id: 'add', side, quantity: 6 }, []).state;
+  const result = processPaperOrders(adding, [quote()], now + 1000);
+  assert.equal(result.positions.AAPL.quantity, short ? -10 : 10);
+  assert.ok(result.orders.filter(row => row.parentId === 'order-1').every(row => row.quantity === 4));
+ }
+});
+
+test('generated protective IDs cannot collide with existing orders or pending bracket reservations', () => {
+ const existing = submit(empty(), { id: 'parent-stop', type: 'LIMIT', limitPrice: 80 }).state;
+ const collision = submit(existing, { id: 'parent', stopLoss: 90 });
+ assert.match(collision.error, /reserved|conflict/i); assert.equal(collision.state, existing);
+ const pending = submit(empty(), { id: 'parent', type: 'LIMIT', limitPrice: 95, stopLoss: 90, takeProfit: 110 }).state;
+ for (const suffix of ['stop', 'target']) {
+  const attempted = submit(pending, { id: `parent-${suffix}` });
+  assert.match(attempted.error, /reserved|conflict/i); assert.equal(attempted.state, pending);
+ }
+});
 test('duplicate submission and repeated quote processing cannot double fill',()=>{
  const first=submit();const duplicate=submit(first.state);assert.equal(duplicate.state,first.state);assert.equal(duplicate.duplicate,true);
  assert.equal(processPaperOrders(first.state,[quote()],now+1000),first.state);

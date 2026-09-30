@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import "./workspaceControls.css";
 import "../workstation/workspacePages.css";
 import { workstationTheme, workstationPages } from "../workstation/workstationTheme";
@@ -60,6 +61,7 @@ import RiskWorkspacePage from "./pages/RiskWorkspacePage";
 import ScannerWorkspacePage from "./pages/ScannerWorkspacePage";
 import SettingsWorkspacePage from "./pages/SettingsWorkspacePage";
 import WatchlistWorkspacePage from "./pages/WatchlistWorkspacePage";
+const OrderFlowPage = lazy(() => import("../../modules/orderFlow/OrderFlowPage.jsx"));
 
 function PremiumWorkspaceContent({
   activeWorkspace,
@@ -1042,6 +1044,6 @@ export default function PremiumWorkspace(props) {
   const [title, description] = workstationPages[props.activeWorkspace] || ["Workspace", "SB Terminal"];
   return <div className="ws-workspace" data-workspace={props.activeWorkspace} style={{ "--ws-bg": theme.bg, "--ws-panel": theme.panel, "--ws-alt": theme.panel2, "--ws-border": theme.border, "--ws-text": theme.text, "--ws-muted": theme.muted, "--ws-green": theme.green, "--ws-red": theme.red }}>
     <header className="ws-workspace-heading"><div><h1>{title}</h1><span>{description}</span></div><span className="ws-workspace-symbol">{props.selectedStock}</span></header>
-    <div className="ws-workspace-content"><PremiumWorkspaceContent {...props} theme={theme} /></div>
+    <div className="ws-workspace-content">{props.activeWorkspace === "order-flow" ? <Suspense fallback={<p role="status">Loading Order Flow Analytics…</p>}><OrderFlowPage /></Suspense> : <PremiumWorkspaceContent {...props} theme={theme} />}</div>
   </div>;
 }

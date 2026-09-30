@@ -40,7 +40,7 @@ export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSym
 
 const navigation = [
   ["dashboard", "Dashboard", House], ["watchlist", "Watchlist", ListFilter], ["chart-analysis", "Charts", ChartNoAxesCombined],
-  ["scanner", "Market Scanner", Search], ["news", "News & Calendar", CalendarDays], ["options", "Options Flow", Activity],
+  ["scanner", "Market Scanner", Search], ["news", "News & Calendar", CalendarDays], ["order-flow", "Order Flow", Activity],
   ["positions", "Positions", BriefcaseBusiness], ["orders", "Orders", SlidersHorizontal], ["journal", "Trade Journal", BookOpen],
   ["performance", "Performance", ChartNoAxesCombined], ["risk", "Risk Manager", ShieldCheck], ["tools", "Tools", Wrench], ["settings", "Settings", Settings],
 ];

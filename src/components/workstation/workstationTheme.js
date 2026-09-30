@@ -20,6 +20,7 @@ export function workstationTheme(base = {}) {
 }
 
 export const workstationPages = {
+  "order-flow": ["Order Flow", "Footprint, liquidity and trade analytics · simulated demo"],
   scanner: ["Market Scanner", "Screen and rank your market universe"],
   charts: ["Charts", "Analyze price, volume and indicators"],
   "chart-analysis": ["Charts", "Analyze price, volume and indicators"],

@@ -20,6 +20,7 @@ export const FEATURE_MIN_PLAN = {
   news: "free",
   alerts: "free",
   settings: "free",
+  orderFlow: "free",
   aiSummaries: "pro",
   replay: "pro",
   journal: "pro",
@@ -45,6 +46,7 @@ export const WORKSPACE_FEATURES = {
   risk: "risk",
   performance: "performance",
   settings: "settings",
+  "order-flow": "orderFlow",
   broker: "brokerDiagnostics",
   portfolio: "positions",
 };
@@ -61,6 +63,7 @@ export const DEFAULT_ENTITLEMENTS = {
     news: true,
     alerts: true,
     settings: true,
+    orderFlow: true,
     aiSummaries: false,
     replay: false,
     journal: false,

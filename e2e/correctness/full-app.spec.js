@@ -14,6 +14,64 @@ const initialWorkspace = {
   replayMode: false, replayNotes: "Original session note", advancedMode: true,
 };
 
+for (const [width, height] of [[1920, 1080], [2560, 1440], [3440, 1440], [3840, 2160]]) {
+  test(`order flow analytics fits ${width} desktop and renders active simulated data`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height });
+    const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'order-flow' });
+    await expect(page.getByRole('toolbar', { name: 'Order flow toolbar' })).toBeVisible();
+    await expect(page.getByText('SIMULATED DATA', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Simulated footprint chart', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Simulated DOM ladder' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Order flow signals' })).toBeVisible();
+    await page.getByRole('button', { name: 'Pause simulated stream', exact: true }).click();
+    const chart = page.getByRole('region', { name: 'Footprint workspace' });
+    await expect(chart).toContainText('SIMULATED ES');
+    const canvas = page.getByRole('img', { name: 'Simulated footprint chart', exact: true });
+    const rect = await canvas.boundingBox(); expect(rect.width).toBeGreaterThan(650); expect(rect.height).toBeGreaterThan(280);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`order-flow-${width}.png`) });
+    expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+  });
+}
+
+test('order flow controls replay, filtering, settings and navigation without placing orders', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard' });
+  await expect(page.getByRole('heading', { name: 'AAPL', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Order Flow', exact: true }).click();
+  await expect(page.getByRole('toolbar', { name: 'Order flow toolbar' })).toBeVisible();
+  const chart = page.getByRole('region', { name: 'Footprint workspace' });
+  const initial = await chart.locator('footer').innerText();
+  await expect.poll(async () => chart.locator('footer').innerText()).not.toBe(initial);
+  await page.getByRole('button', { name: 'Pause simulated stream', exact: true }).click();
+  const stopped = await chart.locator('footer').innerText();
+  await page.waitForTimeout(700); expect(await chart.locator('footer').innerText()).toBe(stopped);
+  await chart.getByRole('button', { name: 'Delta', exact: true }).click();
+  await expect(chart.getByRole('button', { name: 'Delta', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('Tick aggregation', { exact: true }).selectOption('4');
+  await page.getByLabel('Liquidity Heatmap', { exact: true }).uncheck();
+  await page.getByLabel('Minimum trade size', { exact: true }).fill('100000');
+  await expect(page.getByText('No trades meet the selected size.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Order flow settings', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Imbalance ratio', exact: true }).fill('4');
+  await page.getByRole('button', { name: 'Close order flow settings', exact: true }).click();
+  await page.getByLabel('Order flow mode', { exact: true }).selectOption('replay');
+  await page.getByRole('slider', { name: 'Order flow replay position' }).fill('10');
+  await expect(chart).toContainText('11 trades');
+  await page.getByRole('button', { name: 'Step trade', exact: true }).click();
+  await expect(chart).toContainText('12 trades');
+  await page.getByLabel('Order flow symbol', { exact: true }).selectOption('NQ');
+  await expect(chart).toContainText('SIMULATED NQ');
+  await page.getByRole('button', { name: 'Reset order flow workspace', exact: true }).click();
+  await expect(page.getByLabel('Tick aggregation', { exact: true })).toHaveValue('2');
+  await page.getByLabel('Order flow layout', { exact: true }).selectOption('chart');
+  await expect(page.getByRole('region', { name: 'Simulated DOM ladder' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Order book', exact: true })).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+  expect(evidence.paper.orders || []).toHaveLength(0);
+});
+
 function candles(symbol, timeframe) {
   const seconds = { "1m": 60, "5m": 300, "15m": 900, "1H": 3600, "1D": 86400 }[timeframe];
   const interval = { "1m": "OneMinute", "5m": "FiveMinutes", "15m": "FifteenMinutes", "1H": "OneHour", "1D": "OneDay" }[timeframe];

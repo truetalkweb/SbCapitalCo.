@@ -42,6 +42,17 @@ try {
   assert.equal(cached.cached, true); assert.equal(cached.summary.cached, true);
   assert.equal(cached.summary.summary, first.summary.summary);
   record('Authenticated Gemini generation and repeat-request cache work with actual provider news');
+  const tickerResponse = await fetch(`${backend}/api/ai/catalyst/NVDA?limit=4`, { headers });
+  assert.equal(tickerResponse.status, 200);
+  const ticker = await tickerResponse.json();
+  assert.equal(ticker.intelligence.source, 'gemini');
+  assert.equal(ticker.intelligence.mode, 'generated');
+  assert.ok(ticker.intelligence.summary);
+  const sourceUrls = new Set(ticker.news.map((row) => row.url).filter(Boolean));
+  for (const catalyst of ticker.intelligence.keyCatalysts) {
+    if (catalyst.url) assert.ok(sourceUrls.has(catalyst.url), 'AI catalyst citations must come from provider news');
+  }
+  record('Live ticker AI generates with provider-owned catalyst citations');
   const health = await (await fetch(`${backend}/api/platform/health`)).json();
   assert.equal(health.ai.status, 'available'); assert.equal(health.ai.live, true);
   record('Public health reports successful generation without exposing credentials');

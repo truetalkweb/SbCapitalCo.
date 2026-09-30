@@ -10,6 +10,8 @@ export interface DepthUpdateEvent extends EventEnvelope { type: 'depth-update'; 
 export interface HeartbeatEvent extends EventEnvelope { type: 'heartbeat' }
 export interface ReconnectNotice { type: 'reconnect'; attempt: number; reason: string; receivedAt: number; previousEpoch: string | null }
 export type MarketEvent = SessionEvent | TradeEvent | BookSnapshotEvent | DepthUpdateEvent | HeartbeatEvent;
+export interface LocalRecordingFile { format: 'sb-order-flow-recording'; version: 1; provenance: 'historical' | 'simulated'; source: string; instrument: Pick<InstrumentMetadata, 'root' | 'contractId' | 'expiry' | 'tickSize' | 'pricePrecision' | 'contractMultiplier'>; events: MarketEvent[] }
+export interface RecordingMetadata { name: string; provenance: 'historical' | 'simulated'; sourceVerified: false; eventCount: number; depthStates: number; sessionOnly: true }
 export interface NormalizedFeedTransport { open(callbacks: { onOpen(): void; onEvent(event: MarketEvent): void; onClose(): void; onError(): void }): Promise<void>; close(): void; subscribe(request: { contractId: string; symbol: string; streams: string[]; sinceTimestampNs: string | null }): void; requestSnapshot(request: { contractId: string; epoch: string; minimumSequence: string }): void }
 export interface Trade { id: number | string; timestamp: number; timestampNs?: string; receivedAt?: number; sequence?: string; epoch?: string; price: number; size: number; side: AggressorSide }
 export interface DOMLevel { price: number; bidSize: number; askSize: number; bidOrders?: number; askOrders?: number; added: number; pulled: number }

@@ -57,7 +57,7 @@ function FootprintCandle(ctx, candle, x, yFor, rowHeight, options) {
 }
 
 function FootprintChart({ flow, books, signals, settings, instrument, heatmap, mode, resetToken }) {
-  const { simulated } = useFeedContext();
+  const { simulated, recording } = useFeedContext();
   const canvas = useRef(null), wrapper = useRef(null), geometry = useRef(null), pointer = useRef(null), dragging = useRef(null);
   const [size, setSize] = useState({ width: 900, height: 520 }), [view, setView] = useState({ count: 7, offset: 0, shift: 0 }), [hover, setHover] = useState(null);
   useEffect(() => {
@@ -122,7 +122,7 @@ function FootprintChart({ flow, books, signals, settings, instrument, heatmap, m
   }
   return <div className="of-chart-wrap" ref={wrapper} onPointerMove={move} onPointerLeave={() => { pointer.current = null; setHover(null); }}
     onPointerDown={event => { dragging.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={() => { dragging.current = null; }} onPointerCancel={() => { dragging.current = null; }}>
-    <canvas ref={canvas} aria-label={simulated ? 'Simulated footprint chart' : 'Provider footprint chart'} role="img" />
+    <canvas ref={canvas} aria-label={recording ? `${simulated ? 'Simulated' : 'Historical'} recording footprint chart` : simulated ? 'Simulated footprint chart' : 'Provider footprint chart'} role="img" />
     <div className="of-chart-tools"><button aria-label="Zoom in footprint" onPointerDown={event => event.stopPropagation()} onClick={() => setView(v => ({ ...v, count: Math.max(3, v.count - 1) }))}>+</button><button aria-label="Zoom out footprint" onPointerDown={event => event.stopPropagation()} onClick={() => setView(v => ({ ...v, count: Math.min(40, v.count + 1) }))}>−</button><button onPointerDown={event => event.stopPropagation()} onClick={() => setView({ count: 7, offset: 0, shift: 0 })}>Fit</button></div>
     {hover && <div className="of-tooltip" style={{ left: Math.max(0, Math.min(hover.x + 15, size.width - 240)), top: Math.max(0, Math.min(hover.y + 15, size.height - 170)) }}><b>{new Date(hover.candle.timestamp).toISOString().slice(11, 19)} UTC · {hover.price.toFixed(instrument.decimals)}</b><span>O {hover.candle.open.toFixed(instrument.decimals)} · C {hover.candle.close.toFixed(instrument.decimals)}</span><span>Volume {formatFlow(hover.candle.volume)} · Delta {formatFlow(hover.candle.delta)}</span><span>POC {hover.candle.poc.toFixed(instrument.decimals)}</span>{hover.level && <span>Bid {hover.level.bidVolume} × Ask {hover.level.askVolume} · Δ {hover.level.delta}</span>}{hover.candle.unfinishedHigh || hover.candle.unfinishedLow ? <span>○ Unfinished auction candidate</span> : null}</div>}
     <div className="of-chart-hint">Wheel zoom · drag pan · ○ unfinished auction · ▲/▼ stacked imbalance · A absorption / E exhaustion</div>

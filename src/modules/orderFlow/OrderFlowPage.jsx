@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { Maximize2, Pause, Play, RotateCcw, Settings } from 'lucide-react';
+import { Maximize2, Pause, Play, RotateCcw, Settings, Upload } from 'lucide-react';
 import { DEFAULT_SETTINGS, inSession, INSTRUMENTS } from './analytics.js';
 import { MockMarketDataProvider } from './MockMarketDataProvider.js';
 import { CmeMarketDataProvider } from './data/CmeMarketDataProvider.js';
 import { CME_ROOTS } from './data/instruments.js';
 import { buildOrderFlowAnalysis, selectReplayBook, selectReplayBooks } from './data/analyticsPipeline.js';
 import { FeedContext } from './data/FeedContext.js';
+import { LocalRecordingProvider } from './data/LocalRecordingProvider.js';
+import { importRecordingFile } from './data/importRecordingFile.js';
 import FootprintChart from './FootprintChart.jsx';
 import { DOMLadder, OrderFlowAnalytics, OrderFlowSignals, TimeAndSales } from './OrderFlowPanels.jsx';
 import OrderFlowSettings from './OrderFlowSettings.jsx';
@@ -25,16 +27,38 @@ function loadSettings() {
 const createDefaultProvider = options => options.feed === 'cme' ? new CmeMarketDataProvider(options) : new MockMarketDataProvider(options);
 export default function OrderFlowPage({ createProvider = createDefaultProvider }) {
   const [feed, setFeed] = useState('mock');
+  const [recording, setRecording] = useState(null), [importing, setImporting] = useState(false);
   const [symbol, setSymbol] = useState('ES'), [resetToken, setResetToken] = useState(0), [settings, setSettings] = useState(loadSettings);
   const [mode, setMode] = useState('simulation'), [paused, setPaused] = useState(false), [timeframe, setTimeframe] = useState(60000), [aggregation, setAggregation] = useState(2);
   const [chartMode, setChartMode] = useState('bidask'), [heatmap, setHeatmap] = useState(true), [session, setSession] = useState('all'), [layout, setLayout] = useState('full'), [drawer, setDrawer] = useState(false);
   const [replayIndex, setReplayIndex] = useState(null), [replayPlaying, setReplayPlaying] = useState(false), [replaySpeed, setReplaySpeed] = useState(1), [statusMessage, setStatusMessage] = useState('');
-  const root = useRef(null), audio = useRef(null), lastAlert = useRef(0), replayCursor = useRef(null);
-  const provider = useMemo(() => createProvider({ symbol, feed, seed: 17 + resetToken }), [symbol, feed, resetToken, createProvider]);
+  const root = useRef(null), audio = useRef(null), lastAlert = useRef(0), replayCursor = useRef(null), fileInput = useRef(null), importRequest = useRef(null);
+  const provider = useMemo(() => feed === 'recording' ? new LocalRecordingProvider(recording)
+    : createProvider({ symbol, feed, seed: 17 + resetToken }), [symbol, feed, resetToken, createProvider, recording]);
   const snapshot = useSyncExternalStore(provider.subscribe, provider.getSnapshot);
   const instrument = useMemo(() => ({ ...INSTRUMENTS[symbol], tick: snapshot.metadata?.tickSize || INSTRUMENTS[symbol].tick,
     decimals: snapshot.metadata?.pricePrecision ?? INSTRUMENTS[symbol].decimals, aggregation }), [symbol, aggregation, snapshot.metadata]);
-  const simulated = snapshot.simulated, provenance = simulated ? 'SIM' : 'CME';
+  const simulated = snapshot.simulated, localRecording = snapshot.recording;
+  const provenance = localRecording ? simulated ? 'SIM FILE' : 'FILE' : simulated ? 'SIM' : 'CME';
+  useEffect(() => () => importRequest.current?.abort(), []);
+  function cancelImport() { importRequest.current?.abort(); importRequest.current = null; setImporting(false); }
+  async function importFile(event) {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file) return;
+    cancelImport(); const controller = new AbortController(); importRequest.current = controller;
+    setImporting(true); setStatusMessage('Validating local recording…');
+    try {
+      const data = await importRecordingFile(file, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setRecording(data); setSymbol(data.symbol); setFeed('recording'); setMode('replay'); setPaused(false); setReplayIndex(0); setReplayPlaying(false);
+      setStatusMessage(`Imported ${data.recording.name}: ${data.trades.length.toLocaleString()} trades, ${data.books.length.toLocaleString()} depth states. Stored only in this tab; no upload.`);
+    } catch (error) { if (!controller.signal.aborted) setStatusMessage(`Import rejected: ${error.message} Your current data was kept.`); }
+    finally { if (importRequest.current === controller) { importRequest.current = null; setImporting(false); } }
+  }
+  function clearRecording() {
+    cancelImport(); setRecording(null); setStatusMessage('Local recording cleared.');
+    if (feed === 'recording') { setFeed('mock'); setMode('simulation'); setReplayIndex(null); setReplayPlaying(false); setPaused(false); }
+  }
   useEffect(() => {
     provider.subscribeTrades(symbol); provider.subscribeOrderBook(symbol);
     if (mode === 'simulation' && !paused) provider.connect().catch(() => setStatusMessage('The market data connection failed. Pause and resume to retry.'));
@@ -78,21 +102,23 @@ export default function OrderFlowPage({ createProvider = createDefaultProvider }
     if (key === 'sounds' && value && !audio.current) { const Audio = window.AudioContext || window.webkitAudioContext; if (Audio) { audio.current = new Audio(); audio.current.resume(); } }
     setSettings(current => ({ ...current, [key]: value }));
   }, []);
-  function reset() { setResetToken(value => value + 1); setSettings(DEFAULT_SETTINGS); setMode('simulation'); setPaused(false); setReplayPlaying(false); setReplayIndex(null); setAggregation(2); setTimeframe(60000); setSession('all'); setLayout('full'); setChartMode('bidask'); setHeatmap(true); }
-  const chart = <section className="of-panel of-footprint" aria-label="Footprint workspace"><header><b>{symbol} · Footprint / Cluster</b><div className="of-chart-modes">{[['bidask', 'Bid × Ask'], ['delta', 'Delta'], ['volume', 'Volume'], ['profile', 'Profile'], ['candles', 'Candles']].map(([value, label]) => <button key={value} aria-pressed={chartMode === value} onClick={() => setChartMode(value)}>{label}</button>)}</div></header><FootprintChart key={`${feed}:${symbol}:${resetToken}`} flow={flow} books={books} signals={signals} settings={settings} instrument={instrument} heatmap={heatmap} mode={chartMode} resetToken={resetToken} /><footer>{simulated ? 'SIMULATED' : 'CME'} {symbol} · {instrument.tick} tick · Candle POC gold / Session POC dashed · {flow.candles.length} bars · {trades.length} trades</footer></section>;
-  return <FeedContext value={{ simulated, status: snapshot.status, source: snapshot.source, metadata: snapshot.metadata, quality: analysis.quality }}><div className="of-workspace" ref={root} style={{ '--of-buy': settings.buyColor, '--of-sell': settings.sellColor }}>
+  function reset() { cancelImport(); setResetToken(value => value + 1); setSettings(DEFAULT_SETTINGS); setMode(feed === 'recording' ? 'replay' : 'simulation'); setPaused(false); setReplayPlaying(false); setReplayIndex(feed === 'recording' ? 0 : null); setAggregation(2); setTimeframe(60000); setSession('all'); setLayout('full'); setChartMode('bidask'); setHeatmap(true); }
+  const chart = <section className="of-panel of-footprint" aria-label="Footprint workspace"><header><b>{symbol} · Footprint / Cluster</b><div className="of-chart-modes">{[['bidask', 'Bid × Ask'], ['delta', 'Delta'], ['volume', 'Volume'], ['profile', 'Profile'], ['candles', 'Candles']].map(([value, label]) => <button key={value} aria-pressed={chartMode === value} onClick={() => setChartMode(value)}>{label}</button>)}</div></header><FootprintChart key={`${feed}:${symbol}:${resetToken}:${localRecording?.name || ''}`} flow={flow} books={books} signals={signals} settings={settings} instrument={instrument} heatmap={heatmap} mode={chartMode} resetToken={resetToken} /><footer>{localRecording ? simulated ? 'SIMULATED FILE' : 'HISTORICAL FILE' : simulated ? 'SIMULATED' : 'CME'} {symbol} · {instrument.tick} tick · Candle POC gold / Session POC dashed · {flow.candles.length} bars · {trades.length} trades</footer></section>;
+  return <FeedContext value={{ simulated, label: provenance, recording: localRecording, status: snapshot.status, source: snapshot.source, metadata: snapshot.metadata, quality: analysis.quality }}><div className="of-workspace" ref={root} style={{ '--of-buy': settings.buyColor, '--of-sell': settings.sellColor }}>
     <div className="of-toolbar" role="toolbar" aria-label="Order flow toolbar">
-      <label>Instrument<select aria-label="Order flow symbol" value={symbol} onChange={e => { setSymbol(e.target.value); setReplayIndex(null); setReplayPlaying(false); setPaused(false); setMode('simulation'); }}>{Object.keys(feed === 'cme' ? CME_ROOTS : INSTRUMENTS).map(value => <option key={value}>{value}</option>)}</select></label>
-      <label>Feed<select aria-label="Order flow provider" value={feed} onChange={e => { setFeed(e.target.value); if (e.target.value === 'cme' && !CME_ROOTS[symbol]) setSymbol('ES'); setMode('simulation'); setReplayPlaying(false); setReplayIndex(null); setPaused(false); }}><option value="mock">{instrument.exchange} · Simulator</option><option value="cme">CME bridge · not configured</option>{['Rithmic', 'CQG', 'CME direct', 'Interactive Brokers', 'Binance', 'Coinbase'].map(p => <option key={p} disabled>{p} — not connected</option>)}</select></label>
+      <label>Instrument<select aria-label="Order flow symbol" value={symbol} disabled={feed === 'recording'} onChange={e => { cancelImport(); setSymbol(e.target.value); setReplayIndex(null); setReplayPlaying(false); setPaused(false); setMode('simulation'); }}>{Object.keys(feed === 'cme' || feed === 'recording' ? CME_ROOTS : INSTRUMENTS).map(value => <option key={value}>{value}</option>)}</select></label>
+      <label>Feed<select aria-label="Order flow provider" value={feed} onChange={e => { cancelImport(); setStatusMessage(''); setFeed(e.target.value); if (e.target.value === 'recording') setSymbol(recording.symbol); else if (e.target.value === 'cme' && !CME_ROOTS[symbol]) setSymbol('ES'); setMode(e.target.value === 'recording' ? 'replay' : 'simulation'); setReplayPlaying(false); setReplayIndex(e.target.value === 'recording' ? 0 : null); setPaused(false); }}><option value="mock">{instrument.exchange} · Simulator</option><option value="cme">CME bridge · not configured</option><option value="recording" disabled={!recording}>{recording ? `Local file · ${recording.metadata.contractId}` : 'Local recording · import file'}</option>{['Rithmic', 'CQG', 'CME direct', 'Interactive Brokers', 'Binance', 'Coinbase'].map(p => <option key={p} disabled>{p} — not connected</option>)}</select></label>
       <span className={`of-connection ${snapshot.status === 'connected' ? 'is-connected' : ''}`} role="status"><i />{mode === 'replay' ? `${provenance} REPLAY` : paused ? `${provenance} PAUSED` : simulated && snapshot.status === 'connected' ? 'SIM CONNECTED' : simulated ? 'SIM DISCONNECTED' : `${provenance} ${snapshot.status.toUpperCase()}`}</span>
-      <label>Mode<select aria-label="Order flow mode" value={mode} onChange={e => { setMode(e.target.value); setReplayIndex(Math.max(0, snapshot.trades.length - 600)); setReplayPlaying(false); }}><option value="simulation">Stream · {provenance}</option><option value="replay" disabled={!snapshot.trades.length}>Replay · {provenance}</option><option disabled value="live">LIVE — feed required</option></select></label>
+      <label>Mode<select aria-label="Order flow mode" value={mode} onChange={e => { setMode(e.target.value); setReplayIndex(Math.max(0, snapshot.trades.length - 600)); setReplayPlaying(false); }}><option value="simulation" disabled={Boolean(localRecording)}>Stream · {provenance}</option><option value="replay" disabled={!snapshot.trades.length}>Replay · {provenance}</option><option disabled value="live">LIVE — feed required</option></select></label>
       <label>Timeframe<select aria-label="Footprint timeframe" value={timeframe} onChange={e => setTimeframe(Number(e.target.value))}>{[[15000, '15s'], [60000, '1m'], [300000, '5m']].map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
       <label>Aggregation<select aria-label="Tick aggregation" value={aggregation} onChange={e => setAggregation(Number(e.target.value))}>{[1, 2, 4, 8].map(n => <option key={n} value={n}>{n} tick{n > 1 ? 's' : ''}</option>)}</select></label>
-      <label>Session<select aria-label="Order flow session" value={session} onChange={e => setSession(e.target.value)}><option value="all">Demo session · all</option><option value="custom">Custom · UTC</option></select></label>
+      <label>Session<select aria-label="Order flow session" value={session} onChange={e => setSession(e.target.value)}><option value="all">{localRecording ? 'Recording · all' : simulated ? 'Demo session · all' : 'Retained session · all'}</option><option value="custom">Custom · UTC</option></select></label>
       <label>Layout<select aria-label="Order flow layout" value={layout} onChange={e => setLayout(e.target.value)}><option value="full">Full workspace</option><option value="chart">Chart only</option><option value="tape">Chart + Tape</option></select></label>
+      <input ref={fileInput} type="file" hidden accept=".json,application/json" aria-label="Order flow recording file" onChange={importFile} />
+      <button className="of-icon" aria-label="Import order flow recording" title="Import local JSON recording (up to 8 MiB). Format example in settings." disabled={importing} onClick={() => fileInput.current.click()}><Upload size={15} /></button>
       <button className="of-icon" aria-label={paused ? `Resume ${simulated ? 'simulated' : 'provider'} stream` : `Pause ${simulated ? 'simulated' : 'provider'} stream`} disabled={mode === 'replay'} onClick={() => setPaused(v => !v)}>{paused ? <Play size={15} /> : <Pause size={15} />}</button><button className="of-icon" aria-label="Order flow settings" onClick={() => setDrawer(true)}><Settings size={15} /></button><button className="of-icon" aria-label="Fullscreen order flow" onClick={async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await root.current.requestFullscreen(); } catch { setStatusMessage('Fullscreen is unavailable in this browser.'); } }}><Maximize2 size={15} /></button><button className="of-icon" aria-label="Reset order flow workspace" onClick={reset}><RotateCcw size={15} /></button>
     </div>
-    <div className="of-subtoolbar"><span className="of-sim-badge">{simulated ? 'SIMULATED DATA' : snapshot.status === 'connected' ? 'PROVIDER DATA' : 'FEED UNAVAILABLE'}</span><span>{simulated ? 'Demo prices · no live market connection · execution disabled' : snapshot.message} {analysis.quality.reason || ''}</span><label><input type="checkbox" checked={heatmap} onChange={e => setHeatmap(e.target.checked)} />Liquidity Heatmap</label><small>{snapshot.timestamp ? `${new Date(snapshot.timestamp).toISOString().slice(0, 19).replace('T', ' ')} UTC · ${simulated ? 'demo clock' : 'exchange time'}` : 'No provider timestamp'}</small></div>
+    <div className="of-subtoolbar"><span className="of-sim-badge">{localRecording ? simulated ? 'SIMULATED RECORDING' : 'HISTORICAL FILE' : simulated ? 'SIMULATED DATA' : snapshot.status === 'connected' ? 'PROVIDER DATA' : 'FEED UNAVAILABLE'}</span><span>{localRecording ? `${snapshot.source} · declared source unverified · local only · execution disabled` : simulated ? 'Demo prices · no live market connection · execution disabled' : snapshot.message} {analysis.quality.reason || ''}</span><label><input type="checkbox" checked={heatmap} onChange={e => setHeatmap(e.target.checked)} />Liquidity Heatmap</label><small>{(mode === 'replay' ? lastTime : snapshot.timestamp) ? `${new Date(mode === 'replay' ? lastTime : snapshot.timestamp).toISOString().slice(0, 19).replace('T', ' ')} UTC · ${localRecording ? 'recorded time' : simulated ? 'demo clock' : 'exchange time'}` : 'No provider timestamp'}</small></div>
     {mode === 'replay' && <div className="of-replay"><button onClick={() => setReplayPlaying(v => !v)} disabled={replayAt >= snapshot.trades.length - 1}>{replayPlaying && replayAt < snapshot.trades.length - 1 ? 'Pause replay' : 'Play replay'}</button><button onClick={() => setReplayIndex(Math.min(snapshot.trades.length - 1, replayAt + 1))}>Step trade</button><input type="range" aria-label="Order flow replay position" min="0" max={Math.max(0, snapshot.trades.length - 1)} value={replayAt} onChange={e => { setReplayIndex(Number(e.target.value)); setReplayPlaying(false); }} /><select aria-label="Order flow replay speed" value={replaySpeed} onChange={e => setReplaySpeed(Number(e.target.value))}>{[1, 2, 4, 8].map(v => <option key={v} value={v}>{v}×</option>)}</select><span>{replayAt + 1} / {snapshot.trades.length}</span></div>}
     {statusMessage && <p role="status">{statusMessage}</p>}
     <div className="of-main">
@@ -105,6 +131,6 @@ export default function OrderFlowPage({ createProvider = createDefaultProvider }
       </PanelGroup>}
     </div>
     <div className="of-bottom"><OrderFlowAnalytics flow={flow} book={book} trades={trades} settings={settings} instrument={instrument} /><OrderFlowSignals signals={signals} /></div>
-    {drawer && <OrderFlowSettings settings={settings} update={update} close={() => setDrawer(false)} />}
+    {drawer && <OrderFlowSettings settings={settings} update={update} close={() => setDrawer(false)} recording={recording} clearRecording={clearRecording} />}
   </div></FeedContext>;
 }

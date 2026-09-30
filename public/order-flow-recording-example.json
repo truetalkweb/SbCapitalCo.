@@ -1,0 +1,15 @@
+{
+  "format": "sb-order-flow-recording",
+  "version": 1,
+  "provenance": "simulated",
+  "source": "Format example — synthetic values, not real CME data",
+  "instrument": { "root": "ES", "contractId": "example:ES:202612", "expiry": "2026-12-18", "tickSize": 0.25, "pricePrecision": 2, "contractMultiplier": 50 },
+  "events": [
+    { "version": 1, "type": "session", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776800000000000", "tradeSequence": "0", "marketDataMode": "historical" },
+    { "version": 1, "type": "book-snapshot", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776800000000001", "sequence": "1", "levels": [{ "side": "bid", "price": 5800, "size": 10 }, { "side": "ask", "price": 5800.25, "size": 20 }] },
+    { "version": 1, "type": "trade", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776800000000002", "sequence": "1", "tradeId": "example-1", "price": 5800.25, "size": 3, "side": "buy" },
+    { "version": 1, "type": "depth-update", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776801000000000", "sequence": "2", "changes": [{ "side": "ask", "price": 5800.25, "size": 12 }] },
+    { "version": 1, "type": "trade", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776801000000001", "sequence": "2", "tradeId": "example-2", "price": 5800, "size": 2, "side": "sell" },
+    { "version": 1, "type": "trade", "symbol": "ES", "contractId": "example:ES:202612", "epoch": "example", "timestampNs": "1790776802000000000", "sequence": "3", "tradeId": "example-3", "price": 5800.25, "size": 1, "side": "unknown" }
+  ]
+}

@@ -19,7 +19,7 @@ function level(raw, metadata) {
 export function normalizeEvent(raw, metadata, receivedAt, { maxLevels = 4000, maxFutureMs = 5000 } = {}) {
   if (!raw || raw.version !== EVENT_VERSION || raw.contractId !== metadata.contractId || raw.symbol !== metadata.root) throw new Error('Event version or instrument mismatch.');
   if (typeof raw.epoch !== 'string' || !raw.epoch.length || raw.epoch.length > 100) throw new Error('Missing connection epoch.');
-  if (!/^\d{1,22}$/.test(raw.timestampNs || '')) throw new Error('Nanosecond exchange timestamp required as a decimal string.');
+  if (typeof raw.timestampNs !== 'string' || !/^\d{1,22}$/.test(raw.timestampNs)) throw new Error('Nanosecond exchange timestamp required as a decimal string.');
   const timestamp = Number(BigInt(raw.timestampNs) / 1000000n);
   if (!Number.isSafeInteger(timestamp) || timestamp <= 0 || timestamp > receivedAt + maxFutureMs) throw new Error('Invalid or future exchange timestamp.');
   const event = { version: EVENT_VERSION, contractId: metadata.contractId, symbol: metadata.root, epoch: raw.epoch,

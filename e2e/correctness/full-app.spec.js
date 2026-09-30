@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { Buffer } from "node:buffer";
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createPaperService } = require('../support/paperService.cjs');
@@ -13,6 +14,45 @@ const initialWorkspace = {
   activeWorkspace: "chart-analysis", layoutMode: "2", gridMode: "4", syncCharts: false,
   replayMode: false, replayNotes: "Original session note", advancedMode: true,
 };
+
+test('order flow local recording validates in a worker and replays depth without future leakage', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'order-flow' });
+  const recording = JSON.parse(readFileSync('public/order-flow-recording-example.json', 'utf8'));
+  recording.provenance = 'historical'; recording.source = 'Browser test declared source';
+  const upload = data => page.getByLabel('Order flow recording file').setInputFiles({ name: 'recording.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
+  await upload(recording);
+  const chart = page.getByRole('region', { name: 'Footprint workspace' });
+  const dom = page.getByRole('region', { name: 'Historical recording DOM ladder' });
+  await expect(chart).toContainText('1 trades');
+  await expect(page.getByText('HISTORICAL FILE', { exact: true })).toBeVisible();
+  await expect(page.getByText(/declared source unverified · local only/)).toBeVisible();
+  await expect(page.getByLabel('Order flow symbol', { exact: true })).toBeDisabled();
+  await expect(dom.locator('tbody tr').first().locator('td').nth(4)).toHaveText('20');
+  await page.getByRole('button', { name: 'Step trade', exact: true }).click();
+  await expect(chart).toContainText('2 trades');
+  await expect(dom.locator('tbody tr').first().locator('td').nth(4)).toHaveText('12');
+  await page.getByRole('button', { name: 'Step trade', exact: true }).click();
+  await expect(chart).toContainText('3 trades');
+  await expect(page.getByRole('region', { name: 'Historical recording Time and Sales' }).locator('tbody tr')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Play replay', exact: true })).toBeDisabled();
+  await upload({ ...recording, version: 999 });
+  await expect(page.getByText(/Import rejected:/)).toBeVisible();
+  await expect(chart).toContainText('3 trades');
+  await page.screenshot({ path: testInfo.outputPath('historical-recording.png') });
+  await upload({ ...recording, provenance: 'simulated', events: recording.events.filter(e => ['session', 'trade'].includes(e.type)) });
+  await expect(page.getByText('SIMULATED RECORDING', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Simulated recording DOM ladder' }).locator('tbody tr')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reset order flow workspace', exact: true }).click();
+  await expect(chart).toContainText('1 trades');
+  await page.getByRole('button', { name: 'Order flow settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear local recording', exact: true }).click();
+  await page.getByRole('button', { name: 'Close order flow settings', exact: true }).click();
+  await expect(page.getByText('SIMULATED DATA', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Order flow provider', { exact: true }).locator('option[value="recording"]')).toHaveAttribute('disabled', '');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+  expect(evidence.paper.orders || []).toHaveLength(0);
+});
 
 for (const [width, height] of [[1920, 1080], [2560, 1440], [3440, 1440], [3840, 2160]]) {
   test(`order flow analytics fits ${width} desktop and renders active simulated data`, async ({ page }, testInfo) => {

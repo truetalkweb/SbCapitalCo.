@@ -3,7 +3,6 @@ import { getNewsStatusLabel } from "../hooks/useMarketNews";
 import { terminalSansFont } from "../config/terminalConfig";
 import { getCleanProviderMessage } from "../utils/healthStatus";
 import { formatTerminalStatusLabel } from "../utils/marketUtils";
-import { cleanConfidenceLabel } from "../utils/scannerNewsAdapters";
 
 function getStatusColor(label, theme) {
   const value = String(label || "").toUpperCase();
@@ -70,7 +69,7 @@ export default function MarketNewsPanel({
   terminalMonoFont,
 }) {
   const isDark = theme.isDark !== false;
-  const statusLabel = newsMeta.confidenceLabel || cleanConfidenceLabel(newsMeta) || getNewsStatusLabel(newsMeta);
+  const statusLabel = getNewsStatusLabel(newsMeta);
   const statusColor = getStatusColor(statusLabel, theme);
   const rawVisibleMessage = newsMeta.userMessage || newsMeta.userWarnings?.[0] || null;
   const visibleMessage = rawVisibleMessage

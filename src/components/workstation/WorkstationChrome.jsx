@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Activity, Bell, BookOpen, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, House, ListFilter, LogOut, Search, Settings, ShieldCheck, SlidersHorizontal, Wrench } from "lucide-react";
 import "./workstation.css";
 import { useDismissPopover } from "./useDismissPopover";
@@ -14,7 +14,7 @@ export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSym
   const profileControl = useDismissPopover(profile, setProfile);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
-  const matches = [...new Map(quotes.map(row => [row.symbol, row])).values()].filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7);
+  const matches = useMemo(() => [...new Map(quotes.map(row => [row.symbol, row])).values()].filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7), [quotes, query]);
   const pick = symbol => { if (/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbol)) { onSymbolCommit?.(symbol, null, "global-search"); setQuery(""); setFocused(false); } };
   return <header className="ws-header terminal-top-bar" data-selected-symbol={selectedSymbolContext?.symbol || selectedSymbol} data-selection-source={selectedSymbolContext?.selectionSource || "terminal"}>
     <Brand />

@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import { fetchWithTimeout } from "../utils/marketUtils";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchWithTimeout } from "../utils/marketUtils.js";
+import { buildNewsMeta, getNewsStatusLabel } from '../utils/newsMetadata.js';
+export { getNewsStatusLabel } from '../utils/newsMetadata.js';
 import {
-  cleanConfidenceLabel,
   createNormalizedNewsFallback,
   mergeNewsRows,
   normalizeNewsRow,
   shouldFetchMarketNews,
-} from "../utils/scannerNewsAdapters";
+} from "../utils/scannerNewsAdapters.js";
 
 const DEFAULT_NEWS_META = {
   source: "Backend News",
@@ -22,51 +23,20 @@ const DEFAULT_NEWS_META = {
   backendTime: null,
 };
 
-function buildNewsMeta(meta, normalizedRows) {
-  const fallbackRows = normalizedRows.filter((item) => item.fallback).length;
-  const providerWarnings = Array.isArray(meta.providerWarnings) ? meta.providerWarnings : [];
-  const userWarnings = Array.isArray(meta.userWarnings) ? meta.userWarnings : [];
-
-  return {
-    source: meta.source || "Backend News",
-    degraded: Boolean(meta.degraded) || (normalizedRows.length > 0 && fallbackRows === normalizedRows.length),
-    cached: Boolean(meta.cached),
-    updatedAt: meta.updatedAt || new Date().toISOString(),
-    warning: meta.warning || providerWarnings[0] || null,
-    providerWarnings,
-    userWarnings,
-    userMessage: meta.userMessage || userWarnings[0] || null,
-    statusLabel: meta.statusLabel || null,
-    providerStatus: meta.providerStatus || null,
-    backendTime: meta.backendTime || null,
-    confidenceLabel: cleanConfidenceLabel(meta),
-    fallbackRows,
-    rowCount: normalizedRows.length,
-  };
-}
-
-export function getNewsStatusLabel(newsMeta = {}) {
-  if (newsMeta.statusLabel) return newsMeta.statusLabel;
-  if (newsMeta.providerStatus?.label) {
-    const label = String(newsMeta.providerStatus.label).toUpperCase();
-    return label === "LIVE" ? "NEWS LIVE" : `NEWS ${label}`;
-  }
-
-  if (newsMeta.degraded) return "NEWS FALLBACK";
-  if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "NEWS PROVIDER LIMITED";
-  if (newsMeta.cached) return "NEWS CACHED";
-  if (Number(newsMeta.rowCount) > 0 && newsMeta.updatedAt) return "NEWS LIVE";
-
-  return "NEWS PENDING";
-}
-
 export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], limit = 14 }) {
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsMeta, setNewsMeta] = useState(DEFAULT_NEWS_META);
+  const request = useRef(null);
+  useEffect(() => () => request.current?.abort(), [selectedStock, brokerApiUrl]);
 
   const fetchNews = useCallback(
     async ({ cancelled = () => false, signal } = {}) => {
+      request.current?.abort();
+      const controller = new AbortController(); request.current = controller;
+      const abort = () => controller.abort();
+      if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+      const obsolete = () => controller.signal.aborted || request.current !== controller || cancelled();
       setNewsLoading(true);
 
       try {
@@ -77,7 +47,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
         const marketNewsUrl = `${brokerApiUrl}/api/news?limit=${limit}`;
         const fetchNewsPayload = async (url, label) => {
           try {
-            const response = await fetchWithTimeout(url, 5000, { signal });
+            const response = await fetchWithTimeout(url, 5000, { signal: controller.signal });
 
             if (!response.ok) throw new Error(`${label} HTTP ${response.status}`);
 
@@ -87,6 +57,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
           }
         };
         const symbolResult = await fetchNewsPayload(tickerNewsUrl, "Ticker news");
+        if (obsolete()) return;
 
         if (symbolResult.payload) {
           const symbolPayload = symbolResult.payload;
@@ -130,7 +101,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
           .sort((a, b) => Number(a.fallback) - Number(b.fallback))
           .slice(0, limit);
 
-        if (!cancelled()) {
+        if (!obsolete()) {
           const nextNews = normalizedRows.length
             ? normalizedRows
             : createNormalizedNewsFallback(selectedStock, scannerRows);
@@ -146,7 +117,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
           }, nextNews));
         }
       } catch {
-        if (!cancelled()) {
+        if (!obsolete()) {
           const fallbackRows = createNormalizedNewsFallback(selectedStock, scannerRows);
 
           setNews(fallbackRows);
@@ -154,15 +125,15 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
             ...DEFAULT_NEWS_META,
             source: "Fallback",
             degraded: true,
-            updatedAt: new Date().toISOString(),
+            updatedAt: null,
             warning: "Backend news feed unavailable.",
             fallbackRows: fallbackRows.length,
           });
         }
-      }
-
-      if (!cancelled()) {
-        setNewsLoading(false);
+      } finally {
+        signal?.removeEventListener('abort', abort);
+        if (!obsolete()) setNewsLoading(false);
+        if (request.current === controller) request.current = null;
       }
     },
     [brokerApiUrl, limit, scannerRows, selectedStock]

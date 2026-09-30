@@ -3,7 +3,7 @@ import { journalStatistics } from "../../../utils/journalAccounting.js";
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { X } from "lucide-react";
-import { terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
+import { defaultJournalDraft, terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
 import { money, num } from "../premiumWorkspaceData";
 import { ActionButton, FilterBar, MetricTile, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, SeriesSparkline, StatusPill } from "../PremiumWorkspacePrimitives";
 
@@ -45,7 +45,7 @@ export default function JournalWorkspacePage({
           <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
-              <ActionButton theme={theme} onClick={() => setJournalDraft?.((current) => ({ ...current, symbol: selectedStock, setup: "", review: "", result: "Review", grade: "B" }))}>Clear Draft</ActionButton>
+              <ActionButton theme={theme} onClick={() => setJournalDraft?.({ ...defaultJournalDraft, symbol: selectedStock, setup: '' })}>Clear Draft</ActionButton>
               <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Record</ActionButton>
             </div>
           </div>

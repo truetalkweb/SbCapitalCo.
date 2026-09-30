@@ -97,22 +97,27 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   const [scannerMeta, setScannerMeta] = useState(defaultScannerMeta);
   const [scannerLoading, setScannerLoading] = useState(false);
   const scannerGroupsRef = useRef(emptyScannerGroups);
+  const request = useRef(null);
+  useEffect(() => () => request.current?.abort(), [brokerApiUrl]);
   const [selectedScannerStock, setSelectedScannerStock] = useState(() =>
     loadSetting("sb_selected_scanner_stock", null)
   );
 
   const loadScanner = useCallback(async (options = {}) => {
     const silent = Boolean(options?.silent);
+    request.current?.abort();
+    const controller = new AbortController(); request.current = controller;
     setScannerLoading(true);
 
     try {
-      const response = await fetchWithTimeout(`${brokerApiUrl}/api/scanner`, 30000);
+      const response = await fetchWithTimeout(`${brokerApiUrl}/api/scanner`, 30000, { signal: controller.signal });
 
       if (!response.ok) {
         throw new Error("Backend scanner unavailable");
       }
 
       const data = await response.json();
+      if (controller.signal.aborted || request.current !== controller) return;
       const nextMeta = buildScannerMeta(data);
       const normalizedGroups = normalizeScannerGroups({
         gainers: data.gainers || [],
@@ -141,6 +146,7 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
         detail: `${data.source || "FMP SCANNER"} returned ${getScannerRowCount(data)} ranked rows.`,
       });
     } catch {
+      if (controller.signal.aborted || request.current !== controller) return;
       const hasPreviousRows = Object.values(scannerGroupsRef.current)
         .some((rows) => Array.isArray(rows) && rows.length > 0);
       if (!hasPreviousRows) {
@@ -173,7 +179,10 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
           : "Scanner data is temporarily unavailable.",
       });
     } finally {
-      setScannerLoading(false);
+      if (request.current === controller) {
+        if (!controller.signal.aborted) setScannerLoading(false);
+        request.current = null;
+      }
     }
   }, [brokerApiUrl, onActivity]);
 

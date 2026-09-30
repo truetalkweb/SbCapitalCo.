@@ -5,7 +5,8 @@ export function useWatchlistCollections({ preferences, setPreferences, liveStock
   const active = lists.find(list=>list.id===preferences.activeWatchlistId) || lists[0];
   const update = transform => setPreferences?.(current => {
     const currentLists = normalizeWatchlists(current.watchlists, liveStocks);
-    return { ...current, ...transform(currentLists, current.activeWatchlistId || currentLists[0].id) };
+    const currentId = currentLists.find(list => list.id === current.activeWatchlistId)?.id || currentLists[0].id;
+    return { ...current, activeWatchlistId: currentId, ...transform(currentLists, currentId) };
   });
   const add = symbol => {
     addGlobal?.(symbol);

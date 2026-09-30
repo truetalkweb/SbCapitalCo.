@@ -311,6 +311,47 @@ test("full App adding alert 106 preserves every existing alert after reload", as
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });
 
+test('journal Clear Draft removes trade prices, quantity, fees and imported P&L before reuse', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'journal', journalDraft: {
+    recordType: 'trade', status: 'closed', symbol: 'AAPL', quantity: '10', entryPrice: '100', exitPrice: '120', fees: '2',
+    pnl: 198, setup: 'Previous trade', grade: 'A', tags: 'old', screenshotUrl: 'https://example.com/old', review: 'Old review', bias: 'Short' } });
+  await expect(page.getByLabel('Journal quantity', { exact: true })).toHaveValue('10');
+  await page.getByRole('button', { name: 'Clear Draft', exact: true }).click();
+  await expect(page.getByLabel('Journal record type', { exact: true })).toHaveValue('note');
+  await page.getByLabel('Journal record type', { exact: true }).selectOption('trade');
+  for (const label of ['quantity', 'entry price', 'exit price', 'total fees']) await expect(page.getByLabel(`Journal ${label}`, { exact: true })).toHaveValue('');
+  await expect.poll(() => evidence.workspace().journalDraft?.pnl ?? null).toBeNull();
+  await page.reload();
+  await expect(page.getByLabel('Journal quantity', { exact: true })).toHaveValue('');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('journal CSV exports formula-like notes as text without changing recorded P&L', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'journal', journalEntries: [
+    { id: 'csv-safety', symbol: 'AAPL', pnl: -40, setup: '=SUM(1,2)', review: '@SUM(A1:A2)', createdAt: new Date().toISOString() } ] });
+  await page.getByRole('tab', { name: 'Exports', exact: true }).click();
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Journal CSV', exact: true }).click();
+  const stream = await (await download).createReadStream(); let csv = ''; for await (const chunk of stream) csv += chunk;
+  expect(csv).toContain('"\'=SUM(1,2)"'); expect(csv).toContain('"\'@SUM(A1:A2)"'); expect(csv).toContain('"-40"');
+  expect(evidence.workspace().journalEntries[0].setup).toBe('=SUM(1,2)');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('watchlist edits target the visible fallback list when a restored active ID is missing', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'watchlist', liveStocks: [{ symbol: 'AAPL' }],
+    premiumPreferences: { watchlists: [{ id: 'main', name: 'Main', symbols: ['AAPL'] }, { id: 'other', name: 'Other', symbols: ['TSLA'] }], activeWatchlistId: 'deleted-list' } });
+  await expect(page.getByLabel('Active watchlist')).toHaveValue('main');
+  await page.getByLabel('Watchlist symbol', { exact: true }).fill('NVDA');
+  await page.getByRole('button', { name: 'Add Symbol', exact: true }).click();
+  await expect.poll(() => evidence.workspace().premiumPreferences?.watchlists?.[0]?.symbols).toEqual(['AAPL', 'NVDA']);
+  expect(evidence.workspace().premiumPreferences.watchlists[1].symbols).toEqual(['TSLA']);
+  await expect.poll(() => evidence.workspace().premiumPreferences?.activeWatchlistId).toBe('main');
+  await page.getByRole('button', { name: 'Remove AAPL from watchlist', exact: true }).click();
+  await expect.poll(() => evidence.workspace().premiumPreferences.watchlists[0].symbols).toEqual(['NVDA']);
+  await page.reload(); await expect(page.getByLabel('Active watchlist')).toHaveValue('main');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test("full App restores two independent named watchlists", async ({page})=>{
   const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:"watchlist",liveStocks:[{symbol:"AAPL"}],premiumPreferences:{watchlists:[{id:"main",name:"Main",symbols:["AAPL"]}],activeWatchlistId:"main"}});
   await page.getByLabel("Watchlist name",{exact:true}).fill("Swing trades");

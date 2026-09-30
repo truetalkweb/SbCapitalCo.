@@ -60,6 +60,10 @@ test('order flow controls replay, filtering, settings and navigation without pla
   await expect(chart).toContainText('11 trades');
   await page.getByRole('button', { name: 'Step trade', exact: true }).click();
   await expect(chart).toContainText('12 trades');
+  await page.getByLabel('Order flow replay speed', { exact: true }).selectOption('8');
+  await page.getByRole('button', { name: 'Play replay', exact: true }).click();
+  await expect.poll(() => chart.locator('footer').innerText()).not.toContain('12 trades');
+  await page.getByRole('button', { name: 'Pause replay', exact: true }).click();
   await page.getByLabel('Order flow symbol', { exact: true }).selectOption('NQ');
   await expect(chart).toContainText('SIMULATED NQ');
   await page.getByRole('button', { name: 'Reset order flow workspace', exact: true }).click();

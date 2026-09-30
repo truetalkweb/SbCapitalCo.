@@ -42,6 +42,10 @@ try {
   await expect(chart).toContainText('101 trades');
   await page.getByRole('button', { name: 'Step trade', exact: true }).click();
   await expect(chart).toContainText('102 trades');
+  await page.getByLabel('Order flow replay speed', { exact: true }).selectOption('8');
+  await page.getByRole('button', { name: 'Play replay', exact: true }).click();
+  await expect.poll(() => chart.locator('footer').innerText()).not.toContain('102 trades');
+  await page.getByRole('button', { name: 'Pause replay', exact: true }).click();
   record('Production replay uses only trades and book snapshots up to its cursor');
   await page.getByRole('button', { name: 'Reset order flow workspace', exact: true }).click();
   await page.getByLabel('Order flow symbol', { exact: true }).selectOption('NQ');

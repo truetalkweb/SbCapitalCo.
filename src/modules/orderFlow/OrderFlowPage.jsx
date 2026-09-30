@@ -24,7 +24,7 @@ export default function OrderFlowPage({ createProvider = createMockProvider }) {
   const [mode, setMode] = useState('simulation'), [paused, setPaused] = useState(false), [timeframe, setTimeframe] = useState(60000), [aggregation, setAggregation] = useState(2);
   const [chartMode, setChartMode] = useState('bidask'), [heatmap, setHeatmap] = useState(true), [session, setSession] = useState('all'), [layout, setLayout] = useState('full'), [drawer, setDrawer] = useState(false);
   const [replayIndex, setReplayIndex] = useState(null), [replayPlaying, setReplayPlaying] = useState(false), [replaySpeed, setReplaySpeed] = useState(1), [statusMessage, setStatusMessage] = useState('');
-  const root = useRef(null), audio = useRef(null), lastAlert = useRef(0);
+  const root = useRef(null), audio = useRef(null), lastAlert = useRef(0), replayCursor = useRef(null);
   const provider = useMemo(() => createProvider({ symbol, seed: 17 + resetToken }), [symbol, resetToken, createProvider]);
   const snapshot = useSyncExternalStore(provider.subscribe, provider.getSnapshot);
   const instrument = useMemo(() => ({ ...INSTRUMENTS[symbol], aggregation }), [symbol, aggregation]);
@@ -35,11 +35,18 @@ export default function OrderFlowPage({ createProvider = createMockProvider }) {
   }, [provider, mode, paused, symbol]);
   useEffect(() => { try { localStorage.setItem('sb_order_flow_settings_v1', JSON.stringify(settings)); } catch { /* Session-only settings if storage is unavailable. */ } }, [settings]);
   const replayComplete = replayIndex !== null && replayIndex >= snapshot.trades.length - 1;
+  useEffect(() => { replayCursor.current = replayIndex; }, [replayIndex]);
   useEffect(() => {
     if (mode !== 'replay' || !replayPlaying || replayComplete) return;
-    const timer = setInterval(() => setReplayIndex(current => Math.min(snapshot.trades.length - 1, (current ?? 0) + 8 * replaySpeed)), 200);
+    const startIndex = replayCursor.current ?? 0, startTime = snapshot.trades[startIndex].timestamp, startedAt = performance.now();
+    const timer = setInterval(() => {
+      const target = startTime + (performance.now() - startedAt) * replaySpeed;
+      let low = startIndex, high = snapshot.trades.length - 1;
+      while (low < high) { const middle = Math.ceil((low + high) / 2); if (snapshot.trades[middle].timestamp <= target) low = middle; else high = middle - 1; }
+      setReplayIndex(low);
+    }, 100);
     return () => clearInterval(timer);
-  }, [mode, replayPlaying, replaySpeed, snapshot.trades.length, replayComplete]);
+  }, [mode, replayPlaying, replaySpeed, snapshot.trades, replayComplete]);
   useEffect(() => () => { audio.current?.close(); }, []);
   const replayAt = mode === 'replay' ? replayIndex ?? snapshot.trades.length - 1 : snapshot.trades.length - 1;
   const trades = useMemo(() => snapshot.trades.slice(0, replayAt + 1).filter(t => session === 'all' || inSession(t.timestamp, settings.sessionStart, settings.sessionEnd)), [snapshot.trades, replayAt, session, settings.sessionStart, settings.sessionEnd]);

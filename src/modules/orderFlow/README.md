@@ -21,7 +21,7 @@ No execution adapter is installed. The module has no execution controls or broke
 
 ## Replay and limitations
 
-Replay freezes simulation, clips trades and books at the cursor, and recalculates all metrics without future snapshots. Scrubbing, stepping and 1×–8× playback use the retained dataset. Reset restores defaults and a new deterministic seed; changing instrument isolates the provider and disposes the prior timer. Custom UTC sessions support overnight windows.
+Replay freezes simulation, clips trades and books at the cursor, and recalculates all metrics without future snapshots. Scrubbing, stepping and 1×–8× playback use the retained dataset. Playback advances against recorded event timestamps and elapsed browser time, rather than a fixed number of trades per frame. Reset restores defaults and a new deterministic seed; changing instrument isolates the provider and disposes the prior timer. Custom UTC sessions support overnight windows.
 
 Signals are heuristic candidates, not certified exchange events or trade recommendations. Absorption, exhaustion, failed auctions and sweeps require richer context for professional confirmation. The demo is not a full MBO reconstruction, market-wide tape, futures execution system or exchange session calendar. The rolling window is labelled explicitly; cumulative delta is not an unbounded full-day total.
 

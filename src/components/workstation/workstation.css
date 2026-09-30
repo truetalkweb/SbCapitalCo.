@@ -44,3 +44,10 @@
 .ws-menu-field { display: grid; gap: 6px; padding: 8px 3px; font-size: 11px; color: var(--ws-muted); }
 .ws-menu-field select { width: 100%; color: var(--ws-text); background: var(--ws-panel); border: 1px solid var(--ws-border); border-radius: 4px; height: 30px; }
 .theme-light .ws-profile > button span { color: #f0f3f5; }
+.theme-light .ws-logo-window { mix-blend-mode: multiply; }
+.theme-light .ws-logo-window img { filter: invert(1); }
+.theme-light .ws-sidebar nav button { color: var(--ws-muted); }
+.theme-light .ws-sidebar nav button:hover { background: var(--ws-alt); }
+.theme-light .ws-sidebar nav button[aria-current=page] { color: var(--ws-text); background: var(--ws-alt); }
+.theme-light .ws-sidebar nav button[aria-current=page] > svg { color: var(--ws-green); }
+.theme-light .ws-clock,.theme-light .ws-search > svg { color: var(--ws-muted); }

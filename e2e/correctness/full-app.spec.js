@@ -661,6 +661,28 @@ for (const width of [1536, 1280]) {
   }
 }
 
+for (const width of [1280, 1536]) test(`light theme logo and navigation remain readable at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1024 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'watchlist', themeMode: 'light' });
+  const logo = page.getByRole('img', { name: 'SB logo', exact: true });
+  await expect(logo).toHaveAttribute('src', '/sb-terminal-logo.png');
+  await expect(logo).toHaveCSS('filter', 'invert(1)');
+  await expect(page.locator('.ws-logo-window')).toHaveCSS('mix-blend-mode', 'multiply');
+  const contrast = await page.evaluate(() => {
+    const luminance = value => {
+      const rgb = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+      return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+    };
+    return [...document.querySelectorAll('.ws-sidebar nav button'), document.querySelector('.ws-clock')].map(element => {
+      const style = getComputedStyle(element), background = style.backgroundColor === 'rgba(0, 0, 0, 0)' ? getComputedStyle(element.closest('.ws-sidebar') || element.closest('.ws-header')).backgroundColor : style.backgroundColor;
+      const a = luminance(style.color), b = luminance(background); return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+    });
+  });
+  expect(Math.min(...contrast)).toBeGreaterThanOrEqual(4.5);
+  await page.screenshot({ path: testInfo.outputPath(`readable-light-shell-${width}.png`) });
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test("secondary workspace navigation keeps the shared shell and light theme", async ({ page }) => {
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "watchlist", themeMode: "light" });
   await expect(page.locator('.ws-workspace[data-workspace="watchlist"]')).toHaveCSS("background-color", "rgb(244, 247, 250)");

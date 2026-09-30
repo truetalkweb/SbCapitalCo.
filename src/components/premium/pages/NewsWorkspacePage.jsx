@@ -2,10 +2,13 @@ import { useState } from "react";
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { Star } from "lucide-react";
+import { useNewsAiSummary } from "../../../hooks/useNewsAiSummary";
 import { ActionButton, FilterBar, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function NewsWorkspacePage({
   addSymbolToWatchlist,
+      brokerApiUrl,
+      aiEnabled = false,
       mainTwoCol,
       newsCatalystHighlights,
       newsRows,
@@ -28,6 +31,7 @@ export default function NewsWorkspacePage({
     const [impact, setImpact] = useState("all");
     const filtered = newsRows.filter(row => (source === "all" || row.source === source) && (impact === "all" || row.impact === impact));
     const selectedStory = filtered.find(row=>row.id===inputStory?.id) || filtered[0] || null;
+    const ai = useNewsAiSummary({ story: selectedStory, brokerApiUrl, enabled: aiEnabled });
     const pagination = useRecordPage(filtered, 25, newsSearch + newsView + source + impact);
     return (
       <div className="terminal-page" style={page}>
@@ -101,6 +105,20 @@ export default function NewsWorkspacePage({
                 <h2 style={{ margin: 0, fontSize: 22 }}>{selectedStory?.headline || "No story selected"}</h2>
                 <div style={{ color: theme.muted, marginTop: 10 }}>{selectedStory ? `${selectedStory.source} / ${selectedStory.time}` : "Provider feed unavailable"}</div>
                 <div style={{ marginTop: 16, lineHeight: 1.55, color: theme.text }}>{selectedStory?.summary || "No provider summary is available for this headline."}</div>
+                <div style={{ margin: "14px 0", display: "grid", gap: 8 }}>
+                  <ActionButton theme={theme} disabled={!aiEnabled || !selectedStory?.headline || ai.status === "loading"}
+                    onClick={ai.generate}>{ai.status === "loading" ? "Generating AI Summary…" : ai.result ? "Refresh AI Summary" : "Generate AI Summary"}</ActionButton>
+                  {!aiEnabled && <span style={{ color: theme.muted, fontSize: 12 }}>AI summaries require Pro or above.</span>}
+                  <div role="status" aria-live="polite" style={{ color: theme.muted, fontSize: 12 }}>
+                    {ai.error || (ai.result ? `${ai.result.source === "local" ? "Heuristic context · AI unavailable" : `AI analysis · ${ai.result.source} · ${ai.result.cached ? "cached" : "generated"}`} · ${ai.result.evidence?.scope === "headline-and-excerpt" ? "headline and supplied excerpt" : "headline only"}` : "")}
+                  </div>
+                  {ai.result && <div aria-label="Article AI summary" style={{ lineHeight: 1.55, color: theme.text }}>
+                    <p>{ai.result.summary}</p>
+                    <p>{ai.result.marketImpact}</p>
+                    <p style={{ color: theme.muted }}>{ai.result.riskWarning}</p>
+                    {ai.result.warning && <p style={{ color: theme.amber }}>{ai.result.warning}</p>}
+                  </div>}
+                </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
                   <ActionButton theme={theme} active onClick={() => {
                     selectMainSymbol?.(selectedStory?.symbol || selected.symbol);

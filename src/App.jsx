@@ -2236,8 +2236,8 @@ export default function App() {
   const resolvedMarketDataStatusLabel = marketDataStatusLabel;
   const resolvedNewsStatusLabel = newsStatusLabel || newsSourceLabel;
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || null;
-  const aiHealthLabel = aiHealth?.source === "gemini" && (aiHealth?.live || aiHealth?.providerLabel === "LIVE")
-    ? "GEMINI LIVE"
+  const aiHealthLabel = (aiHealth?.live || aiHealth?.providerLabel === "LIVE")
+    ? `${String(aiHealth?.source || "AI").toUpperCase()} LIVE`
     : aiHealth?.label
       ? String(aiHealth.label).replace(/^AI /, "AI ")
       : "AI PENDING";

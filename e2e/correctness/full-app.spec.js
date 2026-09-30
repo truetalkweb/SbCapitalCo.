@@ -23,7 +23,7 @@ function candles(symbol, timeframe) {
       open: base + index, high: base + index + 2, low: base + index - 1, close: base + index + 1, volume: 1000 })) };
 }
 
-async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [], providerScanner = {} } = {}) {
+async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [], providerScanner = {}, providerSummary = null, aiEntitled = true } = {}) {
   const errors = [];
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
@@ -35,6 +35,10 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin === "http://127.0.0.1:4175") return route.continue();
+    if (url.origin === "http://127.0.0.1:4999" && url.pathname === "/api/ai/summarize-news" && request.method() === "POST") {
+      return route.fulfill(providerSummary ? await providerSummary(request.postDataJSON())
+        : { status: 503, json: { error: "AI unavailable in this test" } });
+    }
     if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/paper/')) {
       serverNow = await page.evaluate(() => Date.now());
       if (request.method() === 'GET' && url.pathname === '/api/paper/account') {
@@ -62,7 +66,7 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
       && !/\/(submit|execute|cancel|flatten|close)(?:\/|$)/i.test(url.pathname)) {
       if (url.pathname === "/api/entitlements/me") return route.fulfill({ json: {
         plan: "premium", status: "active", source: "isolated-test",
-        capabilities: { replay: true, journal: true, risk: true, performance: true, brokerDiagnostics: false },
+        capabilities: { replay: true, journal: true, risk: true, performance: true, brokerDiagnostics: false, aiSummaries: aiEntitled },
       } });
       if (url.pathname === "/api/questrade/quotes") return route.fulfill({ json: { quotes: providerQuotes, source: "Isolated provider-shape test", realtime: true } });
       if (url.pathname === "/api/scanner") return route.fulfill({ json: providerScanner });
@@ -87,6 +91,41 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
   await page.goto("/");
   return { errors, blocked, paper, repository, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
 }
+
+test("news AI handles retry, provenance and article switching", async ({ page }) => {
+  let calls = 0;
+  const providerNews = [
+    { id: "article-a", headline: "Alpha earnings evidence", relatedTicker: "NVDA", source: "Yahoo Finance", url: "https://example.com/a", timestamp: new Date().toISOString() },
+    { id: "article-b", headline: "Beta revenue evidence", relatedTicker: "NVDA", source: "Yahoo Finance", url: "https://example.com/b", timestamp: new Date().toISOString() },
+  ];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "news", selectedStock: "NVDA" }, {
+    providerNews, providerSummary: async ({ newsItem }) => {
+      calls++;
+      if (calls === 1) return { status: 503, json: { error: "Provider unavailable" } };
+      return { json: { summary: { summary: `Summary for ${newsItem.headline}`, source: calls === 2 ? "gemini" : "local",
+        cached: false, evidence: { scope: "headline-only" }, warning: calls === 2 ? null : "Provider unavailable" } } };
+    },
+  });
+  await page.getByRole("row").filter({ hasText: "Alpha earnings evidence" }).first().click();
+  await page.getByRole("button", { name: "Generate AI Summary", exact: true }).click();
+  await expect(page.getByText("AI summary is temporarily unavailable. Try again.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Generate AI Summary", exact: true }).click();
+  await expect(page.getByLabel("Article AI summary")).toContainText("Summary for Alpha earnings evidence");
+  await expect(page.getByText("AI analysis · gemini · generated · headline only", { exact: true })).toBeVisible();
+  await page.getByRole("row").filter({ hasText: "Beta revenue evidence" }).first().click();
+  await expect(page.getByLabel("Article AI summary")).toHaveCount(0);
+  await page.getByRole("button", { name: "Generate AI Summary", exact: true }).click();
+  await expect(page.getByLabel("Article AI summary")).toContainText("Summary for Beta revenue evidence");
+  await expect(page.getByText("Heuristic context · AI unavailable · headline only", { exact: true })).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test("news AI action stays disabled without the AI entitlement", async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "news" }, { aiEntitled: false,
+    providerNews: [{ id: "article", headline: "Provider evidence", source: "Yahoo Finance", url: "https://example.com/article" }] });
+  await expect(page.getByRole("button", { name: "Generate AI Summary", exact: true })).toBeDisabled();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
 
 test("scanner shows bounded verified quotes and keeps empty categories independent", async ({ page }) => {
   const row = { symbol: "NVDA", price: 123, changePercent: 2, volume: 3000000,

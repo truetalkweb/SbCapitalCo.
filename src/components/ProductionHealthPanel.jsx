@@ -117,7 +117,7 @@ export default function ProductionHealthPanel({
   const scannerSource = String(scannerMeta?.source || platformHealth?.scanner?.source || "").toUpperCase();
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || {};
   const newsHealth = platformHealth?.news || platformHealth?.deepHealth?.news || {};
-  const aiLive = aiHealth.source === "gemini" && (aiHealth.live || aiHealth.providerLabel === "LIVE");
+  const aiLive = Boolean(aiHealth.live || aiHealth.providerLabel === "LIVE");
   const aiPersistentCache = aiHealth.persistentCache || {};
   const aiStatusMessage = getCleanProviderMessage(
     aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError,
@@ -132,7 +132,7 @@ export default function ProductionHealthPanel({
     "No broker sync error recorded."
   );
   const aiLabel = aiLive
-    ? "GEMINI LIVE"
+    ? `${String(aiHealth.source || "AI").toUpperCase()} LIVE`
     : aiHealth.label || (aiHealth.configured ? "AI DEGRADED" : "AI FALLBACK");
   const newsLabel = newsHealth.label || "NEWS PENDING";
   const scannerLabel = scannerLoading

@@ -23,6 +23,7 @@ import { DEFAULT_SCANNER_FILTERS } from "../../utils/premiumScanner";
 import {
   DEFAULT_ENTITLEMENTS,
   canUseWorkspace,
+  canUseFeature,
 } from "../../services/entitlements";
 import {
   buildStocks,
@@ -730,6 +731,8 @@ function PremiumWorkspaceContent({
     return (
       <NewsWorkspacePage
         {...{
+          brokerApiUrl,
+          aiEnabled: canUseFeature(entitlements, "aiSummaries"),
           addSymbolToWatchlist,
           mainTwoCol,
           newsRows,

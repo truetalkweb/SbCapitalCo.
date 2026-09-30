@@ -114,8 +114,8 @@ export default function NewsWorkspacePage({
                   </div>
                   {ai.result && <div aria-label="Article AI summary" style={{ lineHeight: 1.55, color: theme.text }}>
                     <p>{ai.result.summary}</p>
-                    <p>{ai.result.marketImpact}</p>
-                    <p style={{ color: theme.muted }}>{ai.result.riskWarning}</p>
+                    {ai.result.marketImpact && <p><span style={{ color: theme.muted }}>Market impact: </span>{ai.result.marketImpact}</p>}
+                    {ai.result.riskWarning && <p style={{ color: theme.muted }}>Evidence limits: {ai.result.riskWarning}</p>}
                     {ai.result.warning && <p style={{ color: theme.amber }}>{ai.result.warning}</p>}
                   </div>}
                 </div>

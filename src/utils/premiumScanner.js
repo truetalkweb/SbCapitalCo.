@@ -40,7 +40,10 @@ export function selectScannerUniverse({
     "New Lows": scannerGroups.newLows,
     Premarket: scannerGroups.premarket,
   };
-  const activeRows = rowsByTab[scannerTab] || scannerGroups.gainers || scannerStocks;
+  const activeRows = rowsByTab[scannerTab];
+  if (Object.hasOwn(rowsByTab, scannerTab)) {
+    return activeRows?.length ? buildStocks([], activeRows, null, activeRows[0].symbol) : [];
+  }
   if (activeRows?.length) return buildStocks([], activeRows, null, activeRows[0].symbol);
   if (scannerStocks?.length) return buildStocks([], scannerStocks, null, scannerStocks[0].symbol);
   return fallbackStocks;

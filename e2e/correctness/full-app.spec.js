@@ -23,7 +23,7 @@ function candles(symbol, timeframe) {
       open: base + index, high: base + index + 2, low: base + index - 1, close: base + index + 1, volume: 1000 })) };
 }
 
-async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [] } = {}) {
+async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [], providerScanner = {} } = {}) {
   const errors = [];
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
@@ -65,6 +65,7 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
         capabilities: { replay: true, journal: true, risk: true, performance: true, brokerDiagnostics: false },
       } });
       if (url.pathname === "/api/questrade/quotes") return route.fulfill({ json: { quotes: providerQuotes, source: "Isolated provider-shape test", realtime: true } });
+      if (url.pathname === "/api/scanner") return route.fulfill({ json: providerScanner });
       if (url.pathname.startsWith("/api/news")) return route.fulfill({ json: { news: providerNews } });
       if (url.pathname.includes("/candles/")) return route.fulfill(unavailableHistory
         ? { status: 503, json: { error: "History unavailable in this test" } }
@@ -86,6 +87,24 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
   await page.goto("/");
   return { errors, blocked, paper, repository, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
 }
+
+test("scanner shows bounded verified quotes and keeps empty categories independent", async ({ page }) => {
+  const row = { symbol: "NVDA", price: 123, changePercent: 2, volume: 3000000,
+    source: "Questrade", verified: true, trustTier: 3, freshness: "live", providerTimestamp: new Date().toISOString() };
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: "scanner", selectedStock: "NVDA" }, {
+    providerScanner: { gainers: [row], active: [row], verifiedMovers: [row], losers: [],
+      fallback: true, degraded: true, coverageLabel: "Bounded coverage; not market-wide rankings", contractVersion: "scanner-v2" },
+  });
+  await page.getByLabel("Minimum relative volume").selectOption("0");
+  const workspace = page.locator('.ws-workspace[data-workspace="scanner"]');
+  await expect(workspace).toContainText("Verified provider");
+  await expect(workspace).toContainText("Bounded coverage; not market-wide rankings");
+  await expect(workspace).toContainText("Results: 1");
+  await page.getByRole("tab", { name: "Losers", exact: true }).click();
+  await expect(workspace).toContainText("Results: 0");
+  await page.screenshot({ path: "artifacts/scanner-browser.png", fullPage: true });
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
 
 test("full App keeps 60 trades when saving a note and restores full-history statistics", async ({ page }) => {
   const journalEntries = Array.from({length:60},(_,id)=>({id:`old-${id}`,symbol:"AAPL",pnl:100,createdAt:new Date(Date.UTC(2026,0,id+1)).toISOString()}));

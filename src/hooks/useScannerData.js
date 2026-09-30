@@ -78,6 +78,7 @@ function buildScannerMeta(data) {
     lastWarning: data.lastWarning || data.warning || data.primaryScannerError || null,
     contractVersion: data.contractVersion || null,
     marketSession: data.marketSession || null,
+    coverageLabel: data.coverageLabel || null,
   };
 }
 
@@ -151,6 +152,9 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
           confidenceLabel: "Unavailable",
         });
       } else {
+        const cachedGroups = normalizeScannerGroups(scannerGroupsRef.current, { cached: true });
+        scannerGroupsRef.current = cachedGroups;
+        setScannerGroups(cachedGroups);
         setScannerMeta((current) => ({
           ...current,
           degraded: true,

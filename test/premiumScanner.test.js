@@ -37,6 +37,11 @@ const rows = [
   { symbol: "EMPTY", dataMode: "unavailable" },
 ];
 
+test("empty selected categories never display rows from another category", () => {
+  assert.deepEqual(selectScannerUniverse({ scannerTab: "Losers", scannerGroups: { losers: [] },
+    scannerStocks: rows, fallbackStocks: rows }), []);
+});
+
 test("scanner filter defaults merge stored and preference values predictably", () => {
   const result = mergeScannerFilters({ minPrice: "2", risk: "high" }, { minPrice: "5" });
   assert.equal(result.minPrice, "5");

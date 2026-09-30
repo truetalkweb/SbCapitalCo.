@@ -25,7 +25,6 @@ export default function ScannerWorkspacePage({
       scannerTab,
       scannerTable,
       scannerUniverseRows,
-      selected,
       selectedRail,
       selectedStock,
       setActiveScannerPreset,
@@ -43,7 +42,7 @@ export default function ScannerWorkspacePage({
     const scannerSelected =
       scannerUniverseRows.find((row) => row.symbol === selectedStock) ||
       scannerDisplayRows[0] ||
-      selected;
+      { symbol: selectedStock, dataMode: "unavailable", dataStatus: "Unavailable" };
     return (
       <div className="terminal-page" style={page}>
         <div style={mainTwoCol}>
@@ -114,7 +113,8 @@ export default function ScannerWorkspacePage({
                 {" · "}
                 {scannerMeta.contractVersion || "legacy contract"}
                 {" · "}
-                {scannerMeta.cached ? "cached" : scannerMeta.degraded ? "limited context" : "provider data"}
+                {scannerMeta.cached ? "cached snapshot" : "provider data"}
+                {scannerMeta.coverageLabel ? ` · ${scannerMeta.coverageLabel}` : ""}
               </span>
               <button
                 type="button"
@@ -130,7 +130,7 @@ export default function ScannerWorkspacePage({
             <>
               <PremiumCard theme={theme} title="Heuristic Ranking"><div style={{ padding: 14, color: theme.text, lineHeight: 1.55 }}>{scannerSelected.whyRanked || scannerSelected.whyMoving || scannerSelected.catalyst || "No confirmed ranking evidence is available."}</div></PremiumCard>
               <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[
-                ["Trust", scannerSelected.verified ? "Verified provider" : scannerSelected.isSynthetic ? "Synthetic context" : "Calculated context"],
+                ["Trust", scannerSelected.verified ? "Verified provider" : scannerSelected.isSynthetic ? "Synthetic context" : scannerSelected.dataMode === "unavailable" ? "Unavailable" : "Calculated context"],
                 ["Freshness", scannerSelected.freshness || "Unavailable"],
                 ["Relative volume", hasNumericValue(scannerSelected.relativeVolume) ? formatMultiple(scannerSelected.relativeVolume) : "Unavailable"],
                 ["Volume", scannerSelected.volumeLabel || (hasNumericValue(scannerSelected.volume) ? formatCompactNumber(scannerSelected.volume, 1) : "Unavailable")],
@@ -161,4 +161,3 @@ export default function ScannerWorkspacePage({
     );
   
 }
-

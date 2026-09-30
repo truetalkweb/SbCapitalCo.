@@ -24,6 +24,28 @@ function marketRow(overrides = {}) {
   };
 }
 
+test("empty scanner responses remain empty instead of manufacturing fallback prices", () => {
+  const groups = normalizeScannerGroups({}, { degraded: true, fallback: true });
+  assert.ok(Object.values(groups).every((rows) => rows.length === 0));
+});
+
+test("verified quote freshness is independent of restricted feed coverage", () => {
+  const row = normalizeScannerRow(marketRow({ providerTimestamp: new Date().toISOString(), freshness: "live" }),
+    { degraded: true, fallback: true, source: "FMP fallback", warnings: ["Provider plan limited"] });
+  assert.equal(row.isFallback, false);
+  assert.equal(row.dataStatus, "Live");
+  assert.equal(row.verified, true);
+});
+
+test("a failed refresh marks retained rows cached and old quotes stale", () => {
+  const fresh = normalizeScannerRow(marketRow({ providerTimestamp: new Date().toISOString(), freshness: "live" }), { cached: true });
+  assert.equal(fresh.isCached, true);
+  assert.equal(fresh.dataStatus, "Cached");
+  const old = normalizeScannerRow(marketRow({ providerTimestamp: "2026-01-01T00:00:00Z", freshness: "live" }));
+  assert.equal(old.dataStatus, "Stale");
+  assert.equal(normalizeScannerRow(marketRow(), { updatedAt: new Date().toISOString() }).dataStatus, "Delayed");
+});
+
 test("missing gap, RVOL, and float remain unavailable", () => {
   const row = normalizeScannerRow(marketRow(), { contractVersion: "scanner-v2" });
 
@@ -63,7 +85,7 @@ test("restored provider rows stay verified and are presented as cached", () => {
 
   assert.equal(restored.verified, true);
   assert.equal(restored.isCached, true);
-  assert.equal(restored.freshness, "cached");
+  assert.equal(restored.freshness, "stale");
   assert.notEqual(restored.dataStatus, "Live");
 });
 

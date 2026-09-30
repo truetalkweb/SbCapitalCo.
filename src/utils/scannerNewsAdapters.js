@@ -1,4 +1,4 @@
-import { newsFallbackRows, scannerFallbackRows } from "../mocks/scannerNewsMockData.js";
+import { newsFallbackRows } from "../mocks/scannerNewsMockData.js";
 import { formatPacificTime } from "./timeFormatters.js";
 
 const BAD_TEXT = /^(unknown|n\/a|null|undefined|-|--|\$100\+|placeholder)$/i;
@@ -66,17 +66,6 @@ function normalizeTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function freshnessOf(timestamp, meta = {}) {
-  if (meta.cached) return "Cached";
-  if (meta.fallback || meta.degraded) return "Fallback Context";
-
-  const age = Date.now() - new Date(timestamp).getTime();
-  if (age <= 10 * 60_000) return "Live";
-  if (age <= 60 * 60_000) return "Cached";
-
-  return "Provider Limited";
-}
-
 export function cleanConfidenceLabel(meta = {}) {
   const raw = [
     meta.statusLabel,
@@ -137,7 +126,7 @@ function scoreRow({ changePercent, gapPercent, relativeVolume, volume, catalyst,
 export function normalizeScannerRow(row, meta = {}) {
   const symbol = symbolOf(row?.symbol || row?.ticker);
   if (!symbol) return null;
-  const fallbackMode = Boolean(row.isFallback || row.fallback || meta.fallback);
+  const fallbackMode = Boolean(row.isFallback || row.fallback || (!row.verified && meta.fallback));
   const syntheticMode = Boolean(row.isSynthetic || row.synthetic);
 
   const price = numericOrNull(row.price ?? row.currentPrice ?? row.last ?? row.close);
@@ -154,7 +143,7 @@ export function normalizeScannerRow(row, meta = {}) {
 
   const floatValue = numericOrNull(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat);
   const timestamp = normalizeTimestamp(
-    row.providerTimestamp || row.timestamp || row.updatedAt || row.lastUpdated || meta.updatedAt
+    row.providerTimestamp || row.lastTradeTime || row.timestamp || row.updatedAt || row.lastUpdated
   );
   const catalyst = catalystText(row, symbol, changePercent || 0, relativeVolume || 0, gapPercent || 0);
   const risk = text(row.risk || row.riskLabel, "") || riskOf({ changePercent: changePercent || 0, relativeVolume: relativeVolume || 0, price, floatValue: floatValue || 0 });
@@ -162,14 +151,17 @@ export function normalizeScannerRow(row, meta = {}) {
   const score = scannerScore > 0
     ? Number(Math.min(99, scannerScore).toFixed(1))
     : scoreRow({ changePercent: changePercent || 0, gapPercent: gapPercent || 0, relativeVolume: relativeVolume || 0, volume, catalyst, timestamp, risk });
-  const freshness = text(row.freshness, "") || freshnessOf(timestamp, meta);
-  const dataStatus = cleanConfidenceLabel({
-    ...meta,
-    source: row.source || meta.source,
-    provider: row.provider || meta.provider,
-    fallback: row.fallback || meta.fallback,
-    degraded: row.degraded || meta.degraded,
-  });
+  const isCached = Boolean(row.isCached || row.cached || meta.cached);
+  const ageMs = timestamp ? Date.now() - new Date(timestamp).getTime() : null;
+  const freshness = syntheticMode ? "simulated"
+    : ageMs !== null && ageMs < -60_000 ? "stale"
+    : ageMs !== null && ageMs > 60 * 60_000 ? "stale"
+    : isCached ? "cached"
+    : ageMs === null ? "delayed"
+    : row.freshness || (ageMs <= 2 * 60_000 ? "live" : "delayed");
+  const dataStatus = syntheticMode ? "Simulated" : fallbackMode ? "Fallback Context"
+    : freshness === "live" && !row.quoteDelayed ? "Live"
+    : freshness === "stale" ? "Stale" : freshness === "cached" ? "Cached" : "Delayed";
   const trustTier = numericOrNull(row.trustTier) ?? (row.verified ? 3 : syntheticMode ? 1 : 2);
   const source = text(row.source || meta.source, "Scanner Engine");
 
@@ -210,7 +202,7 @@ export function normalizeScannerRow(row, meta = {}) {
     confidence: text(row.confidence, trustTier === 3 ? "High" : trustTier === 2 ? "Medium" : "Limited"),
     verified: Boolean(row.verified),
     trustTier,
-    isCached: Boolean(row.isCached || meta.cached),
+    isCached,
     isFallback: fallbackMode,
     isSynthetic: syntheticMode,
     warnings: Array.isArray(row.warnings) ? row.warnings : [],
@@ -218,7 +210,7 @@ export function normalizeScannerRow(row, meta = {}) {
     scoreWeights: row.scoreWeights || null,
     whyRanked: text(row.whyRanked, row.whyMoving || catalyst),
     fallback: fallbackMode,
-    degraded: Boolean(row.degraded || meta.degraded),
+    degraded: Boolean(row.degraded || (!row.verified && meta.degraded)),
     rankScore: score,
   };
 }
@@ -263,40 +255,7 @@ export function normalizeScannerGroups(groups = {}, meta = {}) {
     verifiedMovers: normalizeList(groups.verifiedMovers, meta),
     contextMovers: normalizeList(groups.contextMovers, meta),
   };
-  const hasRows = Object.values(normalized).some((rows) => rows.length);
-
-  if (hasRows) return normalized;
-
-  const fallbackMeta = { ...meta, fallback: true, degraded: true, source: "Local Scanner Context" };
-  const fallbackRows = normalizeList(
-    scannerFallbackRows.map((row) => ({
-      ...row,
-      synthetic: true,
-      fallback: true,
-      source: "Local Scanner Context",
-      sourceType: "synthetic-context",
-      confidence: "Limited",
-      trustTier: 1,
-    })),
-    fallbackMeta
-  );
-
-  return {
-    gainers: fallbackRows.filter((row) => row.changePercent > 0),
-    losers: fallbackRows.filter((row) => row.changePercent < 0),
-    active: fallbackRows,
-    momentum: fallbackRows.filter((row) => row.changePercent > 0),
-    relativeVolume: [...fallbackRows].sort((a, b) => Number(b.relativeVolume || 0) - Number(a.relativeVolume || 0)),
-    unusualVolume: fallbackRows.filter((row) => Number(row.relativeVolume || 0) >= 1.5),
-    newsMovers: [],
-    newHighs: [],
-    newLows: [],
-    premarket: [],
-    aiMovers: fallbackRows.filter((row) => row.catalyst),
-    smallCaps: fallbackRows,
-    verifiedMovers: [],
-    contextMovers: fallbackRows,
-  };
+  return normalized;
 }
 
 export function normalizeNewsRow(item, _index = 0, selectedSymbol = "MARKET") {

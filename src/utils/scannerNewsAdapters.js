@@ -138,8 +138,9 @@ export function normalizeScannerRow(row, meta = {}) {
   const volume = numericOrNull(row.volume ?? row.vol ?? row.dayVolume);
   if (volume === null || volume <= 0) return null;
 
-  let relativeVolume = numericOrNull(row.relativeVolume ?? row.rvol ?? row.volumeRatio ?? row.volumePercentOfAvg);
-  if (relativeVolume > 25) relativeVolume /= 100;
+  const ratio = numericOrNull(row.relativeVolume ?? row.rvol ?? row.volumeRatio);
+  const volumePercentOfAvg = numericOrNull(row.volumePercentOfAvg);
+  const relativeVolume = ratio ?? (volumePercentOfAvg === null ? null : volumePercentOfAvg / 100);
 
   const floatValue = numericOrNull(row.float ?? row.floatShares ?? row.sharesFloat ?? row.freeFloat);
   const timestamp = normalizeTimestamp(

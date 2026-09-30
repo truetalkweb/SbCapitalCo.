@@ -106,7 +106,7 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
     setScannerLoading(true);
 
     try {
-      const response = await fetchWithTimeout(`${brokerApiUrl}/api/scanner`);
+      const response = await fetchWithTimeout(`${brokerApiUrl}/api/scanner`, 30000);
 
       if (!response.ok) {
         throw new Error("Backend scanner unavailable");

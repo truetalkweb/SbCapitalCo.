@@ -55,6 +55,12 @@ test("missing gap, RVOL, and float remain unavailable", () => {
   assert.equal(row.verified, true);
 });
 
+test("large RVOL ratios retain their units and only percentage fields are divided by 100", () => {
+  assert.equal(normalizeScannerRow(marketRow({ relativeVolume: 62.08 })).relativeVolume, 62.08);
+  assert.equal(normalizeScannerRow(marketRow({ volumePercentOfAvg: 6208 })).relativeVolume, 62.08);
+  assert.equal(normalizeScannerRow(marketRow({ relativeVolume: 150 })).relativeVolume, 150);
+});
+
 test("verified provider rows rank ahead of higher-scoring synthetic context", () => {
   const verified = normalizeScannerRow(marketRow({ scannerScore: 48 }));
   const synthetic = normalizeScannerRow(

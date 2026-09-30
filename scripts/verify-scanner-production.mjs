@@ -14,9 +14,15 @@ const checks = [], errors = [];
 let userId, browser;
 const record = (value) => { checks.push(value); console.log(`PASS ${value}`); };
 try {
-  const response = await fetch(`${backend}/api/scanner`);
-  assert.equal(response.status, 200);
-  const scanner = await response.json();
+  let scanner;
+  const hasConfiguredQuotes = (payload) => ['AAPL', 'NVDA', 'TSLA', 'MSFT']
+    .some((symbol) => payload.movers?.some((row) => row.symbol === symbol));
+  await expect.poll(async () => {
+    const response = await fetch(`${backend}/api/scanner`);
+    assert.equal(response.status, 200);
+    scanner = await response.json();
+    return hasConfiguredQuotes(scanner);
+  }, { timeout: 45000, intervals: [3000] }).toBe(true);
   assert.equal(scanner.contractVersion, 'scanner-v2');
   assert.ok(scanner.verifiedMovers.length > 0, 'Live deployment must return verified provider rows');
   assert.equal(scanner.contextMovers.length, 0);
@@ -29,8 +35,10 @@ try {
     assert.ok(row.price > 0 && row.volume >= 1000);
     if (!row.providerTimestamp) assert.notEqual(row.freshness, 'live');
     if (row.previousClose > 0) assert.ok(Math.abs((row.price / row.previousClose - 1) * 100 - row.changePercent) < 0.02);
+    if (row.avgVolume > 0) assert.ok(Math.abs(row.volume / row.avgVolume - row.relativeVolume) < 0.02);
   }
   record('Live scanner returns unique verified rows, consistent counts and provider-derived daily movement');
+  record('Configured-symbol quote fallback supplies actual provider rows');
   const email = `scanner-ui-${crypto.randomUUID()}@example.com`;
   const password = `Qa!${crypto.randomBytes(24).toString('hex')}`;
   const created = await admin.auth.admin.createUser({ email, password, email_confirm: true }); assert.ifError(created.error);
@@ -56,6 +64,12 @@ try {
   await expect(workspace).toContainText(scanner.coverageLabel, { timeout: 30000 });
   await expect(workspace).toContainText('Verified provider');
   assert.ok(await workspace.getByRole('row').count() > 1, 'Scanner table has provider rows');
+  const highRvol = scanner.gainers.find((row) => row.relativeVolume > 25);
+  if (highRvol) {
+    await expect(workspace.getByRole('row', { name: `Select ${highRvol.symbol}`, exact: true }))
+      .toContainText(`${highRvol.relativeVolume.toFixed(1)}x`);
+    record('Production table preserves large RVOL ratios');
+  }
   await fs.mkdir('artifacts/deployment/scanner', { recursive: true });
   await page.screenshot({ path: 'artifacts/deployment/scanner/gainers.png', fullPage: true });
   record('Authenticated production scanner displays verified provider evidence and coverage disclosure');

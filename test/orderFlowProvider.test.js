@@ -6,7 +6,7 @@ import { DepthBook } from '../src/modules/orderFlow/data/DepthBook.js';
 import { CmeMarketDataProvider } from '../src/modules/orderFlow/data/CmeMarketDataProvider.js';
 import { DevelopmentFeedHarness } from '../src/modules/orderFlow/data/DevelopmentFeedHarness.js';
 import { NormalizedWebSocketTransport } from '../src/modules/orderFlow/data/NormalizedWebSocketTransport.js';
-import { buildOrderFlowAnalysis, selectReplayBooks } from '../src/modules/orderFlow/data/analyticsPipeline.js';
+import { buildOrderFlowAnalysis, selectReplayBook, selectReplayBooks } from '../src/modules/orderFlow/data/analyticsPipeline.js';
 import { DEFAULT_SETTINGS } from '../src/modules/orderFlow/analytics.js';
 import { SequenceBuffer } from '../src/modules/orderFlow/data/SequenceBuffer.js';
 
@@ -49,7 +49,8 @@ test('nanosecond replay excludes depth from later in the same millisecond', () =
   assert.equal(selectReplayBooks([{ timestamp: 99, validUntil: 200 }], { timestamp: 100 })[0].validUntil, undefined);
 });
 test('stale initial depth and one-sided books cannot claim live readiness', async () => {
-  const h = setup(); await h.boot();
+  const h = setup(); await h.provider.connect();
+  h.emit(h.event('session', { tradeSequence: '0', marketDataMode: 'realtime' }));
   h.emit(h.event('book-snapshot', { sequence: '2', timestampNs: `${BigInt(h.time.now() - 16000) * 1000000n}`, levels: [{ side: 'bid', price: 5800, size: 1 }, { side: 'ask', price: 5800.25, size: 1 }] }));
   assert.equal(h.provider.getSnapshot().status, 'synchronizing');
   h.emit(h.event('depth-update', { sequence: '3', changes: [{ side: 'bid', price: 5800, size: 0 }] }));
@@ -147,4 +148,80 @@ test('trade retention/dedup storage is bounded and resync send failures reconnec
   h.transport.requestSnapshot = () => { throw new Error('socket closing'); };
   h.emit(h.event('depth-update', { sequence: '4', changes: [{ side: 'bid', price: 5800, size: 2 }] })); h.time.advance(251);
   assert.doesNotThrow(() => h.provider.pump()); assert.equal(h.provider.getSnapshot().status, 'disconnected'); h.provider.disconnect();
+});
+
+test('a queued recovery update is drained before declaring a scheduling-induced sequence gap', async () => {
+  const h = setup(); await h.boot();
+  h.transport.emit(h.event('depth-update', { sequence: '3', changes: [{ side: 'bid', price: 5800, size: 30 }] }));
+  for (let i = 0; i < 3071; i++) h.transport.emit(h.event('heartbeat'));
+  h.transport.emit(h.event('depth-update', { sequence: '2', changes: [{ side: 'bid', price: 5800, size: 20 }] }));
+  h.provider.pump(); h.time.advance(150); h.provider.pump(); h.time.advance(150); h.provider.pump();
+  assert.equal(h.provider.getSnapshot().quality.gaps.length, 0);
+  h.provider.pump();
+  assert.equal(h.provider.getSnapshot().quality.bookSequence, '3');
+  assert.equal(h.provider.getSnapshot().quality.complete, true);
+  assert.equal(h.provider.getSnapshot().currentBook.levels.find(row => row.price === 5800).bidSize, 30);
+  h.provider.disconnect();
+});
+
+test('a real unresolved gap is detected after the ingress backlog drains', async () => {
+  const h = setup(); await h.boot();
+  h.transport.emit(h.event('depth-update', { sequence: '3', changes: [{ side: 'bid', price: 5800, size: 30 }] }));
+  for (let i = 0; i < 2048; i++) h.transport.emit(h.event('heartbeat'));
+  h.provider.pump(); h.time.advance(300); h.provider.pump(); h.provider.pump();
+  assert.equal(h.provider.getSnapshot().currentBook, null);
+  assert.equal(h.provider.getSnapshot().quality.complete, false);
+  assert.equal(h.transport.requests.at(-1).minimumSequence, '3'); h.provider.disconnect();
+});
+
+test('replay DOM is empty throughout an invalid book interval and returns only at recovery', () => {
+ const books = [{ timestamp: 100, validUntil: 200 }, { timestamp: 300 }];
+ assert.equal(selectReplayBook(books, { timestamp: 150 }).timestamp, 100);
+ assert.equal(selectReplayBook(books, { timestamp: 200 }), null);
+ assert.equal(selectReplayBook(books, { timestamp: 250 }), null);
+ assert.equal(selectReplayBooks(books, { timestamp: 250 }).length, 1);
+ assert.equal(selectReplayBook(books, { timestamp: 300 }).timestamp, 300);
+ assert.equal(selectReplayBook(books, null), null);
+});
+
+test('nanosecond book invalidation hides future boundaries and expires DOM at the exact cursor', async () => {
+ const h = setup(); await h.boot(); const base = BigInt(h.time.now()) * 1000000n;
+ h.emit(h.event('heartbeat', { timestampNs: String(base + 200n) })); h.provider.disconnect();
+ const books = h.provider.getSnapshot().books;
+ assert.equal(books.at(-1).validUntilNs, String(base + 200n));
+ const before = { timestamp: h.time.now(), timestampNs: String(base + 100n) };
+ assert.equal(selectReplayBooks(books, before)[0].validUntil, undefined);
+ assert.equal(selectReplayBooks(books, before)[0].validUntilNs, undefined);
+ assert.ok(selectReplayBook(books, before));
+ assert.equal(selectReplayBook(books, { timestamp: h.time.now(), timestampNs: String(base + 200n) }), null);
+});
+
+test('manual pause and resume cannot silently declare missing retained history complete', async () => {
+ const h = setup(); await h.boot();
+ h.emit(h.event('trade', { tradeId: 'before-pause', price: 5800, size: 2, side: 'buy' }));
+ h.provider.disconnect(); await h.provider.connect();
+ h.emit(h.event('session', { epoch: 'epoch-2', tradeSequence: '100', marketDataMode: 'realtime' }));
+ h.emit(h.event('book-snapshot', { epoch: 'epoch-2', sequence: '50', levels: [{ side: 'bid', price: 5800, size: 1 }, { side: 'ask', price: 5800.25, size: 1 }] }));
+ h.emit(h.event('trade', { epoch: 'epoch-2', sequence: '101', tradeId: 'after-pause', price: 5800, size: 3, side: 'sell' }));
+ const snapshot = h.provider.getSnapshot();
+ assert.equal(snapshot.status, 'connected'); assert.equal(snapshot.trades.length, 2);
+ assert.equal(snapshot.quality.complete, false);
+ assert.ok(snapshot.quality.gaps.some(gap => gap.reason === 'subscription-resumed-with-unverified-history'));
+ const analysis = buildOrderFlowAnalysis({ trades: snapshot.trades, tick: .25, timeframe: 60000, aggregation: 1,
+  settings: DEFAULT_SETTINGS, simulated: true, quality: snapshot.quality });
+ assert.deepEqual(analysis.signals, []); h.provider.disconnect();
+});
+
+test('regressing depth timestamps fail atomically instead of corrupting replay chronology', async () => {
+ for (const type of ['book-snapshot', 'depth-update']) {
+  const h = setup(); await h.boot();
+  h.emit(h.event(type, { sequence: '2', timestampNs: String(BigInt(h.time.now()) * 1000000n - 1n),
+   ...(type === 'book-snapshot' ? { levels: [{ side: 'bid', price: 5800, size: 99 }, { side: 'ask', price: 5800.25, size: 2 }] }
+    : { changes: [{ side: 'bid', price: 5800, size: 99 }] }) }));
+  const snapshot = h.provider.getSnapshot();
+  assert.equal(snapshot.currentBook, null); assert.equal(snapshot.status, 'degraded');
+  assert.equal(snapshot.books[0].levels.find(row => row.price === 5800).bidSize, 10);
+  assert.equal(snapshot.quality.complete, false); assert.equal(h.transport.requests.at(-1).minimumSequence, '2');
+  h.provider.disconnect();
+ }
 });

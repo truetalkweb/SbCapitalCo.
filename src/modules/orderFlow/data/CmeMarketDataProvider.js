@@ -22,7 +22,7 @@ export class CmeMarketDataProvider {
     this.listeners = new Set(); this.queue = []; this.trades = []; this.books = []; this.tradeIds = new Set(); this.gaps = []; this.lifecycle = [];
     this.currentBook = null; this.epoch = null; this.marketDataMode = null; this.status = 'unavailable'; this.message = 'CME connector and exact contract are not configured.';
     this.generation = 0; this.retry = 0; this.active = false; this.timer = null; this.retryTimer = null; this.opening = null;
-    this.lastReceivedAt = null; this.timestamp = null; this.bookFloor = null; this.dirty = false; this.rejected = 0; this.duplicates = 0;
+    this.lastReceivedAt = null; this.timestamp = null; this.timestampNs = null; this.bookFloor = null; this.dirty = false; this.rejected = 0; this.duplicates = 0;
     this.book = metadata ? new DepthBook(metadata) : null;
     this.depthSequence = new SequenceBuffer({ now: clock.now, apply: event => this.applyDepth(event), onGap: info => this.gap('book', info) });
     this.tradeSequence = new SequenceBuffer({ now: clock.now, apply: event => this.applyTrade(event), onGap: info => this.gap('trades', info) });
@@ -45,6 +45,10 @@ export class CmeMarketDataProvider {
     if (!this.transport || !this.metadata?.contractId || !this.metadata?.expiry) { this.status = 'unavailable'; this.publish(); return; }
     if (this.opening) return this.opening;
     if (this.active) return;
+    if (this.epoch && (this.trades.length || this.books.length)
+      && !this.gaps.some(gap => gap.epoch === this.epoch && gap.stream === 'connection')) {
+      this.gapRecord('connection', { reason: 'subscription-resumed-with-unverified-history' });
+    }
     this.active = true; const generation = ++this.generation;
     this.status = 'connecting'; this.message = 'Awaiting authenticated provider session and depth snapshot.'; this.epoch = null;
     this.tradeSequence.reset(); this.depthSequence.reset(); this.book.clear(); this.currentBook = null; this.queue = []; this.queuedBytes = 0; this.bookFloor = null;
@@ -67,7 +71,7 @@ export class CmeMarketDataProvider {
     this.invalidateBook(); this.status = this.transport ? 'disconnected' : 'unavailable'; this.message = this.transport ? 'Market data disconnected.' : 'CME connector and exact contract are not configured.'; this.publish();
   }
   invalidateBook() {
-    if (this.books.length && this.books.at(-1).validUntil === undefined) this.books[this.books.length - 1] = { ...this.books.at(-1), validUntil: this.timestamp };
+    if (this.books.length && this.books.at(-1).validUntil === undefined) this.books[this.books.length - 1] = { ...this.books.at(-1), validUntil: this.timestamp, validUntilNs: this.timestampNs };
     this.book?.clear(); this.currentBook = null; this.dirty = true;
   }
   lostConnection(message) {
@@ -97,7 +101,11 @@ export class CmeMarketDataProvider {
       try { this.ingest(normalizeEvent(raw, this.metadata, receivedAt)); }
       catch { this.rejected++; let highest; try { highest = sequence(raw?.sequence); } catch { /* Invalid sequence cannot set a recovery floor. */ } this.gap(raw?.type === 'trade' ? 'trades' : 'book', { reason: 'invalid-event', highest }); }
     }
-    try { this.tradeSequence.check(); this.depthSequence.check(); } catch { this.gap('book', { reason: 'invalid-buffered-event' }); }
+    // An overdue frame may still have the missing update in the bounded ingress
+    // queue. Drain that backlog before diagnosing an unresolved sequence gap.
+    if (!this.queue.length) {
+      try { this.tradeSequence.check(); this.depthSequence.check(); } catch { this.gap('book', { reason: 'invalid-buffered-event' }); }
+    }
     if (this.active && this.clock.now() - this.lastReceivedAt >= this.limits.staleMs) this.lostConnection('Provider heartbeat timed out.');
     if (this.active && this.currentBook && (this.books.at(-1)?.sequence !== this.currentBook.sequence || this.books.at(-1)?.epoch !== this.currentBook.epoch)) {
       this.books.push(this.currentBook);
@@ -111,10 +119,11 @@ export class CmeMarketDataProvider {
       if (this.epoch && event.epoch !== this.epoch) { this.rejected++; this.dirty = true; return; }
       if (this.epoch) return;
       this.epoch = event.epoch; this.marketDataMode = event.marketDataMode; this.tradeSequence.seed(event.tradeSequence);
-      this.lastReceivedAt = event.receivedAt; this.timestamp = event.timestamp; this.status = 'synchronizing'; this.message = 'Awaiting a valid two-sided depth snapshot.'; this.dirty = true; return;
+      this.lastReceivedAt = event.receivedAt; this.timestamp = event.timestamp; this.timestampNs = event.timestampNs; this.status = 'synchronizing'; this.message = 'Awaiting a valid two-sided depth snapshot.'; this.dirty = true; return;
     }
     if (!this.epoch || event.epoch !== this.epoch) { this.rejected++; this.dirty = true; return; }
     this.lastReceivedAt = event.receivedAt; this.timestamp = Math.max(this.timestamp || 0, event.timestamp); this.dirty = true;
+    if (!this.timestampNs || BigInt(event.timestampNs) > BigInt(this.timestampNs)) this.timestampNs = event.timestampNs;
     if (event.type === 'heartbeat') return;
     if (event.type === 'trade') { if (!this.tradeSequence.push(event)) this.duplicates++; return; }
     if (event.type === 'book-snapshot') {

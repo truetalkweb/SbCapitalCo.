@@ -4,7 +4,8 @@ import { useFeedContext } from './data/FeedContext.js';
 
 function LiquidityHeatmap(ctx, books, candles, xFor, yFor, rowHeight, opacity, timeframe) {
   if (!books.length) return;
-  const max = Math.max(1, ...books.flatMap(book => book.levels.map(level => level.bidSize + level.askSize)));
+  let max = 1;
+  for (const book of books) for (const level of book.levels) max = Math.max(max, level.bidSize + level.askSize);
   candles.forEach((candle, index) => {
     const nextTime = candles[index + 1]?.timestamp || candle.timestamp + timeframe;
     if (books.some(item => item.validUntil !== undefined && item.validUntil >= candle.timestamp && item.validUntil < nextTime)) return;

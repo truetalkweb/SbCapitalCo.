@@ -1,8 +1,15 @@
 import { aggregateFlow, detectSignals } from '../analytics.js';
+const atOrBefore = (timestamp, timestampNs, cursor) => timestampNs && cursor.timestampNs
+  ? BigInt(timestampNs) <= BigInt(cursor.timestampNs) : timestamp <= cursor.timestamp;
 export function selectReplayBooks(books, trade) {
   if (!trade) return [];
-  return books.filter(book => book.timestampNs && trade.timestampNs ? BigInt(book.timestampNs) <= BigInt(trade.timestampNs) : book.timestamp <= trade.timestamp)
-    .map(book => book.validUntil !== undefined && book.validUntil > trade.timestamp ? { ...book, validUntil: undefined } : book);
+  return books.filter(book => atOrBefore(book.timestamp, book.timestampNs, trade))
+    .map(book => book.validUntil != null && !atOrBefore(book.validUntil, book.validUntilNs, trade)
+      ? { ...book, validUntil: undefined, validUntilNs: undefined } : book);
+}
+export function selectReplayBook(books, trade) {
+  const book = selectReplayBooks(books, trade).at(-1);
+  return !book || (book.validUntil != null && atOrBefore(book.validUntil, book.validUntilNs, trade)) ? null : book;
 }
 export function buildOrderFlowAnalysis({ trades, tick, timeframe, aggregation, settings, simulated, quality }) {
   const flow = aggregateFlow(trades, tick, timeframe, aggregation, settings);

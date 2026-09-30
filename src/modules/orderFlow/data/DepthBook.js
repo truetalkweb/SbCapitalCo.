@@ -1,8 +1,10 @@
 import { tickIndex } from './instruments.js';
 export class DepthBook {
   constructor(metadata, { maxLevels = 4000 } = {}) { this.metadata = metadata; this.maxLevels = maxLevels; this.clear(); }
-  clear() { this.bids = new Map(); this.asks = new Map(); this.ready = false; this.sequence = null; }
+  clear() { this.bids = new Map(); this.asks = new Map(); this.ready = false; this.sequence = null; this.timestampNs = null; this.epoch = null; }
   apply(event) {
+    if (this.ready && this.epoch === event.epoch && this.timestampNs && event.timestampNs
+      && BigInt(event.timestampNs) < BigInt(this.timestampNs)) throw new Error('Depth timestamp regressed within its sequence epoch.');
     const replacing = event.type === 'book-snapshot', bids = replacing ? new Map() : new Map(this.bids), asks = replacing ? new Map() : new Map(this.asks);
     const changes = new Map();
     for (const row of replacing ? event.levels : event.changes) {
@@ -15,7 +17,7 @@ export class DepthBook {
     const bestBidKey = bids.size ? Math.max(...bids.keys()) : null, bestAskKey = asks.size ? Math.min(...asks.keys()) : null;
     if (bestBidKey !== null && bestAskKey !== null && bestBidKey >= bestAskKey) throw new Error('Crossed or locked depth batch rejected atomically.');
     if (replacing && (!bids.size || !asks.size)) throw new Error('Two-sided initial depth snapshot required.');
-    this.bids = bids; this.asks = asks; this.ready = true; this.sequence = event.sequence;
+    this.bids = bids; this.asks = asks; this.ready = true; this.sequence = event.sequence; this.timestampNs = event.timestampNs; this.epoch = event.epoch;
     const levels = [...new Set([...bids.keys(), ...asks.keys()])].sort((a, b) => b - a).map(key => {
       const bid = bids.get(key), ask = asks.get(key);
       return { price: Number((key * this.metadata.tickSize).toFixed(this.metadata.pricePrecision)), bidSize: bid?.size || 0, askSize: ask?.size || 0,

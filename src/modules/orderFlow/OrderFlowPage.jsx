@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, inSession, INSTRUMENTS } from './analytics.js';
 import { MockMarketDataProvider } from './MockMarketDataProvider.js';
 import { CmeMarketDataProvider } from './data/CmeMarketDataProvider.js';
 import { CME_ROOTS } from './data/instruments.js';
-import { buildOrderFlowAnalysis, selectReplayBooks } from './data/analyticsPipeline.js';
+import { buildOrderFlowAnalysis, selectReplayBook, selectReplayBooks } from './data/analyticsPipeline.js';
 import { FeedContext } from './data/FeedContext.js';
 import FootprintChart from './FootprintChart.jsx';
 import { DOMLadder, OrderFlowAnalytics, OrderFlowSignals, TimeAndSales } from './OrderFlowPanels.jsx';
@@ -60,7 +60,8 @@ export default function OrderFlowPage({ createProvider = createDefaultProvider }
   const lastTime = mode === 'replay' ? trades.at(-1)?.timestamp ?? 0 : snapshot.timestamp ?? 0;
   const replayTrade = trades.at(-1);
   const books = useMemo(() => mode === 'replay' ? selectReplayBooks(snapshot.books, replayTrade) : snapshot.books.filter(book => book.timestamp <= lastTime), [snapshot.books, lastTime, mode, replayTrade]);
-  const book = mode !== 'replay' && !simulated ? snapshot.currentBook : books.at(-1);
+  const book = mode === 'replay' ? selectReplayBook(books, replayTrade)
+    : Object.hasOwn(snapshot, 'currentBook') ? snapshot.currentBook : books.at(-1);
   const analysis = useMemo(() => buildOrderFlowAnalysis({ trades, tick: instrument.tick, timeframe, aggregation, settings, simulated, quality: snapshot.quality }), [trades, instrument.tick, timeframe, aggregation, settings, simulated, snapshot.quality]);
   const { flow, signals } = analysis;
   useEffect(() => {

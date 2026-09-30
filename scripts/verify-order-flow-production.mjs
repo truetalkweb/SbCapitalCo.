@@ -54,6 +54,17 @@ try {
   await fs.mkdir('artifacts/deployment/order-flow', { recursive: true });
   await page.screenshot({ path: 'artifacts/deployment/order-flow/workspace.png', fullPage: true });
   record('Instrument switching and workspace reset work in production');
+  await page.getByLabel('Order flow provider', { exact: true }).selectOption('cme');
+  await expect(page.getByText('CME UNAVAILABLE', { exact: true })).toBeVisible();
+  await expect(page.getByText('FEED UNAVAILABLE', { exact: true })).toBeVisible();
+  await expect(page.getByText('No provider timestamp', { exact: true })).toBeVisible();
+  await expect(chart).toContainText('0 bars · 0 trades');
+  await expect(page.getByRole('region', { name: 'Provider DOM ladder' }).locator('tbody tr')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Provider Time and Sales' }).locator('tbody tr')).toHaveCount(0);
+  await page.screenshot({ path: 'artifacts/deployment/order-flow/cme-unavailable.png', fullPage: true });
+  record('Unconfigured production CME adapter stays unavailable with no fake ticks, book or timestamp');
+  await page.getByLabel('Order flow provider', { exact: true }).selectOption('mock');
+  await expect(page.getByRole('region', { name: 'Simulated DOM ladder' }).locator('tbody tr').first()).toBeVisible();
   await page.getByRole('button', { name: 'Dashboard', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Order book', exact: true })).toBeVisible();
   assert.deepEqual(executions, []); assert.deepEqual(errors, []);

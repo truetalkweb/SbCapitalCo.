@@ -13,15 +13,15 @@ test('custom UTC sessions handle boundaries, overnight windows and full days', (
   assert.equal(inSession(at(12), '00:00', '00:00'), true);
 });
 
-test('footprints conserve classified volume, signed delta and VWAP across tick/time aggregation', () => {
+test('footprints conserve all volume and VWAP while delta counts only classified trades', () => {
   const trades = [trade(1, 100, 10, 'buy'), trade(2, 100.25, 20, 'sell'), trade(3, 100.5, 5, 'buy', 61000), trade(4, 100, 100, 'unknown')];
   for (const ticks of [1, 2, 4]) {
     const flow = aggregateFlow(trades, 0.25, 60000, ticks);
-    assert.equal(flow.metrics.volume, 35); assert.equal(flow.metrics.delta, -5);
-    assert.equal(flow.candles.reduce((n, c) => n + c.volume, 0), 35);
-    assert.equal(flow.profile.reduce((n, r) => n + r.volume, 0), 35);
+    assert.equal(flow.metrics.volume, 135); assert.equal(flow.metrics.delta, -5); assert.equal(flow.metrics.unknown, 100);
+    assert.equal(flow.candles.reduce((n, c) => n + c.volume, 0), 135);
+    assert.equal(flow.profile.reduce((n, r) => n + r.volume, 0), 135);
     assert.equal(flow.cumulative.at(-1).delta, -5);
-    assert.equal(flow.metrics.vwap, (100 * 10 + 100.25 * 20 + 100.5 * 5) / 35);
+    assert.equal(flow.metrics.vwap, (100 * 110 + 100.25 * 20 + 100.5 * 5) / 135);
     assert.equal(flow.metrics.openInterest, null);
   }
 });
@@ -36,10 +36,11 @@ test('POC is the highest volume level and value area expands from it to at least
   const flow = aggregateFlow([trade(1, 100, 10, 'buy'), trade(2, 101, 60, 'sell'), trade(3, 102, 20, 'buy'), trade(4, 103, 10, 'buy')], 1, 60000, 1);
   assert.equal(flow.metrics.poc, 101); assert.equal(flow.metrics.valueLow, 101); assert.equal(flow.metrics.valueHigh, 102);
 });
-test('empty/unknown-side trades do not invent volume, VWAP or signals', () => {
+test('unknown-side trades retain actual volume and VWAP but cannot invent signed delta', () => {
   const flow = aggregateFlow([trade(1, 100, 10, 'unknown')], 0.25, 60000, 1);
-  assert.equal(flow.metrics.vwap, null); assert.equal(flow.metrics.poc, null); assert.equal(flow.metrics.volume, 0);
-  assert.deepEqual(detectSignals(flow, [], 0.25, DEFAULT_SETTINGS), []);
+  assert.equal(flow.metrics.vwap, 100); assert.equal(flow.metrics.poc, 100); assert.equal(flow.metrics.volume, 10);
+  assert.equal(flow.metrics.delta, 0); assert.equal(flow.metrics.sideCoverage, 0);
+  const empty = aggregateFlow([], 0.25, 60000, 1); assert.equal(empty.metrics.vwap, null); assert.deepEqual(detectSignals(empty, [], 0.25, DEFAULT_SETTINGS), []);
 });
 test('signal IDs remain unique and thresholds control large-trade candidates', () => {
   const trades = [trade(1, 100, 100, 'buy'), trade(2, 101, 100, 'sell')], flow = aggregateFlow(trades, 0.25, 60000, 1);

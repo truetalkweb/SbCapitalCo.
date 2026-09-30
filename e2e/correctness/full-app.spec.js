@@ -34,6 +34,24 @@ for (const [width, height] of [[1920, 1080], [2560, 1440], [3440, 1440], [3840, 
   });
 }
 
+test('order flow unavailable CME adapter has no synthetic fallback or connected status', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'order-flow' });
+  await expect(page.getByRole('toolbar', { name: 'Order flow toolbar' })).toBeVisible();
+  await page.getByLabel('Order flow provider', { exact: true }).selectOption('cme');
+  await expect(page.getByText('CME UNAVAILABLE', { exact: true })).toBeVisible();
+  await expect(page.getByText('FEED UNAVAILABLE', { exact: true })).toBeVisible();
+  await expect(page.getByText('No provider timestamp', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Footprint workspace' })).toContainText('0 bars · 0 trades');
+  await expect(page.getByRole('region', { name: 'Provider DOM ladder' }).locator('tbody tr')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Provider Time and Sales' }).locator('tbody tr')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('cme-unavailable.png') });
+  await page.getByLabel('Order flow provider', { exact: true }).selectOption('mock');
+  await expect(page.getByText('SIMULATED DATA', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Simulated DOM ladder' }).locator('tbody tr').first()).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test('order flow controls replay, filtering, settings and navigation without placing orders', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard' });

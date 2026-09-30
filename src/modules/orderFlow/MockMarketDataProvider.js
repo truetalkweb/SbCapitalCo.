@@ -1,4 +1,5 @@
 import { INSTRUMENTS } from './analytics.js';
+import { CME_ROOTS } from './data/instruments.js';
 
 /** @implements {import('./types').MarketDataProvider} */
 export class MockMarketDataProvider {
@@ -36,7 +37,7 @@ export class MockMarketDataProvider {
   }
   publish(status = 'connected') {
     this.snapshot = { symbol: this.symbol, trades: this.trades.slice(), books: this.books.slice(), timestamp: this.time,
-      simulated: true, status, openInterest: null };
+      simulated: true, source: 'Simulator', metadata: CME_ROOTS[this.symbol] || null, status, openInterest: null };
     for (const listener of this.listeners) listener();
   }
   async connect() { if (this.timer) return; this.publish(); this.timer = setInterval(() => { for (let i = 0; i < 4; i++) this.trade(); this.book(); this.publish(); }, 250); }

@@ -1,13 +1,15 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { formatFlow } from './analytics.js';
+import { useFeedContext } from './data/FeedContext.js';
 
-function LiquidityHeatmap(ctx, books, candles, xFor, yFor, rowHeight, opacity) {
+function LiquidityHeatmap(ctx, books, candles, xFor, yFor, rowHeight, opacity, timeframe) {
   if (!books.length) return;
   const max = Math.max(1, ...books.flatMap(book => book.levels.map(level => level.bidSize + level.askSize)));
   candles.forEach((candle, index) => {
-    const nextTime = candles[index + 1]?.timestamp || candle.timestamp + 60000;
+    const nextTime = candles[index + 1]?.timestamp || candle.timestamp + timeframe;
+    if (books.some(item => item.validUntil !== undefined && item.validUntil >= candle.timestamp && item.validUntil < nextTime)) return;
     const book = books.findLast(item => item.timestamp < nextTime);
-    if (!book) return;
+    if (!book || (book.validUntil !== undefined && candle.timestamp >= book.validUntil)) return;
     for (const level of book.levels) {
       const size = level.bidSize + level.askSize;
       ctx.fillStyle = `rgba(${level.bidSize ? '20,155,128' : '204,133,46'},${Math.min(0.75, size / max * opacity)})`;
@@ -25,9 +27,9 @@ function FootprintCandle(ctx, candle, x, yFor, rowHeight, options) {
   if (mode === 'candles') {
     ctx.fillRect(x - 12, Math.min(yFor(candle.open), yFor(candle.close)), 24, Math.max(2, Math.abs(yFor(candle.open) - yFor(candle.close))));
   } else {
-    const maxVolume = Math.max(1, ...candle.levels.map(level => level.bidVolume + level.askVolume));
+    const maxVolume = Math.max(1, ...candle.levels.map(level => level.bidVolume + level.askVolume + (level.unknownVolume || 0)));
     candle.levels.forEach(level => {
-      const y = yFor(level.price), volume = level.bidVolume + level.askVolume;
+      const y = yFor(level.price), volume = level.bidVolume + level.askVolume + (level.unknownVolume || 0);
       if (mode === 'profile') { ctx.fillStyle = `${color}70`; ctx.fillRect(x - width / 2 + 15, y - rowHeight / 2 + 1, volume / maxVolume * (width - 26), Math.max(1, rowHeight - 2)); }
       if (level.buyImbalance || level.sellImbalance) {
         ctx.fillStyle = `${level.buyImbalance ? settings.buyColor : settings.sellColor}20`;
@@ -54,6 +56,7 @@ function FootprintCandle(ctx, candle, x, yFor, rowHeight, options) {
 }
 
 function FootprintChart({ flow, books, signals, settings, instrument, heatmap, mode, resetToken }) {
+  const { simulated } = useFeedContext();
   const canvas = useRef(null), wrapper = useRef(null), geometry = useRef(null), pointer = useRef(null), dragging = useRef(null);
   const [size, setSize] = useState({ width: 900, height: 520 }), [view, setView] = useState({ count: 7, offset: 0, shift: 0 }), [hover, setHover] = useState(null);
   useEffect(() => {
@@ -88,7 +91,7 @@ function FootprintChart({ flow, books, signals, settings, instrument, heatmap, m
         if (settings.grid) { ctx.strokeStyle = '#18242c'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
         ctx.textAlign = 'right'; ctx.fillStyle = '#8794a3'; ctx.fillText(price.toFixed(instrument.decimals), width - 8, y + 4);
       }
-      if (heatmap) LiquidityHeatmap(ctx, books, candles, xFor, yFor, rowHeight, settings.opacity);
+      if (heatmap) LiquidityHeatmap(ctx, books, candles, xFor, yFor, rowHeight, settings.opacity, flow.timeframe);
       ctx.font = `${settings.fontSize}px ui-monospace, monospace`;
       candles.forEach((c, i) => FootprintCandle(ctx, c, xFor(i), yFor, rowHeight, { mode, settings, width: Math.min(145, candleWidth - 6), decimals: instrument.decimals, height }));
       candles.forEach((c, i) => {
@@ -118,7 +121,7 @@ function FootprintChart({ flow, books, signals, settings, instrument, heatmap, m
   }
   return <div className="of-chart-wrap" ref={wrapper} onPointerMove={move} onPointerLeave={() => { pointer.current = null; setHover(null); }}
     onPointerDown={event => { dragging.current = { x: event.clientX, y: event.clientY }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={() => { dragging.current = null; }} onPointerCancel={() => { dragging.current = null; }}>
-    <canvas ref={canvas} aria-label="Simulated footprint chart" role="img" />
+    <canvas ref={canvas} aria-label={simulated ? 'Simulated footprint chart' : 'Provider footprint chart'} role="img" />
     <div className="of-chart-tools"><button aria-label="Zoom in footprint" onPointerDown={event => event.stopPropagation()} onClick={() => setView(v => ({ ...v, count: Math.max(3, v.count - 1) }))}>+</button><button aria-label="Zoom out footprint" onPointerDown={event => event.stopPropagation()} onClick={() => setView(v => ({ ...v, count: Math.min(40, v.count + 1) }))}>−</button><button onPointerDown={event => event.stopPropagation()} onClick={() => setView({ count: 7, offset: 0, shift: 0 })}>Fit</button></div>
     {hover && <div className="of-tooltip" style={{ left: Math.max(0, Math.min(hover.x + 15, size.width - 240)), top: Math.max(0, Math.min(hover.y + 15, size.height - 170)) }}><b>{new Date(hover.candle.timestamp).toISOString().slice(11, 19)} UTC · {hover.price.toFixed(instrument.decimals)}</b><span>O {hover.candle.open.toFixed(instrument.decimals)} · C {hover.candle.close.toFixed(instrument.decimals)}</span><span>Volume {formatFlow(hover.candle.volume)} · Delta {formatFlow(hover.candle.delta)}</span><span>POC {hover.candle.poc.toFixed(instrument.decimals)}</span>{hover.level && <span>Bid {hover.level.bidVolume} × Ask {hover.level.askVolume} · Δ {hover.level.delta}</span>}{hover.candle.unfinishedHigh || hover.candle.unfinishedLow ? <span>○ Unfinished auction candidate</span> : null}</div>}
     <div className="of-chart-hint">Wheel zoom · drag pan · ○ unfinished auction · ▲/▼ stacked imbalance · A absorption / E exhaustion</div>

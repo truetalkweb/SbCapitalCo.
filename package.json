@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "test": "node --test",
+    "orderflow:feed-harness": "node scripts/order-flow-feed-harness.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "measure:performance": "node scripts/measure-performance.mjs",

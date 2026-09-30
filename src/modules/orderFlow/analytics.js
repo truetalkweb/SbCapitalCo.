@@ -25,19 +25,20 @@ export function inSession(timestamp, start, end) {
 
 export function aggregateFlow(trades, tick, timeframe, aggregation, settings = DEFAULT_SETTINGS) {
   const step = tick * aggregation, buckets = new Map(), profile = new Map();
-  let buy = 0, sell = 0, weighted = 0;
+  let buy = 0, sell = 0, unknown = 0, weighted = 0;
   for (const trade of trades) {
-    if (!(trade.size > 0) || !Number.isFinite(trade.price) || !['buy', 'sell'].includes(trade.side)) continue;
+    if (!(trade.size > 0) || !Number.isFinite(trade.price) || !['buy', 'sell', 'unknown'].includes(trade.side)) continue;
     const timestamp = Math.floor(trade.timestamp / timeframe) * timeframe;
     let candle = buckets.get(timestamp);
-    if (!candle) { candle = { timestamp, open: trade.price, close: trade.price, high: trade.price, low: trade.price, levels: new Map(), volume: 0, delta: 0 }; buckets.set(timestamp, candle); }
+    if (!candle) { candle = { timestamp, open: trade.price, close: trade.price, high: trade.price, low: trade.price, levels: new Map(), volume: 0, delta: 0, unknownVolume: 0 }; buckets.set(timestamp, candle); }
     candle.close = trade.price; candle.high = Math.max(candle.high, trade.price); candle.low = Math.min(candle.low, trade.price);
-    candle.volume += trade.size; candle.delta += trade.side === 'buy' ? trade.size : -trade.size;
+    candle.volume += trade.size; candle.delta += trade.side === 'buy' ? trade.size : trade.side === 'sell' ? -trade.size : 0;
+    if (trade.side === 'unknown') candle.unknownVolume += trade.size;
     const key = priceKey(trade.price, step);
-    if (!candle.levels.has(key)) candle.levels.set(key, { price: Number((key * step).toFixed(8)), bidVolume: 0, askVolume: 0 });
-    candle.levels.get(key)[trade.side === 'buy' ? 'askVolume' : 'bidVolume'] += trade.size;
+    if (!candle.levels.has(key)) candle.levels.set(key, { price: Number((key * step).toFixed(8)), bidVolume: 0, askVolume: 0, unknownVolume: 0 });
+    candle.levels.get(key)[trade.side === 'buy' ? 'askVolume' : trade.side === 'sell' ? 'bidVolume' : 'unknownVolume'] += trade.size;
     profile.set(key, (profile.get(key) || 0) + trade.size);
-    if (trade.side === 'buy') buy += trade.size; else sell += trade.size;
+    if (trade.side === 'buy') buy += trade.size; else if (trade.side === 'sell') sell += trade.size; else unknown += trade.size;
     weighted += trade.price * trade.size;
   }
   const candles = [...buckets.values()].sort((a, b) => a.timestamp - b.timestamp).map(candle => {
@@ -45,18 +46,18 @@ export function aggregateFlow(trades, tick, timeframe, aggregation, settings = D
     const levels = [...map.entries()].sort((a, b) => a[0] - b[0]).map(([key, level]) => {
       const lowerBid = map.get(key - 1)?.bidVolume || 0, upperAsk = map.get(key + 1)?.askVolume || 0;
       return { ...level, delta: level.askVolume - level.bidVolume,
-        buyImbalance: level.askVolume >= settings.minVolume && lowerBid > 0 && level.askVolume / lowerBid >= settings.ratio,
-        sellImbalance: level.bidVolume >= settings.minVolume && upperAsk > 0 && level.bidVolume / upperAsk >= settings.ratio };
+        buyImbalance: !candle.unknownVolume && level.askVolume >= settings.minVolume && lowerBid > 0 && level.askVolume / lowerBid >= settings.ratio,
+        sellImbalance: !candle.unknownVolume && level.bidVolume >= settings.minVolume && upperAsk > 0 && level.bidVolume / upperAsk >= settings.ratio };
     });
     const stack = field => { let count = 0, previous = null; return levels.some(level => {
       count = level[field] ? (previous !== null && Math.abs(level.price - previous - step) < step / 100 ? count + 1 : 1) : 0;
       previous = level.price; return count >= settings.stacked;
     }); };
-    const poc = levels.reduce((best, row) => row.bidVolume + row.askVolume > best.bidVolume + best.askVolume ? row : best, levels[0]);
+    const poc = levels.reduce((best, row) => row.bidVolume + row.askVolume + row.unknownVolume > best.bidVolume + best.askVolume + best.unknownVolume ? row : best, levels[0]);
     return { ...candle, levels, poc: poc?.price, stackedBuy: stack('buyImbalance'), stackedSell: stack('sellImbalance'),
       unfinishedHigh: Boolean(levels.at(-1)?.bidVolume && levels.at(-1)?.askVolume), unfinishedLow: Boolean(levels[0]?.bidVolume && levels[0]?.askVolume) };
   });
-  const volume = buy + sell, ordered = [...profile.entries()].sort((a, b) => a[0] - b[0]);
+  const volume = buy + sell + unknown, ordered = [...profile.entries()].sort((a, b) => a[0] - b[0]);
   const pocIndex = ordered.reduce((best, row, index) => row[1] > (ordered[best]?.[1] || 0) ? index : best, 0);
   let lo = pocIndex, hi = pocIndex, covered = ordered[pocIndex]?.[1] || 0;
   while (covered < volume * 0.7 && (lo > 0 || hi < ordered.length - 1)) {
@@ -64,9 +65,9 @@ export function aggregateFlow(trades, tick, timeframe, aggregation, settings = D
     else covered += ordered[++hi][1];
   }
   let cumulative = 0;
-  return { step, candles, profile: ordered.map(([key, amount]) => ({ price: Number((key * step).toFixed(8)), volume: amount })),
+  return { step, timeframe, candles, profile: ordered.map(([key, amount]) => ({ price: Number((key * step).toFixed(8)), volume: amount })),
     cumulative: candles.map(candle => ({ timestamp: candle.timestamp, delta: cumulative += candle.delta })),
-    metrics: { buy, sell, volume, delta: buy - sell, deltaPercent: volume ? (buy - sell) / volume * 100 : 0,
+    metrics: { buy, sell, unknown, volume, sideCoverage: volume ? (buy + sell) / volume : 1, delta: buy - sell, deltaPercent: volume ? (buy - sell) / volume * 100 : 0,
       vwap: volume ? weighted / volume : null, poc: ordered.length ? ordered[pocIndex][0] * step : null,
       valueLow: ordered.length ? ordered[lo][0] * step : null, valueHigh: ordered.length ? ordered[hi][0] * step : null, openInterest: null } };
 }
@@ -85,7 +86,7 @@ export function detectSignals(flow, trades, tick, settings, simulated = true) {
   }
   for (let i = 0; i < trades.length; i++) {
     const t = trades[i];
-    if (t.size >= settings.largeTrade && ['buy', 'sell'].includes(t.side)) add(t, t.side === 'buy' ? 'Large Market Buy' : 'Large Market Sell', 'High', `${t.size} simulated aggressive units at one price.`);
+    if (t.size >= settings.largeTrade && ['buy', 'sell'].includes(t.side)) add(t, t.side === 'buy' ? 'Large Market Buy' : 'Large Market Sell', 'High', `${t.size} ${simulated ? 'simulated ' : ''}aggressive units at one price.`);
     if (i && Math.abs(t.price - trades[i - 1].price) >= tick * 3 && t.size >= settings.largeTrade) add(t, 'Liquidity Sweep', 'Medium', 'Large trade crossed multiple price increments; possible sweep, not order-level confirmation.');
   }
   if (flow.profile.length) {

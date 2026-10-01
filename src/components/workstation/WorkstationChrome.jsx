@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Bell, BookOpen, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, House, ListFilter, LogOut, Search, Settings, ShieldCheck, SlidersHorizontal, Wrench } from "lucide-react";
+import { Activity, Bell, BookOpen, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, House, ListFilter, LogOut, Menu, Search, Settings, ShieldCheck, SlidersHorizontal, Wrench } from "lucide-react";
 import "./workstation.css";
 import { useDismissPopover } from "./useDismissPopover";
 
@@ -7,17 +7,23 @@ export function Brand() {
   return <div className="ws-brand"><span className="ws-logo-window"><img src="/sb-terminal-logo.png" alt="SB logo" /></span><span><strong>TERMINAL</strong><small>TRADE&nbsp; ANALYZE&nbsp; EXECUTE&nbsp; EVOLVE</small></span></div>;
 }
 
-export function WorkstationHeader({ selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions = {}, setMarketRegion }) {
+export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions = {}, setMarketRegion }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [profile, setProfile] = useState(false);
   const profileControl = useDismissPopover(profile, setProfile);
+  const [mobileNavigation, setMobileNavigation] = useState(false);
+  const mobileControl = useDismissPopover(mobileNavigation, setMobileNavigation);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
   const matches = useMemo(() => [...new Map(quotes.map(row => [row.symbol, row])).values()].filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7), [quotes, query]);
   const pick = symbol => { if (/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbol)) { onSymbolCommit?.(symbol, null, "global-search"); setQuery(""); setFocused(false); } };
   return <header className="ws-header terminal-top-bar" data-selected-symbol={selectedSymbolContext?.symbol || selectedSymbol} data-selection-source={selectedSymbolContext?.selectionSource || "terminal"}>
     <Brand />
+    <div className="ws-mobile-navigation" ref={mobileControl}>
+      <button className="ws-mobile-menu" aria-label="Open workspace navigation" aria-expanded={mobileNavigation} aria-controls="mobile-workspaces" onClick={() => setMobileNavigation(value => !value)}><Menu size={22} /></button>
+      {mobileNavigation && <nav id="mobile-workspaces" aria-label="Terminal workspaces">{navigation.map(([id, label, Icon]) => <button key={id} aria-current={id === activeWorkspace || (id === 'tools' && activeWorkspace === 'replay') ? 'page' : undefined} onClick={() => { setActiveWorkspace?.(id === 'tools' ? 'replay' : id); setMobileNavigation(false); }}><Icon size={19} /><span>{label}</span></button>)}</nav>}
+    </div>
     <div className="ws-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
       <Search size={18} /><input aria-label="Global ticker search" placeholder="Search symbol, asset, or news..." value={query} onFocus={() => setFocused(true)} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") pick(matches[0]?.symbol || query.trim().toUpperCase()); if (event.key === "Escape") setFocused(false); }} />
       {focused && query && <div className="ws-search-results">{matches.map(row => <button key={row.symbol} onClick={() => pick(row.symbol)}><b>{row.symbol}</b><span>{row.name || "Select instrument"}</span></button>)}<button onClick={() => pick(query.trim().toUpperCase())}>Open {query.toUpperCase()}</button></div>}

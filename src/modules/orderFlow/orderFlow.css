@@ -12,3 +12,19 @@
 @media(max-width:1350px){.of-toolbar{gap:6px}.of-toolbar select{max-width:134px}.of-main{min-height:450px}.of-bottom{grid-template-columns:1fr;max-height:none}.of-signals{max-height:180px}.of-metrics{grid-template-columns:repeat(6,minmax(0,1fr))}.of-chart-modes button{padding:2px 4px}.of-dom th:nth-child(2),.of-dom th:nth-child(4){width:29px}.of-dom th:nth-child(6),.of-dom th:nth-child(7){width:40px}.of-dom th:nth-child(3){width:68px}.of-panel table{font-size:9px}}
 @media(max-width:850px){.of-main{min-width:650px;min-height:520px}.of-toolbar{min-width:0}.of-bottom{min-width:650px}.of-workspace{overflow:auto}.of-subtoolbar small{display:none}.of-subtoolbar label{margin-left:0}.of-analytics summary small{display:block;margin:5px 0 0}}
 @media(prefers-reduced-motion:reduce){.of-workspace *{transition:none!important}}
+@media(max-width:850px) {
+  .of-main { min-width:0;min-height:0;height:auto;max-height:none;flex:none; }
+  .of-bottom { min-width:0; }
+  .of-mobile-panels { display:grid;grid-template-columns:minmax(0,1fr);gap:8px; }
+  .of-mobile-chart { height:480px;min-width:0; }
+  .of-mobile-panels > .of-panel { height:320px; }
+  .of-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .of-panel > header { flex-wrap:wrap; }
+  .of-panel table { min-width:360px; }
+  .of-table-scroll { overflow:auto; }
+  .of-workspace :is(button,select,input),.of-settings :is(button,select,input) { min-height:40px; }
+  .of-workspace :is(select,input:not([type=checkbox])) { font-size:16px; }
+  .of-subtoolbar { overflow-wrap:anywhere; }
+  .of-replay { flex-wrap:wrap; }
+  .of-chart-wrap { touch-action:pan-y; }
+}

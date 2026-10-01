@@ -51,3 +51,33 @@
 .theme-light .ws-sidebar nav button[aria-current=page] { color: var(--ws-text); background: var(--ws-alt); }
 .theme-light .ws-sidebar nav button[aria-current=page] > svg { color: var(--ws-green); }
 .theme-light .ws-clock,.theme-light .ws-search > svg { color: var(--ws-muted); }
+.ws-mobile-navigation { display:none; }
+@media(max-width:800px) { .ws-header > .ws-icon { display:inline-flex;width:36px;height:44px; } }
+@media(max-width:700px) {
+  .ws-header { gap:6px; }
+  .ws-mobile-navigation { display:block; }
+  .ws-mobile-menu { display:grid;place-items:center;width:40px;height:44px;padding:0; }
+  .ws-mobile-navigation nav { position:absolute;left:10px;right:10px;top:64px;max-height:calc(100dvh - 80px);overflow:auto;background:var(--ws-panel);border:1px solid var(--ws-border);border-radius:6px;box-shadow:0 12px 30px #0008;padding:6px; }
+  .ws-mobile-navigation nav button { display:flex;align-items:center;gap:14px;width:100%;min-height:44px;text-align:left;padding:8px 12px; }
+  .ws-mobile-navigation nav button:hover { background:var(--ws-alt); }
+  .ws-logo-window { width:46px; }
+  .ws-logo-window img { width:86px;height:86px;left:-17px;top:-28px; }
+  .ws-search { min-width:65px;padding:0 8px;gap:6px; }
+  .ws-search input { font-size:16px; }
+  .ws-search-results { position:fixed;top:64px;left:10px;right:10px; }
+  .ws-profile > button > svg { display:none; }
+  .ws-header > .ws-icon { display:inline-flex;width:36px;height:44px; }
+  .ws-dashboard { padding-right:0; }
+  .ws-account-strip { grid-template-columns:repeat(2,minmax(0,1fr));min-height:0;overflow:visible; }
+  .ws-metric { min-width:0;min-height:86px; }
+  .ws-metric:nth-child(4),.ws-metric:nth-child(5),.ws-market-status { display:flex; }
+  .ws-metric strong { font-size:18px; }
+  .ws-execution-stack { grid-template-columns:minmax(0,1fr);grid-template-rows:220px minmax(400px,auto); }
+  .ws-paper-ticket { min-height:400px; }
+  .ws-dashboard .ws-tabs { overflow-x:auto;flex-shrink:0; }
+  .ws-dashboard .ws-tabs button { flex-shrink:0;min-height:44px; }
+  .ws-dashboard .ws-table-scroll { overflow:auto; }
+  .ws-dashboard .ws-portfolio table { min-width:650px; }
+  .ws-dashboard :is(input,select,textarea) { font-size:16px; }
+  .ws-dashboard .ws-paper-form button { min-height:40px; }
+}

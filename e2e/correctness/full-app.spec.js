@@ -15,6 +15,62 @@ const initialWorkspace = {
   replayMode: false, replayNotes: "Original session note", advancedMode: true,
 };
 
+for (const width of [320,390,768]) for (const theme of ['dark','light']) test(`mobile terminal all workspaces at ${width}px ${theme}`, async ({ page }, testInfo) => {
+ await page.setViewportSize({ width, height: 844 });
+ const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', layoutMode: '1', themeMode: theme });
+ await expect(page.getByRole('region', { name: 'Paper trade ticket', exact: true })).toBeVisible();
+ const navigate = async name => {
+   if (width <= 700) await page.getByRole('button', { name: 'Open workspace navigation' }).click();
+   await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name, exact: true }).click();
+   if (width <= 700) await expect(page.getByRole('button', { name: 'Open workspace navigation' })).toHaveAttribute('aria-expanded','false');
+ };
+ if (width <= 700) {
+   expect(await page.locator('.ws-dashboard').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(width - 35);
+   const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+   await ticket.getByLabel('Paper order type').selectOption('STOP_LIMIT');
+   await ticket.getByLabel('Stop trigger').fill('100'); await ticket.getByLabel('Limit price', { exact: true }).fill('101');
+   await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('90');
+   await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).scrollIntoViewIfNeeded();
+   const rect = await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).boundingBox(); expect(rect.width).toBeGreaterThan(250);
+   await page.getByRole('button', { name: 'Open workspace navigation' }).click(); await page.keyboard.press('Escape');
+   await expect(page.getByRole('button', { name: 'Open workspace navigation' })).toBeFocused();
+ }
+ const tabs = ['Dashboard', 'Watchlist', 'Charts', 'Market Scanner', 'News & Calendar', 'Order Flow', 'Positions', 'Orders', 'Trade Journal', 'Performance', 'Risk Manager', 'Tools', 'Settings'];
+ for (const name of tabs) {
+   await navigate(name);
+   if (name === 'Order Flow') {
+     await expect(page.getByRole('toolbar', { name: 'Order flow toolbar' })).toBeVisible();
+     const dom = page.getByRole('region', { name: 'Simulated DOM ladder' });
+     await dom.scrollIntoViewIfNeeded();
+     const rect = await dom.boundingBox(); expect(rect.width).toBeLessThanOrEqual(width); expect(rect.height).toBeGreaterThan(200);
+   } else if (name !== 'Dashboard') await expect(page.locator('.ws-workspace')).toBeVisible();
+   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+   const clippedInputs = await page.evaluate(() => [...document.querySelectorAll('.ws-workspace input:not([type=hidden]),.ws-workspace select')].filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > innerWidth + 1 || r.left < -1); }).map(el => el.getAttribute('aria-label') || el.outerHTML.slice(0,80)));
+   expect(clippedInputs, `${name} controls outside viewport`).toEqual([]);
+   await page.screenshot({ path: testInfo.outputPath(`mobile-${name.replaceAll(' ', '-')}.png`) });
+ }
+ await page.getByRole('button', { name: 'Notifications and alerts' }).click();
+ await expect(page.getByRole('heading', { name: 'Alerts', exact: true, level: 1 })).toBeVisible();
+ await navigate('Settings'); await page.getByRole('tab', { name: 'General', exact: true }).click();
+ await expect(page.getByLabel('Theme', { exact: true })).toBeVisible();
+ expect(await page.getByLabel('Theme', { exact: true }).evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(100);
+ expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('mobile rotation preserves the pending order draft and restores desktop navigation', async ({ page }) => {
+ await page.setViewportSize({ width:390,height:844 });
+ const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace:'dashboard',layoutMode:'1' });
+ const ticket = page.getByRole('region', { name:'Paper trade ticket',exact:true });
+ await ticket.getByLabel('Paper order type').selectOption('LIMIT');
+ await ticket.getByLabel('Limit price', { exact:true }).fill('90');
+ for (const width of [768,1280,390]) {
+   await page.setViewportSize({ width,height:844 });
+   await expect(ticket.getByLabel('Limit price', { exact:true })).toHaveValue('90');
+   if(width>700) await expect(page.getByRole('navigation',{name:'Terminal workspaces'})).toBeVisible();
+ }
+ expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test('order flow local recording validates in a worker and replays depth without future leakage', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'order-flow' });

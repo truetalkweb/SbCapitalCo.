@@ -67,3 +67,14 @@
   .ws-workspace .ws-journal-charts > :last-child { grid-column: 1 / -1; }
 }
 @media(prefers-reduced-motion:reduce) { .ws-workspace * { transition: none !important; animation: none !important; } }
+@media(max-width:700px) {
+  .ws-workspace-heading { flex-shrink:0; }
+  .ws-workspace :is(input,select,textarea) { font-size:16px !important;max-width:100%;min-height:40px; }
+  .ws-workspace :is(input[type=checkbox],input[type=radio]) { min-height:0; }
+  .ws-workspace .ws-action,.ws-workspace .ws-view-tabs [role=tab] { min-height:44px; }
+  .ws-workspace .ws-settings-field { grid-template-columns:minmax(0,1fr) !important;gap:6px !important; }
+  .ws-workspace .ws-settings-field > span { min-width:0; }
+  .ws-workspace .ws-data-table { max-width:100%;overflow-x:auto; }
+  .ws-workspace .ws-section-intro { flex-wrap:wrap; }
+  .ws-workspace .ws-card { min-width:0; }
+}

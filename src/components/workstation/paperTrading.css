@@ -23,6 +23,15 @@
 .ws-paper-form .ws-side-toggle { grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
 .ws-paper-form .ws-side-toggle button { min-height:29px; font-size:10px; line-height:12px; padding:2px; white-space:normal; }
 .ws-paper-form .ws-side-toggle { position:sticky; top:0; z-index:2; background:var(--ws-panel); padding-bottom:3px; }
+@media(max-width:700px) {
+  .ws-execution-stack:has(.ws-paper-ticket) { grid-template-rows:220px minmax(430px,auto); }
+  .ws-paper-ticket { min-height:430px; }
+  .ws-paper-form :is(input,select) { font-size:16px;min-height:40px; }
+  .ws-paper-form .ws-side-toggle button { min-height:44px; }
+  .ws-paper-options summary { padding:10px 0; }
+  .ws-paper-management-actions { flex-wrap:wrap; }
+  .ws-paper-management button { min-height:44px; }
+}
 .ws-paper-position-help { font-size:11px; color:var(--ws-muted); }
 .ws-paper-position-help button { color:var(--ws-green); text-decoration:underline; padding:0; }
 .ws-flow-status { padding:5px 10px; font-size:10px; color:var(--ws-muted); line-height:1.4; flex-shrink:0; }

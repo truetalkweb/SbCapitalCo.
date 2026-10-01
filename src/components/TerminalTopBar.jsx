@@ -191,7 +191,7 @@ export default function TerminalTopBar({
     return true;
   }
 
-  if (premiumShell) return <WorkstationHeader {...{ selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes, setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions, setMarketRegion }} />;
+  if (premiumShell) return <WorkstationHeader {...{ activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes, setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions, setMarketRegion }} />;
   return (
     <div
       className="terminal-top-bar"

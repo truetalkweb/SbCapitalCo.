@@ -181,7 +181,7 @@ export default function SettingsWorkspacePage({
       <PremiumCard theme={theme} title={title}>
         <div style={{ padding: 16, display: "grid", gap: 12 }}>
           {rows.map(([label, control]) => (
-            <div key={label} style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", alignItems: "center", color: theme.muted, fontSize: 12, gap: 12 }}>
+            <div className="ws-settings-field" key={label} style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", alignItems: "center", color: theme.muted, fontSize: 12, gap: 12 }}>
               <span>{label}</span>
               <span>{control}</span>
             </div>

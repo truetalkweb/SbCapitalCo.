@@ -25,7 +25,11 @@ function loadSettings() {
   } catch { return DEFAULT_SETTINGS; }
 }
 const createDefaultProvider = options => options.feed === 'cme' ? new CmeMarketDataProvider(options) : new MockMarketDataProvider(options);
+const mobileQuery = '(max-width:850px)';
+const subscribeMobile = callback => { const query = window.matchMedia(mobileQuery); query.addEventListener('change', callback); return () => query.removeEventListener('change', callback); };
+const mobileSnapshot = () => window.matchMedia(mobileQuery).matches;
 export default function OrderFlowPage({ createProvider = createDefaultProvider }) {
+  const mobile = useSyncExternalStore(subscribeMobile, mobileSnapshot, () => false);
   const [feed, setFeed] = useState('mock');
   const [recording, setRecording] = useState(null), [importing, setImporting] = useState(false);
   const [symbol, setSymbol] = useState('ES'), [resetToken, setResetToken] = useState(0), [settings, setSettings] = useState(loadSettings);
@@ -122,7 +126,7 @@ export default function OrderFlowPage({ createProvider = createDefaultProvider }
     {mode === 'replay' && <div className="of-replay"><button onClick={() => setReplayPlaying(v => !v)} disabled={replayAt >= snapshot.trades.length - 1}>{replayPlaying && replayAt < snapshot.trades.length - 1 ? 'Pause replay' : 'Play replay'}</button><button onClick={() => setReplayIndex(Math.min(snapshot.trades.length - 1, replayAt + 1))}>Step trade</button><input type="range" aria-label="Order flow replay position" min="0" max={Math.max(0, snapshot.trades.length - 1)} value={replayAt} onChange={e => { setReplayIndex(Number(e.target.value)); setReplayPlaying(false); }} /><select aria-label="Order flow replay speed" value={replaySpeed} onChange={e => setReplaySpeed(Number(e.target.value))}>{[1, 2, 4, 8].map(v => <option key={v} value={v}>{v}×</option>)}</select><span>{replayAt + 1} / {snapshot.trades.length}</span></div>}
     {statusMessage && <p role="status">{statusMessage}</p>}
     <div className="of-main">
-      {layout === 'chart' ? chart : <PanelGroup direction="horizontal" key={layout}>
+      {mobile ? <div className="of-mobile-panels"><div className="of-mobile-chart">{chart}</div>{layout !== 'chart' && <>{layout === 'full' && <DOMLadder book={book} instrument={instrument} settings={settings} trades={trades} />}<TimeAndSales trades={trades} instrument={instrument} threshold={settings.largeTrade} /></>}</div> : layout === 'chart' ? chart : <PanelGroup direction="horizontal" key={layout}>
         <Panel defaultSize={layout === 'full' ? 64 : 76} minSize={35}>{chart}</Panel><PanelResizeHandle className="of-resizer" aria-label="Resize order flow panels" />
         <Panel defaultSize={layout === 'full' ? 36 : 24} minSize={23}><PanelGroup direction="vertical">
           {layout === 'full' && <><Panel defaultSize={62} minSize={25}><DOMLadder book={book} trades={trades} settings={settings} instrument={instrument} /></Panel><PanelResizeHandle className="of-resizer horizontal" aria-label="Resize DOM and tape" /></>}

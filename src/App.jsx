@@ -2167,7 +2167,7 @@ export default function App() {
   const usePremiumChartShell = ["charts", "chart-analysis"].includes(activeWorkspace) && usePremiumShell;
   const showLeftDockPanel = showLeftDock && !usePremiumShell && (!isCompactTerminal || activeWorkspace !== "charts");
   const showRightDockPanel = !usePremiumShell && (showRightDock && (!isCompactTerminal || activeWorkspace !== "charts"));
-  const sidebarPanelSize = usePremiumShell ? (viewportWidth <= 1024 ? 56 : 190) / viewportWidth * 100 : isPhoneTerminal
+  const sidebarPanelSize = usePremiumShell ? (isPhoneTerminal ? 0 : viewportWidth <= 1024 ? 56 : 190) / viewportWidth * 100 : isPhoneTerminal
     ? 12
     : viewportWidth >= 1600
       ? usePremiumShell ? 11 : 3
@@ -3931,6 +3931,7 @@ export default function App() {
       >
         <Panel
           id="sidebar-panel"
+          style={usePremiumShell && isPhoneTerminal ? { display: "none" } : undefined}
           order={1}
           defaultSize={sidebarPanelSize}
           minSize={sidebarPanelSize}

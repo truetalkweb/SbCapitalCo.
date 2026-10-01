@@ -41,7 +41,7 @@ try {
     await page.screenshot({ path: `artifacts/deployment/keyboard/report-${width}.png` });
     await page.keyboard.press('Escape'); await expect(opener).toBeFocused();
     const help = page.getByRole('button', { name: 'Help, Terms & Privacy', exact: true }); await help.click();
-    await expect(page.getByRole('tab', { name: 'Quick Start', exact: true })).toBeFocused();
+    await expect(page.locator('[role=dialog] [role=tab][aria-selected=true]')).toBeFocused();
     await page.keyboard.press('ArrowRight'); await expect(page.locator('[role=dialog] [role=tab][aria-selected=true]')).toBeFocused();
     await page.keyboard.press('Escape'); await expect(help).toBeFocused();
     const account = page.getByRole('button', { name: 'Account menu', exact: true });

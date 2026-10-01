@@ -2,6 +2,9 @@ const keyFor = userId => `sb-paper-pending-v1:${userId}`;
 function intent(request) {
   const command = { ...request };
   delete command.id;
+  // Cost preferences must not turn an unchanged, unconfirmed order into a
+  // second execution. Its stored command keeps the original cost snapshot.
+  delete command.paperCosts;
   if (command.draft) {
     const draft = { ...command.draft };
     delete draft.id;

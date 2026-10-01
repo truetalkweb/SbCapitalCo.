@@ -60,6 +60,7 @@ export default function PaperManagement({ trading, symbol, orderId }) {
       <div className="ws-paper-management-actions"><button type="submit" disabled={!trading.ready || trading.busy}>Confirm paper action</button><button type="button" disabled={trading.busy} onClick={() => setMode('')}>Dismiss</button></div>
     </form>}
     {(feedback || trading.error) && <p role="status">{feedback || trading.error}</p>}
+    {order?.status === 'FILLED' && <p>Selected fill · commission ${Number(order.commission || 0).toFixed(2)} · adverse slippage ${Number(order.slippageCost || 0).toFixed(2)}{order.netTradePnL != null ? ` · net exit P&L $${order.netTradePnL.toFixed(2)}` : ''}</p>}
     <small>Today’s realized P&amp;L: ${trading.dailyRealized?.toFixed(2)} · Total realized: ${trading.balances.realizedPnl?.toFixed(2)}</small>
   </section>;
 }

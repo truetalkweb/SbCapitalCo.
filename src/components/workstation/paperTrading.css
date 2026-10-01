@@ -14,7 +14,7 @@
 .ws-paper-options { font-size:11px; color:var(--ws-muted); }
 .ws-paper-options summary { cursor:pointer; padding:2px 0; }
 .ws-paper-options[open] .ws-paper-grid { margin:7px 0; }
-.ws-paper-options small,.ws-paper-note { font-size:9px; line-height:1.4; color:var(--ws-muted); }
+.ws-paper-options small,.ws-paper-note,.ws-paper-costs { font-size:9px; line-height:1.4; color:var(--ws-muted); }
 .ws-paper-meta { display:flex; justify-content:space-between; font-size:11px; color:var(--ws-muted); }
 .ws-paper-meta b { color:var(--ws-text); font-weight:500; }
 .ws-paper-feedback { font-size:11px; line-height:1.5; border:1px solid var(--ws-border); border-radius:4px; padding:7px; }

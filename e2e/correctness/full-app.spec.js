@@ -842,6 +842,57 @@ test("secondary workspace navigation keeps the shared shell and light theme", as
 const paperNow = new Date('2026-09-21T15:00:00Z');
 const paperProviderQuote = (price, symbol = 'NVDA') => ({symbol,price,bidPrice:price-0.01,askPrice:price+0.01,lastTradeTime:paperNow.toISOString(),source:'Isolated paper test provider',realtime:true});
 
+for (const width of [390, 1536]) test(`paper cost preferences save and restore without changing dashboard layout at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1000 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'settings', premiumPreferences: {} });
+  await page.getByRole('tab', { name: 'Trading', exact: true }).click();
+  await page.getByLabel('Commission per fill ($)', { exact: true }).fill('1');
+  await page.getByLabel('Commission per share ($)', { exact: true }).fill('0.01');
+  await page.getByLabel('Adverse slippage (bps)', { exact: true }).fill('10');
+  await expect.poll(() => evidence.workspace().premiumPreferences?.paperCosts).toEqual({ commissionPerOrder: 1, commissionPerShare: 0.01, slippageBps: 10 });
+  await page.getByLabel('Adverse slippage (bps)', { exact: true }).fill('101');
+  await expect(page.getByLabel('Adverse slippage (bps)', { exact: true })).toHaveValue('10');
+  await page.screenshot({ path: testInfo.outputPath(`paper-cost-settings-${width}.png`) });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.reload(); await page.getByRole('tab', { name: 'Trading', exact: true }).click();
+  await expect(page.getByLabel('Commission per fill ($)', { exact: true })).toHaveValue('1');
+  await expect(page.getByLabel('Commission per share ($)', { exact: true })).toHaveValue('0.01');
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+for (const short of [false, true]) test(`paper ${short ? 'short cover' : 'long exit'} shows costs and exports net performance after partial close`, async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(paperNow);
+  const quotes = [paperProviderQuote(100)];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'NVDA', layoutMode: '1', positions: {}, orders: [], realizedPnL: 0, journalEntries: [], premiumPreferences: { paperCosts: { commissionPerOrder: 1, commissionPerShare: 0.01, slippageBps: 10 } } }, { providerQuotes: quotes });
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  if (short) await ticket.getByRole('button', { name: 'Sell Short', exact: true }).click();
+  await ticket.getByLabel('Paper order type').selectOption('MARKET');
+  await ticket.getByLabel('Paper quantity').fill('10');
+  await ticket.getByRole('button', { name: short ? 'Place Paper Sell Short' : 'Place Paper Buy', exact: true }).click();
+  await expect(ticket.getByRole('status')).toContainText('Commission $1.10');
+  await expect.poll(() => evidence.workspace().paperLedger?.realizedPnL).toBe(-1.1);
+  quotes[0] = paperProviderQuote(short ? 90 : 110);
+  await page.reload();
+  await ticket.getByRole('button', { name: short ? 'Buy to Cover' : 'Sell', exact: true }).click();
+  await ticket.getByLabel('Paper order type').selectOption('MARKET');
+  await ticket.getByLabel('Paper quantity').fill('4');
+  await ticket.getByRole('button', { name: short ? 'Place Paper Buy to Cover' : 'Place Paper Sell', exact: true }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.positions.NVDA?.entryFeesRemaining).toBe(0.66);
+  const exit = evidence.workspace().paperLedger.orders.find(row => row.action === (short ? 'BUY_TO_COVER' : 'SELL'));
+  expect(exit.commission).toBe(1.04); expect(exit.entryCommission).toBe(0.44);
+  expect(exit.netTradePnL).toBe(short ? 37.68 : 37.6);
+  await expect(ticket.getByRole('status')).toContainText(short ? 'net exit P&L $37.68' : 'net exit P&L $37.60');
+  await page.screenshot({ path: testInfo.outputPath(`paper-cost-${short ? 'short' : 'long'}.png`) });
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Trade Journal', exact: true }).click();
+  await page.getByRole('tab', { name: 'Exports', exact: true }).click();
+  const pending = page.waitForEvent('download'); await page.getByRole('button', { name: 'Journal CSV', exact: true }).click();
+  const stream = await (await pending).createReadStream(); let csv = ''; for await (const chunk of stream) csv += chunk;
+  expect(csv).toContain('1.48'); expect(csv).toContain(String(exit.netTradePnL));
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Performance', exact: true }).click();
+  await expect(page.getByText(short ? '$37.68' : '$37.60', { exact: true }).first()).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test('server paper management edits, protects, flattens and exports realized history', async ({ page }, testInfo) => {
   await page.clock.setFixedTime(paperNow);
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'orders', selectedStock: 'NVDA', layoutMode: '1' }, { providerQuotes: [paperProviderQuote(100)] });

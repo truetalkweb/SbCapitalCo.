@@ -1010,6 +1010,7 @@ function PremiumWorkspaceContent({
           timeframe,
           updateNotificationPreference,
           updatePremiumPreference,
+          paperCosts: premiumPreferences.paperCosts || {},
           user,
         }}
       />

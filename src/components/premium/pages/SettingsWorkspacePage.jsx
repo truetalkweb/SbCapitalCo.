@@ -53,6 +53,7 @@ export default function SettingsWorkspacePage({
       timeframe,
       updateNotificationPreference,
       updatePremiumPreference,
+      paperCosts = {},
       user
 }) {
     const backupInputRef = useRef(null);
@@ -227,6 +228,8 @@ export default function SettingsWorkspacePage({
               ["Currency display", settingSelect("Currency display", "USD", ["USD"], null, true)],
             ])}
             {group("Trading Preferences", [
+              ...[["Commission per fill ($)", "commissionPerOrder", 100, "0.01"], ["Commission per share ($)", "commissionPerShare", 1, "0.001"], ["Adverse slippage (bps)", "slippageBps", 100, "0.1"]].map(([label, key, max, step]) => [label, <input key={key} aria-label={label} type="number" min="0" max={max} step={step} value={paperCosts[key] ?? 0} style={{ ...selectStyle }} onChange={event => { const value = event.target.valueAsNumber; if (Number.isFinite(value) && value >= 0 && value <= max) updatePremiumPreference("paperCosts", { ...paperCosts, [key]: value }); }} />]),
+              ["Simulated costs", <span style={{ color: theme.muted, fontSize: 11 }}>USD per executed fill. 1 bp = 0.01%. New orders keep these settings; limits cap slippage. Defaults are zero.</span>],
               ["Default order type", settingSelect("Default order type", defaultOrderType, [["MARKET", "Market review"], ["LIMIT", "Limit review"]], (value) => { updatePremiumPreference("defaultOrderType", value); setOrderMessage?.(`Default review order type saved: ${value}.`); })],
               ["Confirm before order", settingToggle(true, null, true, "Confirm before order")],
               ["Default TIF", settingSelect("Default time in force", defaultTif, [["DAY", "Day"], ["GTC", "Good till cancelled"]], (value) => { updatePremiumPreference("defaultTif", value); setOrderMessage?.(`Default review time in force saved: ${value}.`); })],

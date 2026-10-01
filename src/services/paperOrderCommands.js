@@ -1,4 +1,4 @@
-import { cancelPaperOrder, isWorkingPaperOrder, paperQuote, submitPaperOrder } from './paperTradingEngine.js';
+import { cancelPaperOrder, isWorkingPaperOrder, normalizePaperCosts, paperQuote, submitPaperOrder } from './paperTradingEngine.js';
 
 // Pure commands run in a revision-checked server transaction. An error leaves
 // the entire original ledger intact, including reservations and protection.
@@ -6,7 +6,9 @@ export function applyPaperCommand(state, command, quotes, now, limits = {}) {
   const fail = error => ({ state, error });
   const { id, kind } = command;
   if (typeof id !== 'string' || !/^[\w-]{1,100}$/.test(id)) return fail('Invalid command ID.');
-  if (kind === 'submit') return submitPaperOrder(state, { ...command.draft, id }, quotes, now, limits);
+  let paperCosts;
+  try { paperCosts = normalizePaperCosts(command.paperCosts); } catch (error) { return fail(error.message); }
+  if (kind === 'submit') return submitPaperOrder(state, { ...command.draft, id, paperCosts }, quotes, now, limits);
   if (kind === 'cancel') return cancelPaperOrder(state, command.orderId, now);
   if (kind === 'amend') {
     const old = state.orders.find(row => row.id === command.orderId);
@@ -15,6 +17,7 @@ export function applyPaperCommand(state, command, quotes, now, limits = {}) {
     const draft = { ...old, side: old.action || old.side, ...command.changes, id, symbol: old.symbol };
     // Action and symbol cannot be changed by an amend. Linked exits retain size.
     draft.side = old.action || old.side;
+    draft.paperCosts = old.paperCosts;
     if (old.parentId) draft.quantity = old.quantity;
     const cancelled = cancelPaperOrder(state, old.id, now).state;
     const result = submitPaperOrder(cancelled, draft, quotes, now, limits);
@@ -41,7 +44,7 @@ export function applyPaperCommand(state, command, quotes, now, limits = {}) {
       const quantity = Number(next.positions[symbol]?.quantity || 0);
       if (!quantity) continue;
       const result = submitPaperOrder(next, { id: `${id}-${index}`, symbol, side: quantity < 0 ? 'BUY_TO_COVER' : 'SELL',
-        type: 'MARKET', quantity: Math.abs(quantity), tif: 'GTC' }, quotes, now, limits);
+        type: 'MARKET', quantity: Math.abs(quantity), tif: 'GTC', paperCosts }, quotes, now, limits);
       if (result.error) return fail(result.error);
       next = result.state;
     }
@@ -61,7 +64,7 @@ export function applyPaperCommand(state, command, quotes, now, limits = {}) {
     for (const [suffix, type, price] of [['stop', 'STOP', stop], ['target', 'LIMIT', target]]) {
       if (!price) continue;
       const result = submitPaperOrder(next, { id: `${id}-${suffix}`, symbol, side: short ? 'BUY_TO_COVER' : 'SELL', type,
-        quantity: Math.abs(qty), tif: 'GTC', stopPrice: type === 'STOP' ? price : null, limitPrice: type === 'LIMIT' ? price : null }, quotes, now, limits);
+        quantity: Math.abs(qty), tif: 'GTC', paperCosts, stopPrice: type === 'STOP' ? price : null, limitPrice: type === 'LIMIT' ? price : null }, quotes, now, limits);
       if (result.error) return fail(result.error);
       next = { ...result.state, orders: result.state.orders.map(row => row.id === result.order.id ? { ...row, parentId: id, ocoGroup: id } : row) };
     }
@@ -75,7 +78,8 @@ export function paperTradeHistory(state) {
     && ['SELL', 'BUY_TO_COVER'].includes(row.action || row.side)).map(row => ({
       id: `paper-${row.id}`, orderId: row.id, symbol: row.symbol, recordType: 'trade', status: 'closed',
       bias: (row.action || row.side) === 'BUY_TO_COVER' ? 'Short' : 'Long', quantity: row.filled,
-      entryPrice: row.entryPrice ?? null, exitPrice: row.price, pnl: row.realizedPnL, fees: 0,
+      entryPrice: row.entryPrice ?? null, exitPrice: row.price, pnl: row.netTradePnL ?? row.realizedPnL,
+      fees: (row.commission || 0) + (row.entryCommission || 0),
       closedAt: row.filledAt, createdAt: row.filledAt, currency: 'USD', source: 'Paper simulation',
       setup: 'Paper execution', notes: row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)',
       immutable: true,

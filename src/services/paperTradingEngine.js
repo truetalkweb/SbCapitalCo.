@@ -14,6 +14,20 @@ const opening = order => ['BUY', 'SELL_SHORT'].includes(actionOf(order));
 const shortAction = order => ['SELL_SHORT', 'BUY_TO_COVER'].includes(actionOf(order));
 const reference = order => order.limitPrice || order.stopPrice || order.referencePrice || 0;
 
+// Explicit simulation assumptions, frozen per order. Old ledgers remain free.
+export function normalizePaperCosts(raw = {}) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid simulated paper costs.');
+  const costs = {};
+  for (const [key, max] of [['commissionPerOrder', 100], ['commissionPerShare', 1], ['slippageBps', 100]]) {
+    const value = raw[key] === undefined ? 0 : raw[key];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max) throw new Error(`Simulated ${key} must be between 0 and ${max}.`);
+    costs[key] = value;
+  }
+  return costs;
+}
+export const paperCommission = (costs, qty) => round((costs?.commissionPerOrder || 0) + qty * (costs?.commissionPerShare || 0));
+const reserve = order => round(order.quantity * reference(order) * (['MARKET', 'STOP'].includes(order.type) ? 1 + (order.paperCosts?.slippageBps || 0) / 10000 : 1) + paperCommission(order.paperCosts, order.quantity));
+
 function reconcileProtection(state, now, symbol) {
   for (const order of state.orders.filter(row => isWorkingPaperOrder(row) && row.parentId && (!symbol || row.symbol === symbol))) {
     const signedHeld = Number(state.positions[order.symbol]?.quantity || 0);
@@ -67,7 +81,7 @@ export function paperBalances(state, quotes = [], now = Date.now()) {
   }
   const cash = round(PAPER_STARTING_CASH + (number(state.realizedPnL) || 0) - cost);
   const reserved = (state.orders || []).filter(order => isWorkingPaperOrder(order) && opening(order))
-    .reduce((sum, order) => sum + order.quantity * reference(order), 0);
+    .reduce((sum, order) => sum + reserve(order), 0);
   return { cash, shortCollateral: round(shortCollateral), reserved: round(reserved), buyingPower: round(Math.max(0, cash - shortCollateral - reserved)),
     equity: allMarks ? round(cash + value) : null, unrealizedPnl: allMarks ? round(value - cost) : null,
     realizedPnl: number(state.realizedPnL) || 0 };
@@ -95,6 +109,8 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
   const stopPrice = ['STOP', 'STOP_LIMIT'].includes(type) ? positive(draft.stopPrice) : null;
   const stopLoss = positive(draft.stopLoss), takeProfit = positive(draft.takeProfit);
   const fail = error => ({ state, error });
+  let paperCosts;
+  try { paperCosts = normalizePaperCosts(draft.paperCosts); } catch (error) { return fail(error.message); }
   if (!draft.id || !/^[A-Z][A-Z0-9.-]{0,13}$/.test(symbol) || !['BUY', 'SELL', 'SELL_SHORT', 'BUY_TO_COVER'].includes(action)) return fail('Select a valid equity symbol and side.');
   const childIds = [stopLoss && `${draft.id}-stop`, takeProfit && `${draft.id}-target`].filter(Boolean);
   if ((state.orders || []).some(order => childIds.includes(order.id)
@@ -123,7 +139,7 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
   const balances = paperBalances(state, quotes, now);
   if (isOpening) {
     if (balances.buyingPower === null) return fail('Paper buying power cannot be calculated from the saved positions.');
-    if (referencePrice && qty * referencePrice > balances.buyingPower) return fail('Insufficient paper buying power.');
+    if (referencePrice && reserve({ quantity: qty, referencePrice, type, paperCosts }) > balances.buyingPower) return fail('Insufficient paper buying power including simulated costs.');
     if (limits.maxOrderValue > 0 && referencePrice * qty > limits.maxOrderValue) return fail(`Order exceeds your $${limits.maxOrderValue} maximum order value.`);
     if (limits.riskPerTrade > 0 && stopLoss && referencePrice && Math.abs(referencePrice - stopLoss) * qty > limits.riskPerTrade) return fail('Order exceeds your configured risk per trade.');
     const todayPnl = (state.orders || []).filter(order => order.filledAt && day(order.filledAt) === day(now))
@@ -147,7 +163,7 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
     stopLoss, takeProfit, referencePrice, tif: draft.tif || 'DAY', status: 'WORKING', price: null,
     createdAt: iso(now), submittedAt: iso(now), expiresAt: (draft.tif || 'DAY') === 'DAY' ? dayExpiry(now) : null,
     maxOrderValue: Number(limits.maxOrderValue) || 0, riskPerTrade: Number(limits.riskPerTrade) || 0,
-    dailyLossLimit: Number(limits.dailyLossLimit) || 0 };
+    dailyLossLimit: Number(limits.dailyLossLimit) || 0, paperCosts };
   const next = processPaperOrders({ ...state, orders: [order, ...(state.orders || [])] }, quotes, now);
   return { state: next, order: next.orders.find(row => row.id === order.id) };
 }
@@ -178,7 +194,11 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
     if (!open) { order.reason = 'Queued for the regular US equity session'; continue; }
     const quote = paperQuote(quotes.find(row => row.symbol === order.symbol), now);
     if (!quote) { order.reason = 'Waiting for a fresh provider quote'; continue; }
-    const fillPrice = order.side === 'BUY' ? quote.buy : quote.sell;
+    let paperCosts;
+    try { paperCosts = normalizePaperCosts(order.paperCosts); } catch (error) {
+      Object.assign(order, { status: 'REJECTED', remaining: 0, reason: error.message }); continue;
+    }
+    const quotePrice = order.side === 'BUY' ? quote.buy : quote.sell;
     // The last reported trade triggers stops; execution can gap past the stop.
     if (['STOP', 'STOP_LIMIT'].includes(order.type) && !order.triggeredAt) {
       if (!(order.side === 'BUY' ? quote.last >= order.stopPrice : quote.last <= order.stopPrice)) {
@@ -187,20 +207,29 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       order.triggeredAt = iso(now); order.status = 'TRIGGERED';
     }
     if (['LIMIT', 'STOP_LIMIT'].includes(order.type)
-      && !(order.side === 'BUY' ? fillPrice <= order.limitPrice : fillPrice >= order.limitPrice)) {
+      && !(order.side === 'BUY' ? quotePrice <= order.limitPrice : quotePrice >= order.limitPrice)) {
       order.reason = order.triggeredAt ? 'Stop triggered; waiting for limit price' : 'Waiting for limit price'; continue;
     }
     const qty = order.parentId ? Math.min(order.quantity, available) : order.quantity;
+    const adverse = quotePrice * (1 + (order.side === 'BUY' ? 1 : -1) * paperCosts.slippageBps / 10000);
+    // Eligible limit orders cap adverse slippage at the limit; they never cross it.
+    let fillPrice = paperCosts.slippageBps === 0 ? quotePrice : round(['LIMIT', 'STOP_LIMIT'].includes(order.type)
+      ? order.side === 'BUY' ? Math.min(adverse, order.limitPrice) : Math.max(adverse, order.limitPrice) : adverse);
+    if (['LIMIT', 'STOP_LIMIT'].includes(order.type)) fillPrice = order.side === 'BUY' ? Math.min(fillPrice, order.limitPrice) : Math.max(fillPrice, order.limitPrice);
+    const commission = paperCommission(paperCosts, qty);
+    if (!Number.isFinite(fillPrice) || fillPrice <= 0 || !Number.isFinite(commission)) {
+      Object.assign(order, { status: 'REJECTED', remaining: 0, reason: 'Simulated execution price or commission is invalid' }); continue;
+    }
     let reason = '';
     if (isOpening) {
       const balances = paperBalances(next, quotes, now);
       const todayRealized = next.orders.filter(row => row.filledAt && day(row.filledAt) === day(now))
         .reduce((total, row) => total + (number(row.realizedPnL) || 0), 0);
       const otherReserved = next.orders.filter(other => other.id !== order.id && isWorkingPaperOrder(other) && opening(other))
-        .reduce((sum, other) => sum + other.quantity * reference(other), 0);
+        .reduce((sum, other) => sum + reserve(other), 0);
       if (isShort ? held > 0 : held < 0) reason = 'Close the opposite position before opening this order';
       else if (order.dailyLossLimit > 0 && todayRealized <= -order.dailyLossLimit) reason = 'Daily paper loss limit reached before execution';
-      else if (balances.cash === null || fillPrice * qty > balances.cash - balances.shortCollateral - otherReserved) reason = 'Insufficient paper buying power at execution';
+      else if (balances.cash === null || fillPrice * qty + commission > balances.cash - balances.shortCollateral - otherReserved) reason = 'Insufficient paper buying power at execution including simulated costs';
       else if (order.maxOrderValue > 0 && fillPrice * qty > order.maxOrderValue) reason = 'Execution exceeds maximum order value';
       else if ((order.stopLoss && (isShort ? order.stopLoss <= fillPrice : order.stopLoss >= fillPrice)) || (order.takeProfit && (isShort ? order.takeProfit >= fillPrice : order.takeProfit <= fillPrice))) reason = 'Price moved outside the attached protection levels';
       else if (order.riskPerTrade > 0 && order.stopLoss && Math.abs(fillPrice - order.stopLoss) * qty > order.riskPerTrade) reason = 'Execution exceeds risk per trade';
@@ -210,16 +239,21 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
     else if (number(next.positions[order.symbol]?.average) === null) reason = 'Saved paper position cost is unavailable';
     if (reason) { Object.assign(order, { status: 'REJECTED', reason, remaining: 0, updatedAt: iso(now) }); continue; }
     const position = next.positions[order.symbol] || { quantity: 0, average: 0 };
-    let realized = 0;
+    let grossRealizedPnL = 0, entryCommission = 0;
+    const entryFees = Number(position.entryFeesRemaining) || 0;
     if (isOpening) next.positions[order.symbol] = { ...position, quantity: held + (isShort ? -qty : qty),
-      average: round((Number(position.average) * Math.abs(held) + fillPrice * qty) / (Math.abs(held) + qty)), source: 'Paper simulation', currency: 'USD' };
+      average: round((Number(position.average) * Math.abs(held) + fillPrice * qty) / (Math.abs(held) + qty)), ...(entryFees + commission > 0 ? { entryFeesRemaining: round(entryFees + commission) } : {}), source: 'Paper simulation', currency: 'USD' };
     else {
-      realized = round((fillPrice - Number(position.average)) * qty * (isShort ? -1 : 1));
-      next.realizedPnL = round((Number(next.realizedPnL) || 0) + realized);
+      grossRealizedPnL = round((fillPrice - Number(position.average)) * qty * (isShort ? -1 : 1));
+      entryCommission = Math.abs(held) === qty ? entryFees : round(entryFees * qty / Math.abs(held));
       if (Math.abs(held) === qty) delete next.positions[order.symbol];
-      else next.positions[order.symbol] = { ...position, quantity: held + (isShort ? qty : -qty) };
+      else next.positions[order.symbol] = { ...position, quantity: held + (isShort ? qty : -qty), entryFeesRemaining: round(entryFees - entryCommission) };
     }
+    const realized = round(grossRealizedPnL - commission);
+    next.realizedPnL = round((Number(next.realizedPnL) || 0) + realized);
     Object.assign(order, { status: 'FILLED', filled: qty, remaining: 0, price: fillPrice, value: round(fillPrice * qty),
+      paperCosts, commission, entryCommission, grossRealizedPnL, netTradePnL: isOpening ? null : round(realized - entryCommission),
+      quotePrice, slippageCost: round(Math.abs(fillPrice - quotePrice) * qty),
       realizedPnL: realized, entryPrice: isOpening ? fillPrice : Number(position.average),
       closesPosition: !isOpening && Math.abs(held) === qty, filledAt: iso(now), reason: `Simulated fill · ${quote.quality} quote · ${quote.basis}`,
       quoteSource: quote.source, quoteAsOf: quote.asOf, quoteQuality: quote.quality });
@@ -234,7 +268,7 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       const child = { id: `${order.id}-${suffix}`, engine: 'paper-v1', mode: 'paper', source: 'Paper simulation', symbol: order.symbol,
         side: isShort ? 'BUY' : 'SELL', action: isShort ? 'BUY_TO_COVER' : 'SELL', type, orderType: type, quantity: qty, requestedQuantity: qty, filled: 0, remaining: qty, price: null,
         stopPrice: type === 'STOP' ? trigger : null, limitPrice: type === 'LIMIT' ? trigger : null,
-        status: 'WORKING', tif: 'GTC', parentId: order.id, ocoGroup: order.id, createdAt: iso(now), reason: 'Protective exit armed' };
+        status: 'WORKING', tif: 'GTC', parentId: order.id, ocoGroup: order.id, paperCosts: { ...paperCosts }, createdAt: iso(now), reason: 'Protective exit armed' };
       next.orders.unshift(child);
     }
   }

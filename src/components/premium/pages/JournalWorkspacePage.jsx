@@ -184,7 +184,7 @@ export default function JournalWorkspacePage({
                 <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
                 <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
               </div>
-              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports include manual journal records and realized paper exits, including partial closes. Paper fees are zero in the current simulation. Daily and weekly reports are portable Markdown files.</div>
+              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports include manual records and realized paper exits, including partial closes. Paper exit P&amp;L includes allocated entry and exit commissions; slippage is included in fill prices. Account P&amp;L charges entry fees immediately, including positions still open. Daily and weekly reports are portable Markdown files.</div>
             </PremiumCard>}
         </div>
       </div>

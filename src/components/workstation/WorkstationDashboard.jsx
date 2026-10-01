@@ -29,7 +29,7 @@ export default function WorkstationDashboard({ selected = {}, chart, account = {
   return <div className="ws-dashboard" data-testid="sb-main-dashboard">
     <div className="ws-account-strip" aria-label="Account metrics">
       <section className="ws-panel ws-metric ws-equity"><span>Account Equity</span><strong>{currency(accountEquity)}</strong><small>{account?.source || "Workspace account"}</small></section>
-      <section className="ws-panel ws-metric"><span>{paperTrading ? 'Day Realized P&L' : 'Day P&L'}</span><strong className={valueClass(dayPnl)}>{currency(dayPnl)}</strong><small>{paperTrading ? 'Paper exits · excludes open P&L' : dayPnl === null ? "Not reported" : "Reported by account"}</small></section>
+      <section className="ws-panel ws-metric"><span>{paperTrading ? 'Day Realized P&L' : 'Day P&L'}</span><strong className={valueClass(dayPnl)}>{currency(dayPnl)}</strong><small>{paperTrading ? 'Exits & commissions · excludes open P&L' : dayPnl === null ? "Not reported" : "Reported by account"}</small></section>
       <section className="ws-panel ws-metric"><span>Buying Power</span><strong>{currency(accountRows.get("Buying Power"))}</strong></section>
       <section className="ws-panel ws-metric"><span>Open Positions</span><strong>{positions.length}</strong></section>
       <section className="ws-panel ws-metric"><span>Today's Trades</span><strong>{todaysTrades}</strong><small>Recorded fills</small></section>

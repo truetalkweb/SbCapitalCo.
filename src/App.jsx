@@ -923,6 +923,7 @@ export default function App() {
     workspacePayload,
   });
   const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
+    paperCosts: premiumPreferences.paperCosts || {},
     userId: user?.id, enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
   const accountJournalEntries = [...paperTrading.history, ...journalEntries];
   const paperAccountSummary = { source: "Paper account · $100,000 starting balance", rows: [

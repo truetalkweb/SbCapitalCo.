@@ -6,14 +6,14 @@ import { BROKER_API_URL } from '../config/terminalConfig.js';
 import { getUsMarketStatus } from '../utils/marketSession.js';
 import { preparePaperCommand, acknowledgePaperCommand } from '../services/paperCommandRecovery.js';
 
-export function usePaperTrading({ state, setState, quotes, enabled, limits, userId }) {
-  const current = useRef({ enabled, userId, limits });
+export function usePaperTrading({ state, setState, quotes, enabled, limits, userId, paperCosts = {} }) {
+  const current = useRef({ enabled, userId, limits, paperCosts });
   const version = useRef({ userId, revision: -1 });
   const inFlight = useRef(false);
   const [connection, setConnection] = useState({ userId: null, ready: false, error: '' });
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now);
-  useLayoutEffect(() => { current.current = { enabled, userId, limits }; }, [enabled, userId, limits]);
+  useLayoutEffect(() => { current.current = { enabled, userId, limits, paperCosts }; }, [enabled, userId, limits, paperCosts]);
   useEffect(() => {
     const timer = setTimeout(() => setNow(Date.now()), 0);
     return () => clearTimeout(timer);
@@ -53,7 +53,8 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits, user
     inFlight.current = true; setBusy(true);
     let recovered;
     try {
-      recovered = preparePaperCommand(request, data.userId);
+      recovered = preparePaperCommand(['submit', 'close', 'flatten', 'protect'].includes(request.kind)
+        ? { ...request, paperCosts: data.paperCosts } : request, data.userId);
       const response = await authenticatedFetch(`${BROKER_API_URL}/api/paper/commands`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20000),
         body: JSON.stringify({ command: recovered, limits: data.limits }),
@@ -76,8 +77,8 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits, user
   const balances = useMemo(() => paperBalances(state, quotes, now), [state, quotes, now]);
   const history = useMemo(() => paperTradeHistory(state), [state]);
   const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-  const dailyRealized = history.filter(row => new Date(row.closedAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today).reduce((sum, row) => sum + row.pnl, 0);
-  return { submit, cancel, command, busy, balances, history, dailyRealized,
+  const dailyRealized = state.orders.filter(row => row.engine === 'paper-v1' && row.status === 'FILLED' && row.filledAt && new Date(row.filledAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today).reduce((sum, row) => sum + (Number(row.realizedPnL) || 0), 0);
+  return { submit, cancel, command, busy, balances, history, dailyRealized, paperCosts,
     ready: enabled && connection.userId === userId && connection.ready,
     error: connection.userId === userId ? connection.error : '', worker: connection.worker,
     session: getUsMarketStatus(new Date(now)), orders: state.orders, positions: state.positions };

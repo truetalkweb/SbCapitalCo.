@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { paperQuote, paperSellAvailability, paperCoverAvailability } from '../../services/paperTradingEngine.js';
+import { paperQuote, paperSellAvailability, paperCoverAvailability, paperCommission } from '../../services/paperTradingEngine.js';
 import { currency } from './workstationFormat.js';
 import './paperTrading.css';
 const labels = { BUY: 'Buy', SELL: 'Sell', SELL_SHORT: 'Sell Short', BUY_TO_COVER: 'Buy to Cover' };
@@ -49,9 +49,10 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
         {isOpening && <>{field('Stop loss', stopLoss, setStopLoss)}{field('Take profit', takeProfit, setTakeProfit)}</>}
       </div><small>{side === 'SELL_SHORT' ? 'Short stop above entry; target below. Entry value is reserved as paper collateral; short proceeds are restricted.' : side === 'BUY' ? 'Optional linked exits activate after entry. One exit cancels the other.' : side === 'BUY_TO_COVER' ? 'Closes short shares only. Cannot open a long position.' : 'Closes long shares only. Use Sell Short to open a short position.'}</small></details>
       <div className="ws-paper-meta">{!isOpening ? <>Available to {side === 'SELL' ? 'sell' : 'cover'} <b>{available.available} / {available.held} {symbol}</b></> : <>Buying power <b>{currency(trading.balances.buyingPower)}</b></>}</div>
+      <small className="ws-paper-costs">Simulated commission: {currency(paperCommission(trading.paperCosts, Math.max(0, Number(quantity) || 0)))} per fill · adverse slippage: {trading.paperCosts?.slippageBps || 0} bps. Working orders keep their saved costs.</small>
       {side === 'SELL' && available.held === 0 && <div className="ws-paper-position-help">No {symbol} shares owned. <button type="button" onClick={() => { clear(); setSide('BUY'); }}>Switch to Buy</button></div>}
       {!isOpening && available.available > 0 && Number(quantity) > available.available && <button className="ws-paper-new" type="button" onClick={() => { clear(); setQuantity(available.available); }}>Use available quantity ({available.available})</button>}
-      {(feedback?.error || currentOrder) && <div ref={receipt} role="status" className="ws-paper-feedback">{feedback?.error || <><strong>{currentOrder.status.replaceAll('_',' ')}</strong> · {(currentOrder.action || currentOrder.side).replaceAll('_',' ')} {currentOrder.filled || currentOrder.quantity} {currentOrder.symbol}{currentOrder.price ? ` @ ${currency(currentOrder.price)}` : ''}<br />{currentOrder.reason}</>}</div>}
+      {(feedback?.error || currentOrder) && <div ref={receipt} role="status" className="ws-paper-feedback">{feedback?.error || <><strong>{currentOrder.status.replaceAll('_',' ')}</strong> · {(currentOrder.action || currentOrder.side).replaceAll('_',' ')} {currentOrder.filled || currentOrder.quantity} {currentOrder.symbol}{currentOrder.price ? ` @ ${currency(currentOrder.price)}` : ''}<br />{currentOrder.reason}{currentOrder.status === 'FILLED' && <><br />Commission {currency(currentOrder.commission || 0)} · slippage {currency(currentOrder.slippageCost || 0)}{currentOrder.netTradePnL != null ? ` · net exit P&L ${currency(currentOrder.netTradePnL)}` : ''}</>}</>}</div>}
       {currentOrder && <button type="button" className="ws-paper-new" onClick={clear}>New order</button>}
       </div>
       <button type="submit" className={`ws-order-button ${isSell ? 'is-sell' : ''}`} disabled={!trading.ready || trading.busy || Boolean(currentOrder)}>{trading.busy ? 'Submitting…' : `Place Paper ${labels[side]}`}</button>

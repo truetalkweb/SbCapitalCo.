@@ -11,6 +11,7 @@ import { CHART_INDICATORS, VOLUME_INDICATOR } from "../indicators/chartIndicator
 import { marketDataService } from "../services/marketDataService";
 import { normalizeCandleDataset, normalizeMarketQuote } from "../utils/marketDataContract.js";
 import { visibleReplayCandles } from "../utils/replayLedger.js";
+import { fetchJsonWithTimeout } from "../services/fetchJsonWithTimeout.js";
 
 const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
 
@@ -30,23 +31,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return response.json();
-  } finally {
-    window.clearTimeout(timeout);
-  }
 }
 
 function getCandleDateKey(candle) {
@@ -526,13 +510,14 @@ function Chart({
       `;
     });
 
+    const historyRequest = new AbortController();
     async function loadCandles() {
       try {
         const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
         if (!cleanBrokerApiUrl) throw new Error("Chart provider is not configured");
           const backendData = await fetchJsonWithTimeout(
             `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?timeframe=${encodeURIComponent(timeframe)}`,
-            3500
+            { timeoutMs: 3500, signal: historyRequest.signal }
           );
         const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
         if (disposed) return;
@@ -579,6 +564,7 @@ function Chart({
 
     return () => {
       disposed = true;
+      historyRequest.abort();
       resizeObserver.disconnect();
       if (streamFrameRef.current) {
         cancelAnimationFrame(streamFrameRef.current);

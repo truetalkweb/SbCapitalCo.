@@ -187,6 +187,8 @@ for (const quality of ["cached", "delayed"]) {
 }
 
 test("a late response for the previous symbol cannot replace the new chart", async ({ page }) => {
+  const canceled = [];
+  page.on('requestfailed', request => { if (request.url().includes('/candles/AAPL')) canceled.push(request.failure()?.errorText); });
   let oldRequestStarted;
   const started = new Promise(resolve => { oldRequestStarted = resolve; });
   let releaseOld;
@@ -201,10 +203,26 @@ test("a late response for the previous symbol cannot replace the new chart", asy
   await input.press("Enter");
   await expect(mainCanvas(page)).toHaveAttribute("data-chart-canvas", "TSLA");
   await expect.poll(async () => (await ledger(page)).mark).toBe(201);
+  await expect.poll(() => canceled.length).toBeGreaterThan(0);
   releaseOld();
   await page.waitForTimeout(200);
   expect((await ledger(page)).mark).toBe(201);
   expect(evidence.errors).toEqual([]);
+});
+
+test('stalled chart history reaches unavailable and can retry without fabricated candles', async ({ page }) => {
+  let release, recover = false;
+  const held = new Promise(resolve => { release = resolve; });
+  const evidence = await setup(page, async payload => { if (!recover) await held; return payload; });
+  try {
+    await expect(page.locator('header [role="status"]')).toHaveText('UNAVAILABLE');
+    await expect(page.getByText('Historical data request timed out. Retry when the provider recovers.', { exact: true })).toBeVisible();
+    expect((await ledger(page)).mark).toBeNull();
+    recover = true; release();
+    await page.getByRole('button', { name: 'Retry chart data', exact: true }).click();
+    await expect(mainCanvas(page)).toHaveAttribute('data-visible-candle-count', '1');
+    expect(evidence.errors).toEqual([]); expect(evidence.executions).toEqual([]);
+  } finally { release(); }
 });
 
 test("quote transport reconnects without inventing candles or dropping provider identity", async ({ page }) => {

@@ -27,7 +27,9 @@ try {
     }, { key: `sb-${new URL(process.env.SUPABASE_URL).hostname.split('.')[0]}-auth-token`, session });
     const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
     await page.route(/\/api\/questrade\/(?:orders|submit|execute|cancel)/i, () => { throw new Error('Real execution forbidden in reliability verification'); });
-    await page.goto('https://www.sbcapitalco.com'); return page;
+    await page.goto('https://www.sbcapitalco.com');
+    await expect(page.getByRole('region', { name: 'Paper trade ticket', exact: true }).getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeEnabled({ timeout: 30000 });
+    return page;
   }
   const page = await device(); let drop = true;
   await page.route('**/api/paper/commands', async route => {

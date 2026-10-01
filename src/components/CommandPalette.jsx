@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
+import { useModalFocus } from "../hooks/useModalFocus";
 
 function matchesAction(action, query) {
   const cleanQuery = query.trim().toLowerCase();
@@ -29,6 +30,7 @@ export default function CommandPalette({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef(null);
+  const dialog = useModalFocus(isOpen, onClose, 'input');
 
   const filteredActions = useMemo(
     () => actions.filter((action) => matchesAction(action, query)).slice(0, 14),
@@ -38,17 +40,8 @@ export default function CommandPalette({
   useEffect(() => {
     if (!isOpen) return;
 
-    requestAnimationFrame(() => inputRef.current?.focus());
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
     function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
+      if (event.target !== inputRef.current) return;
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -94,6 +87,11 @@ export default function CommandPalette({
       }}
     >
       <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        tabIndex={-1}
         style={{
           width: "min(680px, calc(100vw - 28px))",
           background: theme.panel,
@@ -121,6 +119,7 @@ export default function CommandPalette({
           />
           <input
             ref={inputRef}
+            aria-label="Search commands"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);

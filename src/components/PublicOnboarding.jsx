@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { useModalFocus } from "../hooks/useModalFocus";
 import { terminalMonoFont, terminalSansFont } from "../config/terminalConfig";
 import {
   PUBLIC_INFORMATION_EFFECTIVE_DATE,
@@ -48,49 +49,14 @@ export default function PublicOnboarding({
   onReportIssue,
 }) {
   const [activeView, setActiveView] = useState("quick");
-  const dialogRef = useRef(null);
-  const returnFocusRef = useRef(null);
+  const dialogRef = useModalFocus(isOpen, onClose, '[role="tab"][aria-selected="true"]');
 
   function moveTab(direction) {
     const activeIndex = PUBLIC_INFORMATION_SECTIONS.findIndex((tab) => tab.id === activeView);
     const nextIndex = (activeIndex + direction + PUBLIC_INFORMATION_SECTIONS.length) % PUBLIC_INFORMATION_SECTIONS.length;
     setActiveView(PUBLIC_INFORMATION_SECTIONS[nextIndex].id);
+    dialogRef.current?.querySelector(`#public-tab-${PUBLIC_INFORMATION_SECTIONS[nextIndex].id}`)?.focus();
   }
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    returnFocusRef.current = document.activeElement;
-    window.requestAnimationFrame(() => {
-      dialogRef.current?.querySelector('[role="tab"][aria-selected="true"]')?.focus();
-    });
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        onClose?.();
-        return;
-      }
-      if (event.key === "Tab" && dialogRef.current) {
-        const controls = [...dialogRef.current.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
-        if (!controls.length) return;
-        const first = controls[0];
-        const last = controls[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      returnFocusRef.current?.focus?.();
-    };
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -118,6 +84,7 @@ export default function PublicOnboarding({
     >
       <div
         ref={dialogRef}
+        tabIndex={-1}
         className="public-onboarding-panel"
         style={{
           width: "clamp(320px, 36vw, 620px)",

@@ -15,6 +15,84 @@ const initialWorkspace = {
   replayMode: false, replayNotes: "Original session note", advancedMode: true,
 };
 
+for (const width of [390, 1536]) test(`modal keyboard focus stays contained and returns to its opener at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'settings' });
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
+  const report = page.getByRole('button', { name: 'Report Issue', exact: true });
+  await report.click();
+  const dialog = page.getByRole('dialog', { name: 'Report an issue', exact: true });
+  await expect(dialog.getByLabel('Description', { exact: true })).toBeFocused();
+  await dialog.getByPlaceholder('What were you doing, and what did you expect to happen?').fill('Keyboard draft');
+  await expect(dialog.getByPlaceholder('What were you doing, and what did you expect to happen?')).toBeFocused();
+  await page.getByRole('button', { name: 'Account menu', exact: true }).evaluate(node => node.focus());
+  await expect(dialog.getByPlaceholder('What were you doing, and what did you expect to happen?')).toBeFocused();
+  await dialog.getByRole('button', { name: 'Send report', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: 'Close issue report' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('button', { name: 'Send report', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(report).toBeFocused();
+
+  const help = page.getByRole('button', { name: 'Help, Terms & Privacy', exact: true });
+  await help.click();
+  const information = page.getByRole('dialog').filter({ has: page.getByRole('tab', { name: 'Quick Start', exact: true }) });
+  await expect(information.getByRole('tab', { name: 'Quick Start', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(information.locator('[role=tab][aria-selected=true]')).toBeFocused();
+  await information.getByRole('button', { name: 'Do not show again', exact: true }).focus();
+  await page.keyboard.press('Tab');
+  await expect(information.getByRole('button', { name: /Close/ })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(help).toBeFocused();
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Help & shortcuts', exact: true }).click();
+  await information.getByRole('tab', { name: 'Support', exact: true }).click();
+  await information.getByRole('button', { name: 'Report an issue', exact: true }).click();
+  await expect(dialog.getByLabel('Description', { exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Account menu', exact: true })).toBeFocused();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('terminal hotkeys do not change paper side behind an open dialog', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard' });
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  await expect(ticket.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Account menu', exact: true }).click();
+  await page.getByRole('button', { name: 'Help & shortcuts', exact: true }).click();
+  await page.getByRole('button', { name: 'Do not show again', exact: true }).focus();
+  await page.keyboard.press('Shift+s');
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(ticket.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeVisible();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('command palette keyboard activation respects the focused command and restores focus', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard' });
+  const opener = page.getByRole('button', { name: 'Account menu', exact: true });
+  await opener.focus(); await page.keyboard.press('Control+k');
+  const search = page.getByPlaceholder('Search symbols, presets, workspaces, commands...');
+  await expect(search).toBeFocused();
+  await search.fill('Go to');
+  const command = page.getByRole('button', { name: 'Go to Settings Switch workspace Workspace', exact: true });
+  await command.focus(); await page.keyboard.press('Enter');
+  await expect(search).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true, level: 1 })).toBeVisible();
+  await expect(opener).toBeFocused();
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name: 'Command palette', exact: true });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('button').last().focus(); await page.keyboard.press('Tab');
+  await expect(search).toBeFocused();
+  await page.keyboard.press('Escape'); await expect(opener).toBeFocused();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 for (const width of [320,390,768]) for (const theme of ['dark','light']) test(`mobile terminal all workspaces at ${width}px ${theme}`, async ({ page }, testInfo) => {
  await page.setViewportSize({ width, height: 844 });
  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', layoutMode: '1', themeMode: theme });

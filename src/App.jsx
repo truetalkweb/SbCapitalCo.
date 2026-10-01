@@ -2040,6 +2040,7 @@ export default function App() {
   useEffect(() => {
     function handleHotkeys(event) {
       if (premiumPreferences.hotkeysEnabled === false) return;
+      if (event.defaultPrevented || event.target?.closest('[role="dialog"], dialog[open]')) return;
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -2048,7 +2049,7 @@ export default function App() {
       }
 
       const tag = event.target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
+      if (tag === "input" || tag === "textarea" || tag === "select" || event.target?.isContentEditable) return;
 
       if (event.shiftKey && event.key.toLowerCase() === "b") {
         event.preventDefault();

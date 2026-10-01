@@ -40,7 +40,7 @@ export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSym
       {setSyncCharts && <button aria-pressed={syncCharts} onClick={() => setSyncCharts(!syncCharts)}>Sync charts: {syncCharts ? "On" : "Off"}</button>}
       {setAdvancedMode && <button aria-pressed={advancedMode} onClick={() => setAdvancedMode(!advancedMode)}>Advanced controls: {advancedMode ? "On" : "Off"}</button>}
       {setMarketRegion && <label className="ws-menu-field">Market region<select aria-label="Market region" value={marketRegion} onChange={event => setMarketRegion(event.target.value)}>{Object.entries(marketRegions).map(([id, region]) => <option key={id} value={id}>{region.label || region.name || id}</option>)}</select></label>}
-      <button onClick={() => { setActiveWorkspace?.("settings"); setProfile(false); }}><Settings size={15} />Settings</button><button onClick={() => { onOpenHelp?.(); setProfile(false); }}><CircleHelp size={15} />Help & shortcuts</button>{handleLogout && <button onClick={handleLogout}><LogOut size={15} />Sign out</button>}</div>}</div>
+      <button onClick={() => { setActiveWorkspace?.("settings"); setProfile(false); }}><Settings size={15} />Settings</button><button onClick={() => { profileControl.current?.querySelector("button")?.focus(); onOpenHelp?.(); setProfile(false); }}><CircleHelp size={15} />Help & shortcuts</button>{handleLogout && <button onClick={handleLogout}><LogOut size={15} />Sign out</button>}</div>}</div>
   </header>;
 }
 

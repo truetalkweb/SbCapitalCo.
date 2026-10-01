@@ -852,6 +852,33 @@ test('paper stop limit remains working after trigger and reload, then fills with
  expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
 });
 
+test('paper lost response survives reload and rapid retry without duplicate execution', async ({ page }) => {
+ await page.clock.setFixedTime(paperNow);
+ const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'NVDA', layoutMode: '1', positions: {}, orders: [], realizedPnL: 0 }, { providerQuotes: [paperProviderQuote(100)] });
+ let first = true; const ids = [];
+ await page.route('**/api/paper/commands', async route => {
+   const { command, limits } = route.request().postDataJSON(); ids.push(command.id);
+   if (!first) return route.fallback();
+   first = false;
+   await evidence.paper.transact(user.id, command, limits);
+   await route.abort('connectionreset');
+ });
+ const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+ await ticket.getByLabel('Paper order type').selectOption('MARKET'); await ticket.getByLabel('Paper quantity').fill('10');
+ await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
+ await expect(ticket.getByRole('status')).toContainText('Response not confirmed');
+ expect(evidence.workspace().paperLedger.positions.NVDA.quantity).toBe(10);
+ await page.reload();
+ await ticket.getByLabel('Paper order type').selectOption('MARKET'); await ticket.getByLabel('Paper quantity').fill('10');
+ await expect(ticket.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeEnabled();
+ await ticket.locator('form').evaluate(form => { form.requestSubmit(); form.requestSubmit(); });
+ await expect(ticket.getByRole('status')).toContainText('FILLED');
+ expect(ids).toHaveLength(2); expect(ids[1]).toBe(ids[0]);
+ expect(evidence.workspace().paperLedger.orders).toHaveLength(1);
+ expect(evidence.workspace().paperLedger.positions.NVDA.quantity).toBe(10);
+ expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test('paper market buy and sell execute from dashboard without a broker and restore after reload', async ({page}, testInfo) => {
  await page.clock.setFixedTime(paperNow);
  const evidence=await setupApp(page,{...initialWorkspace,activeWorkspace:'dashboard',selectedStock:'NVDA',layoutMode:'1',positions:{},orders:[],realizedPnL:0},{providerQuotes:[paperProviderQuote(100)]});

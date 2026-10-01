@@ -4,6 +4,7 @@ import { paperTradeHistory } from '../services/paperOrderCommands.js';
 import { authenticatedFetch } from '../services/authenticatedRequest.js';
 import { BROKER_API_URL } from '../config/terminalConfig.js';
 import { getUsMarketStatus } from '../utils/marketSession.js';
+import { preparePaperCommand, acknowledgePaperCommand } from '../services/paperCommandRecovery.js';
 
 export function usePaperTrading({ state, setState, quotes, enabled, limits, userId }) {
   const current = useRef({ enabled, userId, limits });
@@ -47,21 +48,27 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits, user
   }, [enabled, userId, apply]);
   const command = useCallback(async request => {
     const data = current.current;
-    if (!data.enabled) return { error: 'Wait for your workspace to finish loading.' };
+    if (!data.enabled || !data.userId) return { error: 'Wait for your workspace to finish loading.' };
     if (inFlight.current) return { error: 'An order request is still pending.' };
     inFlight.current = true; setBusy(true);
-    const id = request.id || crypto.randomUUID();
+    let recovered;
     try {
+      recovered = preparePaperCommand(request, data.userId);
       const response = await authenticatedFetch(`${BROKER_API_URL}/api/paper/commands`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20000),
-        body: JSON.stringify({ command: { ...request, id }, limits: data.limits }),
+        body: JSON.stringify({ command: recovered, limits: data.limits }),
       });
       const payload = await response.json();
+      if (response.ok && !payload.state) throw new Error('Invalid paper command response.');
       if (payload.state) apply(payload, data.userId);
+      if (response.status >= 500) throw new Error('Paper service response uncertain.');
+      acknowledgePaperCommand(recovered, data.userId);
       if (!response.ok) return { error: payload.error || 'Paper command could not be completed.' };
       return payload;
     } catch {
-      return { error: 'Response not received. Check Orders before retrying; retrying the same request will not duplicate it.', uncertain: true };
+      return { error: recovered
+        ? 'Response not confirmed. Check Orders before retrying. The unchanged request keeps its original ID after reload in this tab.'
+        : 'Paper request recovery storage is unavailable. Check browser session storage before submitting.', uncertain: Boolean(recovered) };
     } finally { inFlight.current = false; setBusy(false); }
   }, [apply]);
   const submit = useCallback(draft => command({ kind: 'submit', id: draft.id, draft }), [command]);

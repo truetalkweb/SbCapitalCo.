@@ -8,6 +8,7 @@ const ENABLE_QUOTE_SSE = import.meta.env.VITE_ENABLE_QUOTE_SSE === "true";
 const STREAM_RECONNECT_BASE_MS = 1000;
 const STREAM_RECONNECT_MAX_MS = 15000;
 const REST_QUOTE_POLL_MS = 10000;
+const STREAM_SILENCE_MS = 45000;
 
 function normalizeSymbol(value) {
   return String(value || "")
@@ -25,8 +26,10 @@ function parseEventData(event) {
   }
 }
 
-class MarketDataService {
-  constructor() {
+export class MarketDataService {
+  constructor({ enableSse = ENABLE_QUOTE_SSE } = {}) {
+    this.enableSse = enableSse;
+    this.streamWatchdog = null;
     this.eventSource = null;
     this.subscribers = new Map();
     this.subscribedSymbols = new Set();
@@ -52,7 +55,18 @@ class MarketDataService {
       }
       if (this.subscribedSymbols.size) this.scheduleConnect(0);
     };
+    this.handleOffline = () => {
+      clearTimeout(this.reconnectTimer); this.reconnectTimer = null;
+      clearTimeout(this.connectTimer); this.connectTimer = null;
+      this.closeEventSource(); this.clearPollTimer();
+      this.setStatus("RECONNECTING");
+    };
+    this.handleOnline = () => {
+      if (this.subscribedSymbols.size) this.scheduleConnect(0);
+    };
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("offline", this.handleOffline);
+    window.addEventListener("online", this.handleOnline);
   }
 
   setStatus(status) {
@@ -75,6 +89,8 @@ class MarketDataService {
   }
 
   closeEventSource() {
+    clearTimeout(this.streamWatchdog);
+    this.streamWatchdog = null;
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
@@ -103,7 +119,7 @@ class MarketDataService {
   }
 
   connect() {
-    if (document.visibilityState === "hidden") return;
+    if (document.visibilityState === "hidden" || navigator.onLine === false) return;
     const symbols = this.getSubscribedSymbolList();
 
     if (!symbols.length) {
@@ -116,7 +132,8 @@ class MarketDataService {
 
     const streamKey = symbols.join(",");
 
-    if (!ENABLE_QUOTE_SSE || symbols.length > 20) {
+    if (!this.enableSse || symbols.length > 20) {
+      if (this.activeStreamKey !== streamKey) this.clearPollTimer();
       this.activeStreamKey = streamKey;
       this.closeEventSource();
 
@@ -140,13 +157,27 @@ class MarketDataService {
 
     const source = new EventSource(this.buildStreamUrl(symbols));
     this.eventSource = source;
+    const watchdog = () => {
+      clearTimeout(this.streamWatchdog);
+      this.streamWatchdog = window.setTimeout(() => {
+        if (this.eventSource !== source) return;
+        this.closeEventSource();
+        this.setStatus("RECONNECTING");
+        this.startRestFallback();
+      }, STREAM_SILENCE_MS);
+    };
+    watchdog();
 
     source.addEventListener("open", () => {
+      if (this.eventSource !== source) return;
+      watchdog();
       this.reconnectAttempt = 0;
       this.setStatus("STREAM");
     });
 
     source.addEventListener("status", (event) => {
+      if (this.eventSource !== source) return;
+      watchdog();
       const payload = parseEventData(event);
 
       if (!payload) return;
@@ -160,11 +191,15 @@ class MarketDataService {
     });
 
     source.addEventListener("quote", (event) => {
+      if (this.eventSource !== source) return;
+      watchdog();
       const payload = parseEventData(event);
       this.handleQuotePayload(payload);
     });
 
     source.onmessage = (event) => {
+      if (this.eventSource !== source) return;
+      watchdog();
       const payload = parseEventData(event);
       this.handleQuotePayload(payload);
     };
@@ -173,22 +208,22 @@ class MarketDataService {
       if (this.eventSource !== source) return;
 
       this.closeEventSource();
+      this.setStatus("RECONNECTING");
       this.startRestFallback();
     };
   }
 
   startRestFallback(delayMs = 0) {
-    this.setStatus(this.reconnectAttempt ? "RECONNECTING" : "BACKEND");
-
     clearTimeout(this.pollTimer);
-    if (document.visibilityState === "hidden") return;
-    if (ENABLE_QUOTE_SSE && this.subscribedSymbols.size <= 20 && !this.reconnectTimer) {
+    if (!this.subscribedSymbols.size || document.visibilityState === "hidden" || navigator.onLine === false) return;
+    if (this.enableSse && this.subscribedSymbols.size <= 20 && !this.reconnectTimer) {
       this.reconnectTimer = window.setTimeout(() => {
         this.reconnectTimer = null;
         this.connect();
       }, STREAM_RECONNECT_MAX_MS);
     }
     this.pollTimer = window.setTimeout(() => {
+      this.pollTimer = null;
       this.pollQuotes();
     }, delayMs);
   }
@@ -196,7 +231,7 @@ class MarketDataService {
   async pollQuotes() {
     const symbols = this.getSubscribedSymbolList();
 
-    if (!symbols.length || this.pollInFlight || document.visibilityState === "hidden") return;
+    if (!symbols.length || this.pollInFlight || document.visibilityState === "hidden" || navigator.onLine === false) return;
 
     this.pollInFlight = true;
     const controller = new AbortController();
@@ -218,7 +253,7 @@ class MarketDataService {
             const response = await fetch(url.toString(), { signal: controller.signal });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const payload = await response.json();
-            if (controller.signal.aborted) return;
+            if (controller.signal.aborted || this.pollAbortController !== controller) return;
             delayed ||= Boolean(payload.delayed);
             this.handleQuotePayload({ ...payload, stream: { transport: "rest", mode: "backend-poll" } });
           } catch {
@@ -264,7 +299,7 @@ class MarketDataService {
 
     if (!quotes.length) return;
 
-    this.reconnectAttempt = 0;
+    if (payload.stream?.transport !== "rest") this.reconnectAttempt = 0;
     this.setStatus(payload.delayed ? "DELAYED" : payload.stream?.transport === "rest" ? "BACKEND" : "STREAM");
 
     quotes.forEach((quote) => this.emitQuote(quote, payload));
@@ -315,6 +350,8 @@ class MarketDataService {
   disconnect() {
     clearTimeout(this.reconnectTimer);
     clearTimeout(this.connectTimer);
+    this.reconnectTimer = null;
+    this.connectTimer = null;
     this.clearPollTimer();
     this.reconnectAttempt = 0;
     this.activeStreamKey = "";

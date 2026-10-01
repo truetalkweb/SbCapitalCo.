@@ -9,12 +9,13 @@ function serviceHarness() {
   const clearTimeout = key => timers.delete(key);
   const context = { URL, AbortController, Map, Set, setTimeout, clearTimeout,
     document: { visibilityState:"visible",addEventListener(){} },
-    window: {setTimeout,clearTimeout}, EventSource: class {addEventListener(){} close(){}},
+    window: {setTimeout,clearTimeout,addEventListener(){}}, navigator: { onLine: true }, EventSource: class {addEventListener(){} close(){}},
     normalizeQuoteEvent: quote=>quote,
     fetch: (_url,{signal})=>new Promise((_,reject)=>signal.addEventListener("abort",()=>reject(new Error("aborted")))),
   };
   let source=fs.readFileSync(new URL("../src/services/marketDataService.js",import.meta.url),"utf8");
   source=source.slice(source.indexOf("const STREAM_RECONNECT_BASE_MS"),source.indexOf("export const marketDataService"));
+  source=source.replace('export class MarketDataService', 'class MarketDataService');
   vm.runInNewContext(`const ENABLE_QUOTE_SSE=true; const DEFAULT_BROKER_API_URL="http://localhost:4999"; ${source}; globalThis.service=new MarketDataService();`,context);
   return { service:context.service, timers, context };
 }
@@ -67,4 +68,20 @@ test("a failed quote batch does not prevent other symbols from refreshing", asyn
   assert.equal(requests, 3);
   assert.equal(service.status, "RECONNECTING");
   assert.equal(service.pollInFlight, false);
+});
+
+test('partial batch successes do not reset outage backoff or erase delayed status', async () => {
+  const { service, context, timers } = serviceHarness();
+  Array.from({ length: 25 }, (_, index) => `T${index}`).forEach(symbol => service.subscribedSymbols.add(symbol));
+  let failed = true;
+  context.fetch = async url => {
+    const symbols = new URL(url).searchParams.get('symbols').split(',');
+    if (failed && symbols.length === 5) throw new Error('One batch unavailable');
+    return { ok: true, json: async () => ({ delayed: true, quotes: symbols.map(symbol => ({ symbol, price: 100 })) }) };
+  };
+  await service.pollQuotes(); await service.pollQuotes(); await service.pollQuotes();
+  assert.equal(service.reconnectAttempt, 3); assert.equal(service.status, 'RECONNECTING');
+  assert.ok([...timers.values()].some(timer => timer.ms === 4000));
+  failed = false; await service.pollQuotes();
+  assert.equal(service.reconnectAttempt, 0); assert.equal(service.status, 'DELAYED');
 });

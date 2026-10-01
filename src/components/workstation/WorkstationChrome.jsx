@@ -32,7 +32,7 @@ export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSym
       const row = quotes.find(item => item.symbol === symbol); const move = Number.parseFloat(row?.changePercent ?? row?.change);
       return <button key={symbol} onClick={() => pick(symbol)}>{symbol}<span className={Number.isFinite(move) ? move < 0 ? "ws-negative" : "ws-positive" : ""}>{Number.isFinite(move) ? `${move >= 0 ? "+" : ""}${move.toFixed(2)}%` : "—"}</span></button>;
     })}</div>
-    <time className="ws-clock" dateTime={now.toISOString()}>{now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}<br />{now.toLocaleTimeString("en-US", { hour12: false, timeZone: "America/New_York" })} ET</time>
+    <time className="ws-clock" dateTime={now.toISOString()}>{now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}<br />{now.toLocaleTimeString("en-US", { hourCycle: 'h23', timeZone: "America/New_York" })} ET</time>
     <button className="ws-icon" aria-label="Notifications and alerts" onClick={() => setActiveWorkspace?.("alerts")}><Bell size={20} /></button>
     <div className="ws-profile" ref={profileControl}><button aria-label="Account menu" aria-expanded={profile} onClick={() => setProfile(value => !value)}><span>SB</span><ChevronDown size={13} /></button>{profile && <div className="ws-profile-menu"><small>SB TERMINAL</small>
       {saveWorkspaceToCloud && <button onClick={() => { saveWorkspaceToCloud(); setProfile(false); }}>Save workspace</button>}

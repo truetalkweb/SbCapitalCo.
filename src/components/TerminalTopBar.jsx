@@ -1,6 +1,7 @@
 import { formatTerminalStatusLabel } from "../utils/marketUtils";
 
-import { getNyDateParts, formatDateKey, getMarketHolidayKeys } from "../utils/marketSession";
+import { getUsMarketStatus } from "../utils/marketSession";
+import { useMarketClock } from '../hooks/useMarketClock.js';
 import { WorkstationHeader } from "./workstation/WorkstationChrome";
 
 export default function TerminalTopBar({
@@ -55,36 +56,15 @@ export default function TerminalTopBar({
     event.stopPropagation();
     setActiveWorkspace(workspaceId);
   };
-  const now = new Date();
+  const now = useMarketClock();
 
   const pacificTime = now.toLocaleTimeString("en-US", {
     timeZone: "America/Los_Angeles",
     hour12: false,
   });
 
-  const nyParts = getNyDateParts(now);
-  const minuteOfDay = nyParts.hour * 60 + nyParts.minute;
-  const todayKey = formatDateKey(nyParts.year, nyParts.month, nyParts.day);
-  const isWeekend = nyParts.weekday === "Sat" || nyParts.weekday === "Sun";
-  const isMarketHoliday = getMarketHolidayKeys(nyParts.year).has(todayKey);
-
-  let marketStatus = "CLOSED";
-  let marketColor = theme.red;
-
-  if (!isWeekend && !isMarketHoliday && minuteOfDay >= 4 * 60 && minuteOfDay < 9 * 60 + 30) {
-    marketStatus = "PREMARKET";
-    marketColor = "#f59e0b";
-  }
-
-  if (!isWeekend && !isMarketHoliday && minuteOfDay >= 9 * 60 + 30 && minuteOfDay < 16 * 60) {
-    marketStatus = "OPEN";
-    marketColor = theme.green;
-  }
-
-  if (!isWeekend && !isMarketHoliday && minuteOfDay >= 16 * 60 && minuteOfDay < 20 * 60) {
-    marketStatus = "AFTER HOURS";
-    marketColor = theme.blue;
-  }
+  const marketStatus = getUsMarketStatus(now);
+  const marketColor = marketStatus === 'OPEN' ? theme.green : marketStatus === 'PREMARKET' ? '#f59e0b' : marketStatus === 'AFTER HOURS' ? theme.blue : theme.red;
 
   const compactButton = (active = false) => ({
     ...buttonStyle(active),

@@ -22,6 +22,7 @@ export default function ChartPanel({
   setSymbol,
   editableSymbol = false,
   tf,
+  timeZone,
   setTf,
   livePrice: quotePrice,
   quoteChange,
@@ -465,6 +466,7 @@ export default function ChartPanel({
           <Chart
             symbol={cleanChartSymbol}
             timeframe={tf}
+            timeZone={timeZone}
             livePrice={livePrice ?? null}
             livePulse={
               allSymbols.find((item) => item.symbol === cleanChartSymbol)?.lastUpdated ||

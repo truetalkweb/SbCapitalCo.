@@ -334,7 +334,7 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
     blocked.push(`${request.method()} ${url.origin}${url.pathname}`);
     return route.fulfill({ status: 409, json: { error: "External access blocked by isolated test" } });
   });
-  const expiry = Math.floor(Date.now() / 1000) + 3600;
+  const expiry = Math.floor(await page.evaluate(() => Date.now()) / 1000) + 3600;
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
   const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: user.id, role: "authenticated", exp: expiry })}.dGVzdA`;
   await page.addInitScript(({ user, token, expiry }) => {
@@ -841,6 +841,62 @@ test("secondary workspace navigation keeps the shared shell and light theme", as
 
 const paperNow = new Date('2026-09-21T15:00:00Z');
 const paperProviderQuote = (price, symbol = 'NVDA') => ({symbol,price,bidPrice:price-0.01,askPrice:price+0.01,lastTradeTime:paperNow.toISOString(),source:'Isolated paper test provider',realtime:true});
+
+test('early close updates dashboard and paper ticket without quote activity; DAY expires and GTC waits', async ({ page }, testInfo) => {
+  const before = new Date('2026-11-27T17:59:50Z');
+  await page.clock.install({ time: before });
+  const quotes = [{ ...paperProviderQuote(100), lastTradeTime: before.toISOString() }];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'NVDA', layoutMode: '1', positions: {}, orders: [], realizedPnL: 0 }, { providerQuotes: quotes });
+  const metric = page.locator('.ws-market-status');
+  await expect(metric).toContainText('Market Open'); await expect(metric).toContainText('Early close · 13:00 ET');
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  await ticket.getByLabel('Paper order type').selectOption('LIMIT'); await ticket.getByLabel('Paper quantity').fill('1');
+  await ticket.getByLabel('Limit price', { exact: true }).fill('95');
+  await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.orders[0]?.expiresAt).toBe('2026-11-27T18:00:00.000Z');
+  await page.clock.fastForward(10000);
+  await expect(metric).toContainText('AFTER HOURS'); await expect(ticket).toContainText('Session closed');
+  await page.clock.fastForward(5000);
+  await expect.poll(() => evidence.workspace().paperLedger?.orders[0]?.status).toBe('EXPIRED');
+  await ticket.getByRole('button', { name: 'New order', exact: true }).click();
+  await ticket.getByLabel('Paper order type').selectOption('MARKET'); await ticket.locator('summary').click();
+  await ticket.getByLabel('Paper duration').selectOption('GTC');
+  await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
+  await expect(ticket.getByRole('status')).toContainText('Queued for the regular US equity session');
+  expect(evidence.workspace().paperLedger.positions).toEqual({});
+  await page.screenshot({ path: testInfo.outputPath('early-close-dashboard.png') });
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('holiday calendar shows closed and DAY queues until the next regular session', async ({ page }) => {
+  const time = new Date('2026-12-25T15:00:00Z'); await page.clock.setFixedTime(time);
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'NVDA', layoutMode: '1', positions: {}, orders: [] }, { providerQuotes: [{ ...paperProviderQuote(100), lastTradeTime: time.toISOString() }] });
+  await expect(page.locator('.ws-market-status')).toContainText('Market Closed');
+  await expect(page.locator('.ws-market-status')).toContainText('Exchange holiday');
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  await ticket.getByLabel('Paper order type').selectOption('MARKET'); await ticket.getByLabel('Paper quantity').fill('1');
+  await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.orders[0]?.expiresAt).toBe('2026-12-28T21:00:00.000Z');
+  expect(evidence.workspace().paperLedger.positions).toEqual({}); expect(evidence.errors).toEqual([]);
+});
+
+test('chart saved timezone controls tooltip labels while market-session clock stays Eastern', async ({ page }, testInfo) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'AAPL', layoutMode: '1', timeZone: 'America/New_York' });
+  const chart = page.getByRole('region', { name: 'Primary trading chart', exact: true });
+  const showTime = async () => {
+    const canvas = chart.locator('canvas').first(); await expect(canvas).toBeVisible();
+    const box = await canvas.boundingBox(); await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.45);
+    return chart.locator('[data-chart-time]');
+  };
+  await expect(await showTime()).toContainText('EDT');
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByLabel('Time zone', { exact: true }).selectOption('UTC');
+  await expect.poll(() => evidence.workspace().timeZone).toBe('UTC');
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Dashboard', exact: true }).click();
+  await expect(await showTime()).toContainText('UTC'); await expect(page.locator('.ws-clock')).toContainText('ET');
+  await page.screenshot({ path: testInfo.outputPath('chart-timezone-utc.png') });
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
 
 for (const width of [390, 1536]) test(`paper cost preferences save and restore without changing dashboard layout at ${width}px`, async ({ page }, testInfo) => {
   await page.setViewportSize({ width, height: 1000 });

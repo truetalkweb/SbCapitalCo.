@@ -1,6 +1,6 @@
 import { normalizeMarketQuote } from '../utils/marketDataContract.js';
 import { parseNullableMarketNumber as number } from '../utils/marketNumbers.js';
-import { getUsMarketStatus } from '../utils/marketSession.js';
+import { getUsMarketStatus, getNextUsEquityClose } from '../utils/marketSession.js';
 
 export const PAPER_STARTING_CASH = 100000;
 export const PAPER_TYPES = ['MARKET', 'LIMIT', 'STOP', 'STOP_LIMIT'];
@@ -88,14 +88,7 @@ export function paperBalances(state, quotes = [], now = Date.now()) {
 }
 
 function dayExpiry(now) {
-  // Find the next regular session, including weekends and exchange holidays.
-  let time = Math.floor(now / 60000) * 60000;
-  for (let count = 0; count < 14 * 48; count++, time += 30 * 60000) {
-    if (getUsMarketStatus(new Date(time)) !== 'OPEN') continue;
-    while (getUsMarketStatus(new Date(time)) === 'OPEN') time += 60000;
-    return iso(time);
-  }
-  throw new Error('Unable to determine the next paper trading session.');
+  return getNextUsEquityClose(new Date(now));
 }
 
 export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), limits = {}) {
@@ -182,6 +175,13 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
   const working = next.orders.filter(isWorkingPaperOrder).reverse();
   for (const order of working) {
     if (!isWorkingPaperOrder(order)) continue;
+    // Repair pending DAY expiries created with the former 16:00-only calendar.
+    // Preserve any earlier explicit expiry, and leave GTC orders untouched.
+    const submitted = Date.parse(order.submittedAt || order.createdAt);
+    if (order.tif === 'DAY' && Number.isFinite(submitted)) {
+      const scheduled = dayExpiry(submitted);
+      if (!order.expiresAt || Date.parse(order.expiresAt) > Date.parse(scheduled)) order.expiresAt = scheduled;
+    }
     if (order.expiresAt && now >= Date.parse(order.expiresAt)) {
       Object.assign(order, { status: 'EXPIRED', remaining: 0, reason: 'DAY order expired', updatedAt: iso(now) }); continue;
     }

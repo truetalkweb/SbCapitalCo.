@@ -1,8 +1,9 @@
 import PaperOrderTicket from "./PaperOrderTicket";
 import { currency, price, signed, valueClass } from "./workstationFormat";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { BellPlus, Camera, CandlestickChart, ChartNoAxesCombined, ChevronDown, Crosshair, Maximize2, MoreHorizontal, MousePointer2, RotateCcw, Settings, Star, TrendingUp } from "lucide-react";
-import { getUsMarketStatus } from "../../utils/marketSession";
+import { getUsEquitySession } from "../../utils/marketSession";
+import { useMarketClock } from '../../hooks/useMarketClock.js';
 import { CHART_INDICATOR_OPTIONS } from "../../indicators/chartIndicators";
 import { formatCompactNumber } from "../../utils/dashboardFormatters";
 import { parseNullableMarketNumber as number } from "../../utils/marketNumbers";
@@ -15,9 +16,9 @@ export default function WorkstationDashboard({ selected = {}, chart, account = {
   const [indicatorMenu, setIndicatorMenu] = useState(false);
   const [story, setStory] = useState(null);
   const indicatorControl = useDismissPopover(indicatorMenu, setIndicatorMenu);
-  const [clock, setClock] = useState(() => new Date());
-  useEffect(() => { const timer = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(timer); }, []);
-  const marketStatus = providedMarketStatus ?? getUsMarketStatus(clock);
+  const clock = useMarketClock();
+  const equitySession = getUsEquitySession(clock);
+  const marketStatus = providedMarketStatus ?? equitySession.status;
   const chartPanel = useRef(null);
   const move = number(selected.changePercent);
   const accountRows = new Map((account?.rows || []).map(row => [row.label, number(row.value)]));
@@ -33,7 +34,7 @@ export default function WorkstationDashboard({ selected = {}, chart, account = {
       <section className="ws-panel ws-metric"><span>Buying Power</span><strong>{currency(accountRows.get("Buying Power"))}</strong></section>
       <section className="ws-panel ws-metric"><span>Open Positions</span><strong>{positions.length}</strong></section>
       <section className="ws-panel ws-metric"><span>Today's Trades</span><strong>{todaysTrades}</strong><small>Recorded fills</small></section>
-      <section className="ws-panel ws-metric ws-market-status"><span>Market Status</span><strong><i className={`ws-status-dot ${marketStatus === "OPEN" ? "ws-open" : ""}`} />{marketStatus === "OPEN" ? "Market Open" : marketStatus === "CLOSED" ? "Market Closed" : marketStatus}</strong><small>US equities · Eastern time</small></section>
+      <section className="ws-panel ws-metric ws-market-status" title={equitySession.reason}><span>Market Status</span><strong><i className={`ws-status-dot ${marketStatus === "OPEN" ? "ws-open" : ""}`} />{marketStatus === "OPEN" ? "Market Open" : marketStatus === "CLOSED" ? "Market Closed" : marketStatus}</strong><small>{equitySession.earlyClose ? 'Early close · 13:00 ET' : equitySession.reason === 'Exchange holiday' ? 'Exchange holiday · ET' : 'US equities · Eastern time'}</small></section>
       <section className="ws-panel ws-indices" aria-label="Market indices">{(["DIA", "SPY", "QQQ"].map(symbol => marketIndexes.find(row => row.symbol === symbol) || { symbol })).map(row => <button key={row.symbol} onClick={() => onSelect?.(row.symbol)}><span>{row.symbol}</span><b>{price(row.price)}</b><span className={valueClass(row.changePercent ?? row.change)}>{number(row.changePercent ?? row.change) === null ? "—" : `${signed(row.changePercent ?? row.change)}%`}</span></button>)}</section>
     </div>
     <div className="ws-main-grid">

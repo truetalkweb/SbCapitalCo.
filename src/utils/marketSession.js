@@ -1,5 +1,4 @@
-function getNyDateParts(date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
+const nyFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     year: "numeric",
     month: "2-digit",
@@ -7,8 +6,10 @@ function getNyDateParts(date) {
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
+    hourCycle: 'h23',
+});
+function getNyDateParts(date) {
+  const parts = nyFormatter.formatToParts(date);
 
   const value = (type) => parts.find((part) => part.type === type)?.value;
 
@@ -81,27 +82,59 @@ function toKey(date) {
 }
 
 function getMarketHolidayKeys(year) {
-  return new Set([
-    toKey(observedFixedHoliday(year, 1, 1)),
+  const holidays = new Set([
+    // NYSE does not observe New Year's Day on the preceding Friday when
+    // January 1 falls on Saturday (including December 31, 2027).
+    ...(new Date(Date.UTC(year, 0, 1)).getUTCDay() === 6 ? [] : [toKey(observedFixedHoliday(year, 1, 1))]),
     toKey(nthWeekdayOfMonth(year, 1, 1, 3)),
     toKey(nthWeekdayOfMonth(year, 2, 1, 3)),
     toKey(addUtcDays(getEasterSunday(year), -2)),
     toKey(lastWeekdayOfMonth(year, 5, 1)),
-    toKey(observedFixedHoliday(year, 6, 19)),
+    ...(year >= 2022 ? [toKey(observedFixedHoliday(year, 6, 19))] : []),
     toKey(observedFixedHoliday(year, 7, 4)),
     toKey(nthWeekdayOfMonth(year, 9, 1, 1)),
     toKey(nthWeekdayOfMonth(year, 11, 4, 4)),
     toKey(observedFixedHoliday(year, 12, 25)),
   ]);
+  if (year === 2025) holidays.add('2025-01-09'); // National Day of Mourning.
+  return holidays;
+}
+
+// Core equity calendar, with the conventional Nasdaq/Arca extended window.
+// Sources: https://www.nyse.com/trade/hours-calendars and Nasdaq Trader calendar.
+// This schedule does not infer a provider connection or an instrument halt.
+export function getUsEquitySession(date = new Date()) {
+  if (!(date instanceof Date) || !Number.isFinite(date.getTime())) return { status: 'CLOSED', label: 'Closed', isRegular: false, reason: 'Invalid session time', earlyClose: false };
+  const parts = getNyDateParts(date);
+  const minutes = parts.hour * 60 + parts.minute;
+  const dateKey = formatDateKey(parts.year, parts.month, parts.day);
+  const weekend = ['Sat', 'Sun'].includes(parts.weekday), holiday = getMarketHolidayKeys(parts.year).has(dateKey);
+  const thanksgivingFriday = toKey(addUtcDays(nthWeekdayOfMonth(parts.year, 11, 4, 4), 1));
+  const earlyClose = !weekend && !holiday && (dateKey === thanksgivingFriday || (parts.month === 7 && parts.day === 3) || (parts.month === 12 && parts.day === 24));
+  const closeMinute = earlyClose ? 780 : 960, extendedCloseMinute = earlyClose ? 1020 : 1200;
+  const status = weekend || holiday ? 'CLOSED' : minutes >= 570 && minutes < closeMinute ? 'OPEN'
+    : minutes >= 240 && minutes < 570 ? 'PREMARKET'
+      : minutes >= closeMinute && minutes < extendedCloseMinute ? 'AFTER HOURS' : 'CLOSED';
+  return { status, label: { OPEN: 'Regular', PREMARKET: 'Premarket', 'AFTER HOURS': 'After Hours', CLOSED: 'Closed' }[status],
+    isRegular: status === 'OPEN', dateKey, earlyClose, closeMinute, extendedCloseMinute,
+    reason: holiday ? 'Exchange holiday' : weekend ? 'Weekend' : earlyClose ? 'Early close at 13:00 ET' : 'US equity core session calendar' };
 }
 
 export function getUsMarketStatus(date = new Date()) {
+  return getUsEquitySession(date).status;
+}
+
+export function getNextUsEquityClose(date = new Date()) {
+  if (!(date instanceof Date) || !Number.isFinite(date.getTime())) throw new Error('Invalid paper session time.');
   const parts = getNyDateParts(date);
-  const minutes = parts.hour * 60 + parts.minute;
-  if (["Sat", "Sun"].includes(parts.weekday) || getMarketHolidayKeys(parts.year).has(formatDateKey(parts.year, parts.month, parts.day))) return "CLOSED";
-  if (minutes >= 240 && minutes < 570) return "PREMARKET";
-  if (minutes >= 570 && minutes < 960) return "OPEN";
-  if (minutes >= 960 && minutes < 1200) return "AFTER HOURS";
-  return "CLOSED";
+  for (let offset = 0; offset < 15; offset++) {
+    const noonUtc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offset, 12));
+    const session = getUsEquitySession(noonUtc);
+    if (session.reason === 'Weekend' || session.reason === 'Exchange holiday') continue;
+    const local = getNyDateParts(noonUtc);
+    const close = noonUtc.getTime() + (session.closeMinute - local.hour * 60 - local.minute) * 60000;
+    if (date.getTime() < close) return new Date(close).toISOString();
+  }
+  throw new Error('Unable to determine the next paper trading session.');
 }
 export { getNyDateParts, formatDateKey, getMarketHolidayKeys };

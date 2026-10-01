@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -12,6 +12,8 @@ import { marketDataService } from "../services/marketDataService";
 import { normalizeCandleDataset, normalizeMarketQuote } from "../utils/marketDataContract.js";
 import { visibleReplayCandles } from "../utils/replayLedger.js";
 import { fetchJsonWithTimeout } from "../services/fetchJsonWithTimeout.js";
+import { createChartTimeFormatters } from '../utils/chartTimeFormatters.js';
+import { getNyDateParts, formatDateKey } from '../utils/marketSession.js';
 
 const DEFAULT_BROKER_API_URL = (import.meta.env.VITE_BROKER_API_URL || "http://localhost:4000").replace(/\/+$/, "");
 
@@ -36,7 +38,8 @@ function escapeHtml(value) {
 function getCandleDateKey(candle) {
   const timestamp = Number(candle?.time || 0);
   if (!timestamp) return "";
-  return new Date(timestamp * 1000).toISOString().slice(0, 10);
+  const parts = getNyDateParts(new Date(timestamp * 1000));
+  return formatDateKey(parts.year, parts.month, parts.day);
 }
 
 function calculateAutoLevels(candles) {
@@ -72,6 +75,7 @@ function calculateAutoLevels(candles) {
 function Chart({
   symbol,
   timeframe,
+  timeZone = 'America/New_York',
   indicators = {},
   onStatusChange,
   replayMode = false,
@@ -83,6 +87,8 @@ function Chart({
   isDark = true,
   workstation = false,
 }) {
+  const timeFormatters = useMemo(() => createChartTimeFormatters(timeZone, !/^(?:1?[dDwW]|1?M)$/.test(timeframe)), [timeZone, timeframe]);
+  const timeFormattersRef = useRef(timeFormatters);
   const chartSymbol = String(symbol || "").trim().toUpperCase() || "SPY";
   const chartTheme = isDark
     ? {
@@ -135,6 +141,11 @@ function Chart({
   const [historyRevision, setHistoryRevision] = useState(0);
   const replayViewRef = useRef({ replayMode, replayIndex });
   const liveQuoteLineRef = useRef(null);
+
+  useLayoutEffect(() => {
+    timeFormattersRef.current = timeFormatters;
+    chartRef.current?.applyOptions({ localization: { timeFormatter: timeFormatters.timeFormatter }, timeScale: { tickMarkFormatter: timeFormatters.tickMarkFormatter } });
+  }, [timeFormatters]);
 
   useLayoutEffect(() => {
     replayViewRef.current = { replayMode, replayIndex };
@@ -399,6 +410,7 @@ function Chart({
       },
       localization: {
         priceFormatter: (price) => `$${Number(price).toFixed(2)}`,
+        timeFormatter: time => timeFormattersRef.current.timeFormatter(time),
       },
       rightPriceScale: {
         borderColor: chartTheme.border,
@@ -409,6 +421,7 @@ function Chart({
         },
       },
       timeScale: {
+        tickMarkFormatter: (time, type) => timeFormattersRef.current.tickMarkFormatter(time, type),
         borderColor: chartTheme.border,
         timeVisible: true,
         secondsVisible: false,
@@ -502,6 +515,7 @@ function Chart({
       tooltipRef.current.style.top = `${Math.max(param.point.y - 84, 8)}px`;
       tooltipRef.current.innerHTML = `
         <div style="font-weight:900;color:${chartTheme.tooltipTitle};margin-bottom:4px">${escapeHtml(chartSymbol)} - ${escapeHtml(timeframe)}</div>
+        <div data-chart-time>${escapeHtml(timeFormattersRef.current.timeFormatter(candle.time))}</div>
         <div>O: <b>${candle.open.toFixed(2)}</b></div>
         <div>H: <b style="color:#00c896">${candle.high.toFixed(2)}</b></div>
         <div>L: <b style="color:#ef5350">${candle.low.toFixed(2)}</b></div>

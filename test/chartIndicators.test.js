@@ -15,3 +15,10 @@ test("EMA calculated from a visible prefix is unaffected by later candles", () =
   assert.deepEqual(calculateEMA(data.slice(0, 1), 9), [{ time: 1, value: 10 }]);
   assert.deepEqual(calculateEMA(data.slice(0, 2), 9), [{ time: 1, value: 10 }, { time: 2, value: 12 }]);
 });
+
+test('VWAP resets at the Eastern date boundary without splitting the same session at UTC midnight', () => {
+  const bar = (iso, price) => ({ time: Date.parse(iso) / 1000, high: price, low: price, close: price, volume: 100 });
+  const rows = [bar('2026-10-01T23:59:00Z', 10), bar('2026-10-02T00:00:00Z', 20), bar('2026-10-02T08:00:00Z', 100)];
+  assert.deepEqual(calculateVWAP(rows).map(row => row.value), [10, 15, 100]);
+  assert.deepEqual(calculateVWAP(rows.slice(0, 2)).map(row => row.value), [10, 15]);
+});

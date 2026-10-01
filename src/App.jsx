@@ -2353,6 +2353,7 @@ export default function App() {
     return (
       <ChartPanel
         {...chartProps}
+        timeZone={timeZone}
         theme={chartProps.workstation ? workstationTheme(theme) : theme}
         isDark={isDark}
         allSymbols={allSymbols}

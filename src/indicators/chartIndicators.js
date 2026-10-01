@@ -1,3 +1,5 @@
+import { getNyDateParts, formatDateKey } from '../utils/marketSession.js';
+
 export const CHART_INDICATORS = [
   {
     id: "ema9",
@@ -85,6 +87,7 @@ export function calculateVWAP(data) {
 
   let cumulativePriceVolume = 0;
   let cumulativeVolume = 0;
+  let sessionKey;
 
   return data
     .filter((candle) =>
@@ -93,6 +96,12 @@ export function calculateVWAP(data) {
       Number.isFinite(Number(candle.close))
     )
     .map((candle) => {
+      const time = Number(candle.time);
+      const date = new Date(time * 1000);
+      if (!Number.isFinite(time) || !Number.isFinite(date.getTime())) return null;
+      const parts = getNyDateParts(date);
+      const key = formatDateKey(parts.year, parts.month, parts.day);
+      if (key !== sessionKey) { sessionKey = key; cumulativePriceVolume = 0; cumulativeVolume = 0; }
       const high = Number(candle.high);
       const low = Number(candle.low);
       const close = Number(candle.close);

@@ -1,25 +1,6 @@
 import { useMemo } from "react";
-
-function getUsMarketSession(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Vancouver",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const getPart = (type) => parts.find((item) => item.type === type)?.value || "";
-  const weekday = getPart("weekday");
-  const minutes = Number(getPart("hour")) * 60 + Number(getPart("minute"));
-  const isWeekday = !["Sat", "Sun"].includes(weekday);
-  const regularOpen = 6 * 60 + 30;
-  const regularClose = 13 * 60;
-
-  if (!isWeekday) return { label: "Closed", isRegular: false };
-  if (minutes < regularOpen) return { label: "Premarket", isRegular: false };
-  if (minutes <= regularClose) return { label: "Regular", isRegular: true };
-  return { label: "After Hours", isRegular: false };
-}
+import { getUsEquitySession } from '../utils/marketSession.js';
+import { useMarketClock } from './useMarketClock.js';
 
 export function useOrderRisk({
   brokerConnected,
@@ -67,7 +48,7 @@ export function useOrderRisk({
 
   const orderValue = Number(orderEntryPrice || 0) * Number(quantity || 0);
   const quantityValue = Number(quantity || 0);
-  const marketSession = getUsMarketSession();
+  const marketSession = getUsEquitySession(useMarketClock());
   const dailyRealizedLoss = Math.max(0, -Number(realizedPnL || 0));
   const positionQuantity = Number(positions[selectedStock]?.quantity || 0);
   const positionAverage = Number(positions[selectedStock]?.average || 0);

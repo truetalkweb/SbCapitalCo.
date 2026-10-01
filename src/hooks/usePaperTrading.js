@@ -5,8 +5,10 @@ import { authenticatedFetch } from '../services/authenticatedRequest.js';
 import { BROKER_API_URL } from '../config/terminalConfig.js';
 import { getUsMarketStatus } from '../utils/marketSession.js';
 import { preparePaperCommand, acknowledgePaperCommand } from '../services/paperCommandRecovery.js';
+import { useMarketClock } from './useMarketClock.js';
 
 export function usePaperTrading({ state, setState, quotes, enabled, limits, userId, paperCosts = {} }) {
+  const sessionClock = useMarketClock();
   const current = useRef({ enabled, userId, limits, paperCosts });
   const version = useRef({ userId, revision: -1 });
   const inFlight = useRef(false);
@@ -81,5 +83,5 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits, user
   return { submit, cancel, command, busy, balances, history, dailyRealized, paperCosts,
     ready: enabled && connection.userId === userId && connection.ready,
     error: connection.userId === userId ? connection.error : '', worker: connection.worker,
-    session: getUsMarketStatus(new Date(now)), orders: state.orders, positions: state.positions };
+    session: getUsMarketStatus(sessionClock), orders: state.orders, positions: state.positions };
 }

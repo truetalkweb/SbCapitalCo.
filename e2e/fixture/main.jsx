@@ -1,4 +1,5 @@
 import { normalizeJournalRecord } from "/src/utils/journalAccounting.js";
+import { readWorkspaceBackup } from "/src/services/workspaceBackupPolicy.js";
 /* eslint-disable react-refresh/only-export-components */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -240,6 +241,7 @@ function Harness() {
         loadWorkspaceFromCloud={() => Promise.resolve(true)}
         exportWorkspaceBackup={() => setOrderMessage("Workspace backup exported")}
         importWorkspaceBackup={() => Promise.resolve({ fieldCount: 3 })}
+        previewWorkspaceBackup={readWorkspaceBackup}
         exportDailyReport={() => setOrderMessage("Daily report exported")}
         exportWeeklyReport={() => setOrderMessage("Weekly report exported")}
         exportTradeSummaryCsv={() => setOrderMessage("Trade summary exported")}

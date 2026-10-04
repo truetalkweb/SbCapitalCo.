@@ -1251,6 +1251,51 @@ test('journal compares grouped positions by entry setup, hour and session', asyn
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });
 
+for (const width of [390, 1536]) test(`workspace restore validates and previews replacements while preserving server accounts at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1024 });
+  const savedRisk = { maxOrderValue: 2000, riskPerTrade: 25, dailyLossLimit: 100, requireStopLoss: false, checklistRequired: true };
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts', replayNotes: 'Keep until confirmed',
+    paperLedger: { orders: [], positions: {}, realizedPnL: 0, riskPolicy: savedRisk },
+    alerts: [{ id: 'protected-alert', symbol: 'AAPL', trigger: 1000000, direction: 'above', active: true, history: [] }] });
+  const navigate = async name => {
+    if (width < 900) await page.getByRole('button', { name: 'Open workspace navigation' }).click();
+    await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name, exact: true }).click();
+  };
+  const toggle = page.getByLabel('Enable background price alerts'); await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  await evidence.paper.transact(user.id, { id: 'save-before-restore', kind: 'risk-policy', policy: savedRisk });
+  await navigate('Settings'); await page.getByRole('tab', { name: 'Data & Connections', exact: true }).click();
+  const input = page.getByLabel('Select workspace backup', { exact: true });
+  const envelope = payload => JSON.stringify({ marker: 'sb-terminal-workspace-backup', version: 1, payload });
+  await input.setInputFiles({ name: 'invalid-records.json', mimeType: 'application/json', buffer: Buffer.from(envelope({ journalEntries: [null], replayNotes: 'Do not apply' })) });
+  await expect(page.getByRole('status').filter({ hasText: 'does not contain valid terminal data' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore Selected', exact: true })).toHaveCount(0);
+  expect(evidence.workspace().replayNotes).toBe('Keep until confirmed');
+  const payload = { replayNotes: 'Reviewed import', journalEntries: [{ id: 'manual-import', symbol: 'AAPL', setup: 'Imported review', notes: 'A user-owned note', recordType: 'note' }],
+    paperLedger: { authority: 'server-v1', positions: { AAPL: { qty: 999 } }, realizedPnL: 999999 }, orders: [{ id: 'bad' }], positions: { AAPL: { qty: 999 } }, realizedPnL: 999999,
+    maxOrderValue: 0, riskPerTrade: 0, dailyLossLimit: 0,
+    alerts: [{ id: 'backup-alert', symbol: 'TSLA', trigger: 1, active: true, direction: 'above', history: [] }], premiumPreferences: { notificationPreferences: { priceAlerts: false, soundAlerts: true } } };
+  await input.setInputFiles({ name: 'legacy-account-backup.json', mimeType: 'application/json', buffer: Buffer.from(envelope(payload)) });
+  const preview = page.getByLabel('Workspace restore preview');
+  await expect(preview).toContainText('Journal records and draft'); await expect(preview).toContainText('protected account fields ignored');
+  expect(evidence.workspace().replayNotes).toBe('Keep until confirmed');
+  await page.screenshot({ path: testInfo.outputPath('restore-preview.png') });
+  await page.getByRole('button', { name: 'Restore Selected', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'workspace fields restored' })).toBeVisible();
+  await expect.poll(() => evidence.workspace().replayNotes).toBe('Reviewed import');
+  expect((await evidence.paper.snapshot(user.id)).state.riskPolicy).toEqual(savedRisk);
+  expect((await evidence.paper.snapshot(user.id)).state.positions).toEqual({});
+  const alerts = await evidence.alertService.snapshot(user.id); expect(alerts.enabled).toBe(true); expect(alerts.paused).toBe(false);
+  expect(alerts.alerts.map(rule => rule.id)).toEqual(['protected-alert']);
+  await page.reload(); await page.getByRole('tab', { name: 'Data & Connections', exact: true }).click();
+  const pending = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export Backup', exact: true }).click();
+  const stream = await (await pending).createReadStream(); const chunks = []; for await (const chunk of stream) chunks.push(chunk);
+  const exported = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(exported.payload.replayNotes).toBe('Reviewed import'); expect(exported.payload.journalEntries[0].id).toBe('manual-import');
+  for (const field of ['paperLedger', 'orders', 'positions', 'realizedPnL', 'maxOrderValue', 'riskPerTrade', 'dailyLossLimit', 'alerts']) expect(Object.hasOwn(exported.payload, field)).toBe(false);
+  expect(exported.payload.premiumPreferences.notificationPreferences.priceAlerts).toBeUndefined();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
 test('background alert creation recovers a committed lost response after reload without reactivation or duplicates', async ({ page }) => {
   await page.clock.install({ time: paperNow });
   const quotes = [paperProviderQuote(100, 'AAPL')];

@@ -7,6 +7,7 @@ import {
   lazy,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -81,7 +82,8 @@ import {
   serializeWatchlistForWorkspace,
 } from "./services/workspacePayloadPolicy";
 import {
-  parseWorkspaceBackup,
+  readWorkspaceBackup,
+  prepareWorkspaceRestore,
   serializeWorkspaceBackup,
 } from "./services/workspaceBackupPolicy";
 import { buildCsv } from "./utils/csvExport";
@@ -933,6 +935,10 @@ export default function App() {
     alerts, setAlerts, controllerRef: serverAlertController, onState: setServerAlertState,
     activityEnabled: premiumPreferences.notificationPreferences?.priceAlerts !== false });
   const accountJournalEntries = [...paperTrading.history, ...journalEntries];
+  const workspaceRestoreContext = useRef(null);
+  useLayoutEffect(() => {
+    workspaceRestoreContext.current = { userId: user?.id, backgroundEnabled: !backgroundAlerts.ready || backgroundAlerts.enabled, notifications: premiumPreferences.notificationPreferences };
+  }, [user?.id, backgroundAlerts.ready, backgroundAlerts.enabled, premiumPreferences.notificationPreferences]);
   const paperAccountSummary = { source: "Paper account · $100,000 starting balance", rows: [
     { label: "Account Equity", value: paperTrading.balances.equity },
     { label: "Buying Power", value: paperTrading.balances.buyingPower },
@@ -1671,7 +1677,7 @@ export default function App() {
   }
 
   function exportWorkspaceBackup() {
-    const serialized = serializeWorkspaceBackup(workspacePayload);
+    const serialized = serializeWorkspaceBackup(workspacePayload, { backgroundEnabled: !backgroundAlerts.ready || backgroundAlerts.enabled });
     if (!serialized) throw new Error("The current workspace could not be prepared for export.");
 
     downloadFile(
@@ -1688,22 +1694,31 @@ export default function App() {
     return true;
   }
 
+  async function previewWorkspaceBackup(file) {
+    return readWorkspaceBackup(file, { backgroundEnabled: !backgroundAlerts.ready || backgroundAlerts.enabled });
+  }
+
   async function importWorkspaceBackup(file) {
-    if (!file || typeof file.text !== "function") {
-      throw new Error("Select a valid JSON workspace backup.");
+    const restoreOwner = user?.id;
+    const parsed = await previewWorkspaceBackup(file);
+    // Revalidate at restore time and prevent a pending read crossing an account change.
+    const context = workspaceRestoreContext.current;
+    if (!restoreOwner || context?.userId !== restoreOwner) throw new Error('The account changed while reading this backup. Select it again in the current account.');
+    const plan = prepareWorkspaceRestore(parsed.sourcePayload, { backgroundEnabled: context.backgroundEnabled });
+    if (!plan.fieldCount) throw new Error('This backup contains no restorable workspace fields. Server accounts are managed separately.');
+    const payload = { ...plan.payload };
+    if (payload.premiumPreferences?.notificationPreferences) {
+      payload.premiumPreferences.notificationPreferences = { ...context.notifications, ...payload.premiumPreferences.notificationPreferences };
     }
-
-    const parsed = parseWorkspaceBackup(await file.text());
-    if (!parsed.ok) throw new Error(parsed.error);
-
-    applyWorkspace(parsed.payload);
+    if (payload.journalDraft) payload.journalDraft = { ...defaultJournalDraft, ...payload.journalDraft };
+    applyWorkspace(payload);
     pushActivity({
       type: "workspace",
       status: "success",
       title: "Workspace Backup Restored",
-      detail: `${parsed.fieldCount} workspace fields were restored and queued for sync.`,
+      detail: `${plan.fieldCount} workspace fields were restored and queued for sync.`,
     });
-    return parsed;
+    return { ...parsed, ...plan };
   }
 
   function exportJournalCsv() {
@@ -3755,6 +3770,7 @@ export default function App() {
         loadWorkspaceFromCloud={loadWorkspaceFromCloud}
         exportWorkspaceBackup={exportWorkspaceBackup}
         importWorkspaceBackup={importWorkspaceBackup}
+        previewWorkspaceBackup={previewWorkspaceBackup}
         cloudStatus={cloudStatus}
         cloudSyncPresentation={cloudSyncPresentation}
         requestPasswordReset={handlePasswordReset}

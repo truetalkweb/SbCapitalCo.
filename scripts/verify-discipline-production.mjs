@@ -96,6 +96,39 @@ try {
   result = await api('alerts'); assert.equal(result.alerts.length, 2); assert.equal(result.alerts.filter(rule => rule.trigger === 1000001).length, 1);
   record('Committed lost production alert reply recovers after reload with the same command/rule IDs and no duplicate');
   await page.screenshot({ path: 'artifacts/deployment/discipline/alerts.png' });
+  await navigate('Settings'); await page.getByRole('tab', { name: 'Data & Connections', exact: true }).click();
+  const backupInput = page.getByLabel('Select workspace backup', { exact: true });
+  const envelope = payload => JSON.stringify({ marker: 'sb-terminal-workspace-backup', version: 1, payload });
+  await backupInput.setInputFiles({ name: 'qa-invalid-backup.json', mimeType: 'application/json', buffer: Buffer.from(envelope({ journalEntries: [null] })) });
+  await expect(page.getByRole('status').filter({ hasText: 'does not contain valid terminal data' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore Selected', exact: true })).toHaveCount(0);
+  const paperBeforeRestore = (await api('paper')).state;
+  const alertsBeforeRestore = await api('alerts');
+  await backupInput.setInputFiles({ name: 'qa-legacy-workspace.json', mimeType: 'application/json', buffer: Buffer.from(envelope({
+    replayNotes: 'QA validated workspace restore', journalEntries: [{ id: 'qa-restored-note', symbol: 'AAPL', recordType: 'note', notes: 'Explicitly manual QA backup note' }],
+    paperLedger: { orders: [{ id: 'do-not-import' }], positions: { AAPL: { qty: 999 } }, realizedPnL: 999999 }, orders: [{ id: 'do-not-import' }], positions: { AAPL: { qty: 999 } }, realizedPnL: 999999,
+    maxOrderValue: 0, riskPerTrade: 0, dailyLossLimit: 0, alerts: [{ id: 'do-not-import', symbol: 'TSLA', trigger: 1, direction: 'above', active: true }],
+    premiumPreferences: { notificationPreferences: { priceAlerts: false, soundAlerts: false } },
+  })) });
+  await expect(page.getByLabel('Workspace restore preview')).toContainText('9 protected account fields ignored');
+  await page.screenshot({ path: 'artifacts/deployment/discipline/backup.png' });
+  await page.getByRole('button', { name: 'Restore Selected', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'workspace fields restored' })).toBeVisible();
+  await expect.poll(async () => { const row = await admin.from('terminal_workspaces').select('data').eq('user_id', userId).single(); assert.ifError(row.error); return row.data.data.replayNotes; }).toBe('QA validated workspace restore');
+  const paperAfterRestore = (await api('paper')).state, alertsAfterRestore = await api('alerts');
+  assert.deepEqual(paperAfterRestore.orders, paperBeforeRestore.orders); assert.deepEqual(paperAfterRestore.positions, paperBeforeRestore.positions);
+  assert.deepEqual(paperAfterRestore.riskPolicy, paperBeforeRestore.riskPolicy);
+  assert.equal(alertsAfterRestore.enabled, true); assert.equal(alertsAfterRestore.paused, false);
+  assert.deepEqual(alertsAfterRestore.alerts, alertsBeforeRestore.alerts);
+  await page.reload(); await page.getByRole('tab', { name: 'Data & Connections', exact: true }).click();
+  const backupDownload = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export Backup', exact: true }).click();
+  const downloadStream = await (await backupDownload).createReadStream(); const chunks = []; for await (const chunk of downloadStream) chunks.push(chunk);
+  const exportedBackup = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  assert.equal(exportedBackup.payload.replayNotes, 'QA validated workspace restore');
+  assert.equal(exportedBackup.payload.journalEntries[0].id, 'qa-restored-note');
+  for (const field of ['orders', 'positions', 'paperLedger', 'realizedPnL', 'maxOrderValue', 'riskPerTrade', 'dailyLossLimit', 'alerts']) assert.equal(Object.hasOwn(exportedBackup.payload, field), false);
+  assert.equal(Object.hasOwn(exportedBackup.payload.premiumPreferences.notificationPreferences, 'priceAlerts'), false);
+  record('Production backup rejects malformed records, previews legacy replacements, persists manual data and preserves server orders/risk/alerts');
   const paused = await api('alerts', { id: crypto.randomUUID(), kind: 'pause', paused: true }); assert.equal(paused.paused, true);
   for (const rule of result.alerts) { const removed = await api('alerts', { id: crypto.randomUUID(), kind: 'remove', alertId: rule.id }); assert.equal(removed.status, 200); }
   assert.equal((await api('alerts')).alerts.length, 0);

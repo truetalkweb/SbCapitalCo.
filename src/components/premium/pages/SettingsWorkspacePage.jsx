@@ -24,6 +24,7 @@ export default function SettingsWorkspacePage({
       layoutMode,
       loadWorkspaceFromCloud,
       importWorkspaceBackup,
+      previewWorkspaceBackup,
       cloudStatus,
       cloudSyncPresentation,
       notificationPreferences,
@@ -61,8 +62,11 @@ export default function SettingsWorkspacePage({
     const backupInputRef = useRef(null);
     const [backupStatus, setBackupStatus] = useState("");
     const [stagedBackup, setStagedBackup] = useState(null);
+    const [backupBusy, setBackupBusy] = useState(false);
+    const backupSelection = useRef(0);
 
     const clearStagedBackup = () => {
+      backupSelection.current += 1;
       setStagedBackup(null);
       if (backupInputRef.current) backupInputRef.current.value = "";
     };
@@ -77,15 +81,30 @@ export default function SettingsWorkspacePage({
     };
 
     const handleBackupRestore = async () => {
-      if (!stagedBackup) return;
+      if (!stagedBackup || stagedBackup.userId !== user?.id || backupBusy) return;
+      setBackupBusy(true);
       setBackupStatus("Restoring workspace backup...");
       try {
-        const result = await importWorkspaceBackup?.(stagedBackup);
+        const result = await importWorkspaceBackup?.(stagedBackup.file);
         setBackupStatus(`${result?.fieldCount || "Validated"} workspace fields restored. Cloud sync will follow automatically.`);
         clearStagedBackup();
       } catch (error) {
         setBackupStatus(error?.message || "Workspace backup could not be restored.");
-      }
+      } finally { setBackupBusy(false); }
+    };
+    const selectBackup = async file => {
+      const selection = ++backupSelection.current;
+      setStagedBackup(null); setBackupStatus(file ? 'Validating workspace backup…' : '');
+      if (!file) return;
+      setBackupBusy(true);
+      try {
+        const preview = await previewWorkspaceBackup(file);
+        if (selection !== backupSelection.current) return;
+        setStagedBackup({ file, preview, userId: user?.id });
+        setBackupStatus('Confirm restore to replace the current workspace fields listed below. Fields absent from the backup stay unchanged.');
+      } catch (error) {
+        if (selection === backupSelection.current) setBackupStatus(error.message || 'Workspace backup could not be validated.');
+      } finally { if (selection === backupSelection.current) setBackupBusy(false); }
     };
     const selectStyle = {
       width: 170,
@@ -298,18 +317,24 @@ export default function SettingsWorkspacePage({
                     accept="application/json,.json"
                     aria-label="Select workspace backup"
                     onChange={(event) => {
-                      setStagedBackup(event.target.files?.[0] || null);
-                      setBackupStatus(event.target.files?.[0] ? "Backup selected. Confirm restore to replace the current workspace." : "");
+                      void selectBackup(event.target.files?.[0]);
                     }}
                     style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", clipPath: "inset(50%)", whiteSpace: "nowrap" }}
                   />
                   <div style={{ display: "flex", gap: 7, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <ActionButton theme={theme} onClick={handleBackupExport}>Export Backup</ActionButton>
-                    <ActionButton theme={theme} onClick={() => backupInputRef.current?.click()}>Import Backup</ActionButton>
-                    {stagedBackup && <ActionButton theme={theme} active onClick={handleBackupRestore}>Restore Selected</ActionButton>}
-                    {stagedBackup && <ActionButton theme={theme} onClick={() => { clearStagedBackup(); setBackupStatus("Restore cancelled."); }}>Cancel</ActionButton>}
+                    <ActionButton theme={theme} disabled={backupBusy} onClick={handleBackupExport}>Export Backup</ActionButton>
+                    <ActionButton theme={theme} disabled={backupBusy} onClick={() => backupInputRef.current?.click()}>Import Backup</ActionButton>
+                    {stagedBackup && <ActionButton theme={theme} active disabled={backupBusy || stagedBackup.userId !== user?.id} onClick={handleBackupRestore}>Restore Selected</ActionButton>}
+                    {stagedBackup && <ActionButton theme={theme} disabled={backupBusy} onClick={() => { clearStagedBackup(); setBackupStatus("Restore cancelled."); }}>Cancel</ActionButton>}
                   </div>
-                  {stagedBackup && <span style={{ color: theme.text, fontSize: 11 }}>{stagedBackup.name}</span>}
+                  <span style={{ color: theme.muted, fontSize: 11, maxWidth: 460 }}>Workspace backups contain layouts, preferences, watchlists, journal and replay data. Paper account balances, orders and saved risk rules stay on the server. Background alerts and their monitoring preference stay unchanged. Browser alert rules can be replaced when background monitoring is off.</span>
+                  {stagedBackup && stagedBackup.userId === user?.id && <div aria-label="Workspace restore preview" style={{ color: theme.text, fontSize: 11, maxWidth: 460, overflowWrap: 'anywhere', lineHeight: 1.5 }}>
+                    <b>{stagedBackup.file.name}</b><br />
+                    {stagedBackup.preview.fieldCount} workspace fields · Exported {stagedBackup.preview.exportedAt && Number.isFinite(Date.parse(stagedBackup.preview.exportedAt)) ? new Date(stagedBackup.preview.exportedAt).toLocaleString() : 'time unknown'}<br />
+                    Replace: {stagedBackup.preview.sections.join('; ')}<br />
+                    {Object.entries(stagedBackup.preview.counts).filter(([, count]) => count !== undefined).map(([label, count]) => `${label}: ${count}`).join(' · ')}<br />
+                    {stagedBackup.preview.excluded.length > 0 && <>{stagedBackup.preview.excluded.length} protected account fields ignored.</>}
+                  </div>}
                   {backupStatus && <span role="status" style={{ color: backupStatus.includes("could not") || backupStatus.includes("invalid") || backupStatus.includes("not an") ? theme.amber : theme.muted, fontSize: 11, maxWidth: 460, lineHeight: 1.4 }}>{backupStatus}</span>}
                 </div>
               )],

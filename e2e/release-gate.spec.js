@@ -211,7 +211,7 @@ test("settings exports and explicitly confirms portable workspace restore", asyn
   await page.getByLabel("Select workspace backup").setInputFiles({
     name: "sb-terminal-workspace.json",
     mimeType: "application/json",
-    buffer: Buffer.from(JSON.stringify({ marker: "fixture" })),
+    buffer: Buffer.from(JSON.stringify({ marker: "sb-terminal-workspace-backup", version: 1, payload: { selectedStock: 'AAPL', replayNotes: 'Fixture notes', themeMode: 'dark' } })),
   });
   await expect(page.getByText("Confirm restore to replace the current workspace", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Restore Selected", exact: true }).click();

@@ -76,11 +76,29 @@ try {
   const scanBefore = result.worker.lastScanAt;
   await expect.poll(async () => (await api('alerts')).worker.lastScanAt, { timeout: 45000, intervals: [3000, 5000] }).not.toBe(scanBefore);
   result = await api('alerts'); assert.equal(result.alerts[0].history.length, 0); record('Production background worker scans opted-in rules with real provider plumbing and no invented triggers');
+  const recoveryCommands = []; let loseReply = true;
+  await page.route('**/api/alerts/commands', async route => {
+    const command = route.request().postDataJSON().command;
+    if (command.kind !== 'upsert') return route.continue();
+    recoveryCommands.push(command);
+    const response = await route.fetch();
+    assert.equal(response.status(), 200);
+    if (loseReply) { loseReply = false; return route.abort('failed'); }
+    return route.fulfill({ response });
+  });
+  await page.getByLabel('Alert trigger price').fill('1000001'); await page.getByRole('button', { name: /Create/ }).click();
+  await expect.poll(() => recoveryCommands.length).toBe(1);
+  await expect.poll(async () => (await api('alerts')).alerts.length).toBe(2);
   await page.reload(); await expect(page.getByLabel('Enable background price alerts')).toBeChecked();
+  await expect.poll(() => recoveryCommands.length).toBe(2);
+  assert.deepEqual(recoveryCommands[1], recoveryCommands[0]);
+  await expect.poll(() => page.evaluate(id => sessionStorage.getItem(`sb-alert-pending-v1:${id}`), userId)).toBeNull();
+  result = await api('alerts'); assert.equal(result.alerts.length, 2); assert.equal(result.alerts.filter(rule => rule.trigger === 1000001).length, 1);
+  record('Committed lost production alert reply recovers after reload with the same command/rule IDs and no duplicate');
   await page.screenshot({ path: 'artifacts/deployment/discipline/alerts.png' });
-  const ruleId = result.alerts[0].id;
   const paused = await api('alerts', { id: crypto.randomUUID(), kind: 'pause', paused: true }); assert.equal(paused.paused, true);
-  const removed = await api('alerts', { id: crypto.randomUUID(), kind: 'remove', alertId: ruleId }); assert.equal(removed.alerts.length, 0);
+  for (const rule of result.alerts) { const removed = await api('alerts', { id: crypto.randomUUID(), kind: 'remove', alertId: rule.id }); assert.equal(removed.status, 200); }
+  assert.equal((await api('alerts')).alerts.length, 0);
   await api('alerts', { id: crypto.randomUUID(), kind: 'monitoring', enabled: false });
   const direct = await client.from('alert_accounts').select('user_id'); assert.ok(direct.error, 'Authenticated browser must not read backend-only alert storage');
   record('Background rules persist, pause/delete succeed and direct browser access to alert storage is denied');

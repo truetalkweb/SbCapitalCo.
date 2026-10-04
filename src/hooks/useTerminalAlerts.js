@@ -41,28 +41,24 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
   const [alertDirection, setAlertDirection] = useState("above");
   const [alertNotifications, setAlertNotifications] = useState(false);
   const serverSeen = useRef(null);
-  const pendingCreate = useRef(null);
 
   const createPriceAlert = useCallback(({ symbol = selectedStock, trigger, direction = "above" }) => {
     const next = makePriceAlert({ symbol, trigger, direction });
     if (!next) return false;
+    if (serverState && (!serverState.ready || serverState.enabled && !serverController?.current)) return false;
     if (serverController?.current) {
-      const fingerprint = JSON.stringify([serverState?.userId, next.symbol, next.trigger, next.direction]);
-      if (pendingCreate.current?.fingerprint !== fingerprint) pendingCreate.current = { fingerprint, alert: next };
-      return serverController.current.command({ kind: 'upsert', alert: pendingCreate.current.alert }).then(result => {
-        if (!result.error) pendingCreate.current = null;
-        return !result.error;
-      });
+      return serverController.current.command({ kind: 'upsert', alert: next }, { create: true }).then(result => !result.error);
     }
     setAlerts(prev => [next, ...prev]);
     return true;
-  }, [selectedStock, serverController, serverState?.userId]);
+  }, [selectedStock, serverController, serverState]);
 
-  const addPriceAlert = useCallback(() => {
-    if (createPriceAlert({ symbol: selectedStock, trigger: alertInput, direction: alertDirection })) setAlertInput("");
+  const addPriceAlert = useCallback(async () => {
+    if (await createPriceAlert({ symbol: selectedStock, trigger: alertInput, direction: alertDirection })) setAlertInput("");
   }, [alertDirection, alertInput, createPriceAlert, selectedStock]);
 
   const updateAlert = useCallback((id, updates) => {
+    if (serverState && (!serverState.ready || serverState.enabled && !serverController?.current)) return;
     if (serverController?.current) {
       const old = alerts.find(alert => alert.id === id);
       if (old) void serverController.current.command({ kind: 'upsert', alert: { ...old, ...updates } });
@@ -79,9 +75,10 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
         updatedAt: new Date().toISOString(),
       };
     }));
-  }, [serverController, alerts]);
+  }, [serverController, serverState, alerts]);
 
   const toggleAlert = useCallback((id) => {
+    if (serverState && (!serverState.ready || serverState.enabled && !serverController?.current)) return;
     if (serverController?.current) {
       const old = alerts.find(alert => alert.id === id);
       if (old) void serverController.current.command({ kind: 'upsert', alert: { ...old, active: !old.active } });
@@ -95,7 +92,7 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
           updatedAt: new Date().toISOString(),
         }
       : alert));
-  }, [serverController, alerts]);
+  }, [serverController, serverState, alerts]);
 
   const enableAlertNotifications = useCallback(async () => {
     if (!("Notification" in window)) {
@@ -108,9 +105,10 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
   }, []);
 
   const removeAlert = useCallback((id) => {
+    if (serverState && (!serverState.ready || serverState.enabled && !serverController?.current)) return;
     if (serverController?.current) { void serverController.current.command({ kind: 'remove', alertId: id }); return; }
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
-  }, [serverController]);
+  }, [serverController, serverState]);
 
   useEffect(() => {
     if (!serverState?.enabled) { serverSeen.current = null; return; }

@@ -1251,6 +1251,106 @@ test('journal compares grouped positions by entry setup, hour and session', asyn
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });
 
+test('background alert creation recovers a committed lost response after reload without reactivation or duplicates', async ({ page }) => {
+  await page.clock.install({ time: paperNow });
+  const quotes = [paperProviderQuote(100, 'AAPL')];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts' }, { providerQuotes: quotes });
+  const toggle = page.getByLabel('Enable background price alerts');
+  await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  const commands = []; let lose = true;
+  await page.route('**/api/alerts/commands', async route => {
+    const command = route.request().postDataJSON().command;
+    if (command.kind !== 'upsert') return route.fallback();
+    commands.push(command);
+    const result = await evidence.alertService.transact(user.id, command);
+    if (lose) { lose = false; return route.abort('failed'); }
+    return route.fulfill({ json: result });
+  });
+  await page.getByLabel('Alert trigger price').fill('110');
+  await page.getByRole('button', { name: /Create/ }).click();
+  await expect.poll(() => commands.length).toBe(1);
+  await expect(page.getByLabel('Alert trigger price')).toHaveValue('110');
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).alerts.length).toBe(1);
+  quotes[0] = paperProviderQuote(111, 'AAPL'); await evidence.alertService.tick();
+  await page.reload();
+  await expect.poll(() => commands.length).toBe(2);
+  expect(commands[1]).toEqual(commands[0]);
+  await expect(toggle).toBeChecked();
+  const result = await evidence.alertService.snapshot(user.id);
+  expect(result.alerts).toHaveLength(1); expect(result.alerts[0].active).toBe(false); expect(result.alerts[0].history).toHaveLength(1);
+  expect(await page.evaluate(id => sessionStorage.getItem(`sb-alert-pending-v1:${id}`), user.id)).toBeNull();
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('background alert validation rejection releases recovery state for a corrected rule', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts' });
+  const toggle = page.getByLabel('Enable background price alerts');
+  await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  let reject = true;
+  await page.route('**/api/alerts/commands', async route => {
+    if (route.request().postDataJSON().command.kind !== 'upsert' || !reject) return route.fallback();
+    reject = false; return route.fulfill({ status: 400, json: { error: 'Test validation rejected this rule.' } });
+  });
+  await page.getByLabel('Alert trigger price').fill('110'); await page.getByRole('button', { name: /Create/ }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Test validation rejected this rule.' })).toBeVisible();
+  expect(await page.evaluate(id => sessionStorage.getItem(`sb-alert-pending-v1:${id}`), user.id)).toBeNull();
+  await page.getByLabel('Alert trigger price').fill('120'); await page.getByRole('button', { name: /Create/ }).click();
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).alerts[0]?.trigger).toBe(120);
+  await expect(page.getByLabel('Alert trigger price')).toHaveValue('');
+  expect(evidence.errors).toEqual([]);
+});
+
+test('background monitoring pause failure retries on the polling cadence rather than on every error render', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-02T15:00:00Z') });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts' });
+  const toggle = page.getByLabel('Enable background price alerts');
+  await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  const commands = []; let unavailable = true;
+  await page.route('**/api/alerts/commands', async route => {
+    const command = route.request().postDataJSON().command;
+    if (command.kind !== 'pause') return route.fallback();
+    commands.push(command);
+    if (unavailable) return route.fulfill({ status: 503, json: { error: 'Test alert service unavailable.' } });
+    return route.fallback();
+  });
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Notifications', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle price alert monitoring', exact: true }).click();
+  await expect.poll(() => commands.length).toBe(1);
+  await page.clock.runFor(2000); expect(commands).toHaveLength(1);
+  unavailable = false; await page.clock.runFor(15000);
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).paused).toBe(true);
+  expect(commands).toHaveLength(2); expect(commands[1]).toEqual(commands[0]);
+  expect(evidence.errors).toEqual([]);
+});
+
+test('background alerts keep a newer server revision when an older disable reply arrives late', async ({ page }) => {
+  await page.clock.install({ time: paperNow });
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts', alerts: [{ id: 'old-rule', symbol: 'AAPL', trigger: 110, direction: 'above', active: true, history: [] }] });
+  const toggle = page.getByLabel('Enable background price alerts');
+  await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  let release, captured = false;
+  const held = new Promise(resolve => { release = resolve; });
+  // Reach the next poll while holding the reply for less than its 15-second timeout.
+  await page.clock.runFor(12000);
+  await page.route('**/api/alerts/commands', async route => {
+    const command = route.request().postDataJSON().command;
+    if (command.kind !== 'monitoring' || command.enabled) return route.fallback();
+    const reply = await evidence.alertService.transact(user.id, command); captured = true;
+    await held; return route.fulfill({ json: reply });
+  });
+  await toggle.click(); await expect.poll(() => captured).toBe(true);
+  await evidence.alertService.transact(user.id, { id: 'another-device-enable', kind: 'monitoring', enabled: true, alerts: [{ id: 'new-rule', symbol: 'AAPL', trigger: 220, direction: 'above', active: true }] });
+  await page.clock.runFor(4000);
+  await expect(page.getByRole('row', { name: 'Select AAPL', exact: true })).toContainText('220');
+  release();
+  await expect.poll(() => page.evaluate(id => sessionStorage.getItem(`sb-alert-pending-v1:${id}`), user.id)).toBeNull();
+  await expect(toggle).toBeEnabled(); await expect(toggle).toBeChecked();
+  await expect(page.getByRole('row', { name: 'Select AAPL', exact: true })).toContainText('220');
+  expect(await page.evaluate(id => sessionStorage.getItem(`sb-alert-pending-v1:${id}`), user.id)).toBeNull();
+  expect(evidence.errors).toEqual([]);
+});
+
 test('background alerts retain server activity after reload, respect pause and permit edits', async ({ page }, testInfo) => {
   await page.clock.setFixedTime(paperNow);
   const quotes = [paperProviderQuote(100, 'AAPL')];

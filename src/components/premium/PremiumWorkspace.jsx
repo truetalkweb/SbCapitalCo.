@@ -895,6 +895,8 @@ function PremiumWorkspaceContent({
           journalNet,
           journalRows,
           journalView,
+          journalFilters: premiumPreferences.journalFilters,
+          setJournalFilters: filters => updatePremiumPreference('journalFilters', filters),
           page,
           removeJournalEntry,
           selectedStock,

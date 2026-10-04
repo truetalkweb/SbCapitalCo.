@@ -8,7 +8,7 @@ export function groupJournalTrades(records = []) {
   const groups = new Map(), result = [];
   for (const raw of records) {
     const row = normalizeJournalRecord(raw);
-    if (!row.eligible || !row.tradeGroupId || row.source !== 'Paper simulation') { result.push(row); continue; }
+    if (!row.eligible || !row.tradeGroupId || row.source !== 'Paper simulation' || row.groupedPosition === true) { result.push(row); continue; }
     const key = JSON.stringify([row.tradeGroupId, row.symbol, row.bias || row.side, row.currency]);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
@@ -22,7 +22,9 @@ export function groupJournalTrades(records = []) {
     result.push({ ...last, id: `group-${last.tradeGroupId}`, status: closed ? 'closed' : 'open',
       eligible: closed, pnl: sumKnown(exits.map(row => row.pnl)), fees: sumKnown(exits.map(row => row.fees)),
       quantity, entryPrice: weighted('entryPrice'), exitPrice: weighted('exitPrice'),
-      exitCount: exits.length, notes: `${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`,
+      groupedPosition: true, exitCount: exits.length,
+      searchText: exits.map(row => [row.notes, row.review, row.tags, row.tag].join(' ')).join(' '),
+      notes: `${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`,
       openedAt: exits[0].openedAt || null, setup: exits[0].setup || 'Unspecified',
     });
   }

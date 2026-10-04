@@ -297,7 +297,7 @@ test("stateful workspace controls mutate watchlist, alerts, journal, replay, and
   await expect(page.getByText("Active", { exact: true }).first()).toBeVisible();
 
   await page.goto(fixtureUrl("journal"));
-  await page.getByLabel("Journal setup").fill("Opening range breakout");
+  await page.getByLabel("Journal setup", { exact: true }).fill("Opening range breakout");
   await page.getByLabel("Journal review").fill("Held the planned stop and reviewed execution.");
   await page.getByRole("button", { name: "Save Record", exact: true }).click();
   await expect(page.getByRole("cell", { name: "Opening range breakout", exact: true }).first()).toBeVisible();

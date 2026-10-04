@@ -1721,7 +1721,8 @@ export default function App() {
     return { ...parsed, ...plan };
   }
 
-  function exportJournalCsv() {
+  function exportJournalCsv(rows, options = {}) {
+    const filtered = options.filtered && Array.isArray(rows);
     const headers = [
       "createdAt", "openedAt", "tradeGroupId", "closesPosition",
       "recordType", "status", "currency", "source", "quantity", "entryPrice", "exitPrice", "fees", "pnl",
@@ -1738,9 +1739,14 @@ export default function App() {
       "plan",
       "review",
     ];
+    const exportRows = (filtered ? rows : accountJournalEntries).map(normalizeJournalRecord);
+    if (filtered) {
+      headers.push('id', 'closedAt', 'exitCount', 'notes', 'reportView', 'filterFromET', 'filterThroughET', 'filterSymbol', 'filterSetup', 'filterSearch', 'filterKind');
+      for (const row of exportRows) Object.assign(row, { reportView: options.filters.groupExits ? 'Grouped positions and manual records' : 'Realized exits and manual records', filterFromET: options.filters.from, filterThroughET: options.filters.to, filterSymbol: options.filters.symbol, filterSetup: options.filters.setup, filterSearch: options.filters.search, filterKind: options.filters.kind });
+    }
     downloadFile(
-      `journal-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildCsv(headers, accountJournalEntries.map(normalizeJournalRecord)),
+      `${filtered ? 'journal-filtered' : 'journal'}-${new Date().toISOString().slice(0, 10)}.csv`,
+      buildCsv(headers, exportRows),
       "text/csv;charset=utf-8"
     );
   }

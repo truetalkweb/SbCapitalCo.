@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
+import { DEFAULT_JOURNAL_FILTERS, normalizeJournalFilters, filterJournalRecords } from '../../../utils/journalFilters.js';
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { X } from "lucide-react";
@@ -16,6 +17,8 @@ export default function JournalWorkspacePage({
       journalDraft,
       journalRows,
       journalView,
+      journalFilters,
+      setJournalFilters,
       page,
       removeJournalEntry,
       selectedStock,
@@ -23,13 +26,15 @@ export default function JournalWorkspacePage({
       setJournalView,
       theme
 }) {
-    const [search, setSearch] = useState("");
-    const [kind, setKind] = useState("all");
     const [analysisDimension, setAnalysisDimension] = useState('setup');
-    const [groupExits, setGroupExits] = useState(true);
-    const presentedRows = groupExits ? makeJournalTrades(groupJournalTrades(journalRows)) : journalRows;
+    const filters = normalizeJournalFilters(journalFilters);
+    const { groupExits } = filters;
+    const updateFilters = changes => setJournalFilters?.({ ...filters, ...changes });
+    const grouped = makeJournalTrades(groupJournalTrades(journalRows));
+    const scope = filterJournalRecords(groupExits ? grouped : journalRows, filters);
+    const presentedRows = scope.rows;
     const stats = journalStatistics(presentedRows);
-    const breakdowns = journalBreakdowns(journalRows);
+    const breakdowns = journalBreakdowns(filterJournalRecords(grouped, filters).rows);
     const { wins, losses, breakeven } = stats;
     const tradeCount = stats.total;
     const journalNet = stats.net;
@@ -38,8 +43,10 @@ export default function JournalWorkspacePage({
     const journalAvgWin = stats.averageWin;
     const journalAvgLoss = stats.averageLoss;
     const journalProfitFactor = stats.profitFactor === null ? "Unavailable" : stats.profitFactor.toFixed(2);
-    const visibleRows = presentedRows.filter(row => (kind === "all" || row.recordType === kind) && [row.symbol,row.setup,row.notes,row.tag].join(" ").toLowerCase().includes(search.toLowerCase()));
-    const pagination = useRecordPage(visibleRows, 25, search + kind);
+    const pagination = useRecordPage(presentedRows, 25, JSON.stringify(filters));
+    const symbols = [...new Set(journalRows.map(row => String(row.symbol || '').toUpperCase()).filter(Boolean))].sort();
+    const setups = [...new Set(journalRows.map(row => String(row.setup || 'Unspecified').trim()))].sort();
+    const filterStyle = { height: 32, minWidth: 0, maxWidth: '100%', background: theme.panel2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 5, padding: '0 8px', colorScheme: theme.isDark ? 'dark' : 'light' };
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
     const showTrades = journalView === "Overview" || journalView === "Trades";
@@ -56,9 +63,18 @@ export default function JournalWorkspacePage({
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
             <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
-              <label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => setGroupExits(event.target.checked)} /> Group paper partial exits by position</label>
+              <label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => updateFilters({ groupExits: event.target.checked })} /> Group paper partial exits by position</label>
               <span style={{ color: theme.muted, fontSize: 11 }}>{groupExits ? 'Grouped statistics count fully closed positions. Partial exits from positions still open are excluded; legacy exits without position IDs remain separate.' : 'Execution view counts each realized exit separately.'}</span>
-              {journalView === "Trades" && <><FilterBar theme={theme} search="Search journal records" value={search} onSearchChange={setSearch} /><select aria-label="Journal record filter" value={kind} onChange={event => setKind(event.target.value)}><option value="all">All records</option><option value="note">Notes</option><option value="trade">Trades</option></select></>}
+              <div style={{ display: 'grid', gridTemplateColumns: isNarrowWorkspace ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>From (ET)<input type="date" aria-label="Journal from date ET" value={filters.from} onChange={event => updateFilters({ from: event.target.value })} style={filterStyle} /></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Through (ET)<input type="date" aria-label="Journal through date ET" value={filters.to} onChange={event => updateFilters({ to: event.target.value })} style={filterStyle} /></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Symbol<select aria-label="Journal symbol filter" value={filters.symbol} onChange={event => updateFilters({ symbol: event.target.value })} style={filterStyle}><option value="">All symbols</option>{[...new Set([...symbols, ...(filters.symbol ? [filters.symbol] : [])])].map(symbol => <option key={symbol}>{symbol}</option>)}</select></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Setup<select aria-label="Journal setup filter" value={filters.setup} onChange={event => updateFilters({ setup: event.target.value })} style={filterStyle}><option value="">All setups</option>{[...new Set([...setups, ...(filters.setup ? [filters.setup] : [])])].map(setup => <option key={setup}>{setup}</option>)}</select></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Records<select aria-label="Journal record filter" value={filters.kind} onChange={event => updateFilters({ kind: event.target.value })} style={filterStyle}><option value="all">All records</option><option value="note">Notes</option><option value="trade">Trades</option></select></label>
+              </div>
+              <FilterBar theme={theme} search="Search journal records" value={filters.search} onSearchChange={search => updateFilters({ search })} />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><ActionButton theme={theme} onClick={() => setJournalFilters?.({ ...DEFAULT_JOURNAL_FILTERS })}>Clear Filters</ActionButton><span role="status" style={{ color: scope.error ? theme.amber : theme.muted, fontSize: 11 }}>{scope.error || `${presentedRows.length} matching records · ${stats.total} completed USD trades${scope.unknownDateCount ? ` · ${scope.unknownDateCount} records excluded because their date is unknown` : ''}`}</span></div>
+              <span style={{ color: theme.muted, fontSize: 11 }}>Date range uses the Eastern close/record day. Grouped positions include every partial exit and use their final close date. Table times are Pacific. Filters apply to records, statistics and comparisons.</span>
             </div>
           </PremiumCard>
           {showDraft && <PremiumCard theme={theme} title="Prepared Journal Draft">
@@ -176,7 +192,7 @@ export default function JournalWorkspacePage({
                 theme={theme}
                 columns={[
                   { key: "recordType", label: "Kind", width: "70px" },
-                  { key: "date", label: "Date/Time", width: "150px" },
+                  { key: "date", label: "Date/Time (PT)", width: "150px" },
                   { key: "symbol", label: "Symbol", width: "90px", mono: true, strong: true },
                   { key: "setup", label: "Setup", width: "120px" },
                   { key: "side", label: "Side", width: "70px", color: (row) => row.side === "Short" ? theme.red : theme.green },
@@ -197,12 +213,13 @@ export default function JournalWorkspacePage({
               <RecordPagination theme={theme} state={pagination} label="journal records" />
             </PremiumCard>}
             {journalView === "Exports" && <PremiumCard theme={theme} title="Journal & Performance Exports">
-              <div style={{ padding: 16, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+              <div style={{ padding: 16, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                 <ActionButton theme={theme} onClick={exportJournalCsv}>Journal CSV</ActionButton>
+                <ActionButton theme={theme} disabled={Boolean(scope.error) || !presentedRows.length} onClick={() => exportJournalCsv?.(presentedRows, { filtered: true, filters })}>Filtered Journal CSV</ActionButton>
                 <ActionButton theme={theme} onClick={exportDailyReport}>Daily Report</ActionButton>
                 <ActionButton theme={theme} onClick={exportWeeklyReport}>Weekly Review</ActionButton>
               </div>
-              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Exports include manual records and realized paper exits, including partial closes. Paper exit P&amp;L includes allocated entry and exit commissions; slippage is included in fill prices. Account P&amp;L charges entry fees immediately, including positions still open. Daily and weekly reports are portable Markdown files.</div>
+              <div style={{ padding: "0 16px 16px", color: theme.muted, fontSize: 12, lineHeight: 1.55 }}>Journal CSV retains all manual records and realized paper exits, including partial closes. Filtered Journal CSV exports every matching record in the selected grouped/execution view, including rows beyond the current page, and records its filter scope. Daily and weekly reports use their existing calendar periods rather than these filters. Paper exit P&amp;L includes allocated entry and exit commissions; slippage is included in fill prices. Account P&amp;L charges entry fees immediately, including positions still open.</div>
             </PremiumCard>}
         </div>
       </div>

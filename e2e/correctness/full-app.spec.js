@@ -997,7 +997,7 @@ test('server paper management edits, protects, flattens and exports realized his
   await expect(page.getByText('Position closed', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('paper-realized-history.png') });
   await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Trade Journal', exact: true }).click();
-  await expect(page.getByText('Unspecified', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Unspecified', exact: true }).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Exports', exact: true }).click();
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Journal CSV', exact: true }).click();
@@ -1229,6 +1229,52 @@ for (const width of [390, 1536]) test(`paper discipline rules and checklist work
   await submit.click(); await expect(ticket.getByRole('status')).toContainText('FILLED');
   expect(evidence.workspace().paperLedger.positions.NVDA.setup).toBe('Opening breakout');
   await page.screenshot({ path: testInfo.outputPath('paper-checklist.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+for (const width of [390, 1536]) test(`journal filters scope records, statistics, comparisons and all-page CSV at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1024 });
+  const record = (id, symbol, setup, createdAt, pnl, extra = {}) => ({ id, symbol, setup, createdAt, openedAt: '2026-10-01T14:00:00Z', recordType: 'trade', status: 'closed', pnl, notes: 'Reviewed risk', ...extra });
+  const journalEntries = [
+    record('partial', 'AAPL', 'Breakout', '2026-10-01T14:00:00Z', 38, { tradeGroupId: 'round-trip', source: 'Paper simulation', quantity: 4, fees: 2, closesPosition: false }),
+    record('final', 'AAPL', 'Breakout', '2026-10-02T14:00:00Z', 57, { tradeGroupId: 'round-trip', source: 'Paper simulation', quantity: 6, fees: 3, closesPosition: true }),
+    ...Array.from({ length: 30 }, (_, index) => record(`manual-${index}`, 'AAPL', 'Breakout', '2026-10-02T15:00:00Z', 1)),
+    record('other-symbol', 'TSLA', 'Breakout', '2026-10-02T15:00:00Z', 900),
+    record('other-setup', 'AAPL', 'Pullback', '2026-10-02T15:00:00Z', 800),
+    record('before', 'AAPL', 'Breakout', '2026-10-02T03:59:59Z', 700),
+    record('undated', 'AAPL', 'Breakout', null, 600),
+    record('note', 'AAPL', 'Breakout', '2026-10-02T15:00:00Z', null, { recordType: 'note', status: 'note' }),
+  ];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'journal', journalEntries });
+  await page.getByLabel('Journal from date ET').fill('2026-10-02');
+  await page.getByLabel('Journal through date ET').fill('2026-10-02');
+  await page.getByLabel('Journal symbol filter').selectOption('AAPL');
+  await page.getByLabel('Journal setup filter').selectOption('Breakout');
+  await page.getByLabel('Journal record filter').selectOption('trade');
+  await page.getByPlaceholder('Search journal records').fill('Reviewed risk');
+  await expect(page.getByRole('status').filter({ hasText: '31 matching records' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: '1 records excluded because their date is unknown' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await expect(page.getByRole('row', { name: 'Select Breakout', exact: true })).toContainText('$125.00');
+  await expect.poll(() => evidence.workspace().premiumPreferences?.journalFilters?.symbol).toBe('AAPL');
+  await page.screenshot({ path: testInfo.outputPath('journal-scope.png'), fullPage: true });
+  await page.getByRole('tab', { name: 'Exports', exact: true }).click();
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Filtered Journal CSV', exact: true }).click();
+  const stream = await (await download).createReadStream(); let csv = ''; for await (const chunk of stream) csv += chunk;
+  expect(csv.trim().split('\n')).toHaveLength(32); expect(csv).toContain('filterFromET'); expect(csv).toContain('group-round-trip'); expect(csv).not.toContain('other-symbol');
+  await page.reload(); await expect(page.getByLabel('Journal symbol filter')).toHaveValue('AAPL');
+  await expect(page.getByLabel('Journal from date ET')).toHaveValue('2026-10-02');
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  await page.getByLabel('Group paper partial exits').uncheck();
+  await expect(page.getByRole('status').filter({ hasText: '31 matching records' })).toBeVisible();
+  await expect(page.getByText('$87.00', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('row', { name: 'Select Breakout', exact: true })).toContainText('$125.00');
+  await page.getByLabel('Journal through date ET').fill('2026-10-01');
+  await expect(page.getByRole('status').filter({ hasText: 'start date must be on or before' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Exports', exact: true }).click(); await expect(page.getByRole('button', { name: 'Filtered Journal CSV', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Clear Filters', exact: true }).click();
+  await expect(page.getByLabel('Journal symbol filter')).toHaveValue('');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });

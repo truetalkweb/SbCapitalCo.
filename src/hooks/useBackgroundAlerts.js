@@ -56,7 +56,7 @@ export function useBackgroundAlerts({ userId, enabled, alerts, setAlerts, contro
     } finally {
       if (busy.current === abort) { busy.current = null; setSaving(false); }
     }
-  }, [apply, setAlerts, fail]);
+  }, [apply, fail]);
   useLayoutEffect(() => {
     controllerRef.current = connection.userId === userId && connection.enabled && enabled && connection.ready ? { command } : null;
     return () => { controllerRef.current = null; };

@@ -1,0 +1,97 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import { chromium, expect } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+const backend = 'https://sbcapitalco-backend-production.up.railway.app';
+const options = { auth: { persistSession: false, autoRefreshToken: false } };
+const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, options);
+const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, options);
+const checks = [], errors = []; let browser, userId, headers;
+const record = value => { checks.push(value); console.log(`PASS ${value}`); };
+async function api(module, command, extra = {}) {
+  const response = await fetch(`${backend}/api/${module}/${command ? 'commands' : 'account'}`, {
+    headers: { ...headers, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(20000),
+    ...(command ? { method: 'POST', body: JSON.stringify({ command, ...extra }) } : {}),
+  });
+  return { status: response.status, ...await response.json() };
+}
+try {
+  for (const [path, method] of [['account', 'GET'], ['commands', 'POST']]) {
+    const response = await fetch(`${backend}/api/alerts/${path}`, { method, ...(method === 'POST' ? { headers: { 'Content-Type': 'application/json' }, body: '{}' } : {}), signal: AbortSignal.timeout(15000) });
+    assert.equal(response.status, 401);
+  }
+  record('Production background alert routes reject anonymous reads and writes');
+  const created = await admin.auth.admin.createUser({ email: `discipline-${crypto.randomUUID()}@example.com`, password: `Qa!${crypto.randomBytes(24).toString('hex')}`, email_confirm: true, app_metadata: { plan: 'premium', audit_fixture: true } });
+  assert.ifError(created.error); userId = created.data.user.id;
+  const saved = await admin.from('terminal_workspaces').insert({ user_id: userId, data: { activeWorkspace: 'settings', selectedStock: 'AAPL', layoutMode: '1', timeframe: '5m', orders: [], positions: {}, realizedPnL: 0, journalEntries: [] } }); assert.ifError(saved.error);
+  const link = await admin.auth.admin.generateLink({ type: 'magiclink', email: created.data.user.email }); assert.ifError(link.error);
+  const auth = await client.auth.verifyOtp({ token_hash: link.data.properties.hashed_token, type: 'email' }); assert.ifError(auth.error);
+  headers = { Authorization: `Bearer ${auth.data.session.access_token}` };
+  browser = await chromium.launch({ headless: true }); const context = await browser.newContext({ viewport: { width: 1536, height: 1024 } });
+  await context.addInitScript(({ key, session }) => {
+    localStorage.setItem(key, JSON.stringify(session)); localStorage.setItem('sb_public_onboarding_dismissed', 'true'); localStorage.setItem('sb_focused_terminal_workspace_v1', 'true');
+  }, { key: `sb-${new URL(process.env.SUPABASE_URL).hostname.split('.')[0]}-auth-token`, session: auth.data.session });
+  const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
+  await page.route(/\/api\/questrade\/(?:orders|submit|execute|cancel)/i, () => { throw new Error('Real execution forbidden in discipline verification'); });
+  await fs.mkdir('artifacts/deployment/discipline', { recursive: true });
+  await page.goto('https://www.sbcapitalco.com');
+  const navigate = async name => name === 'Alerts' ? page.getByRole('button', { name: 'Notifications and alerts', exact: true }).click() : page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name, exact: true }).click();
+  await page.getByRole('tab', { name: 'Trading', exact: true }).click({ timeout: 30000 });
+  await page.getByLabel('Maximum order value ($)', { exact: true }).fill('2000');
+  await page.getByLabel('Risk per trade ($)', { exact: true }).fill('25');
+  await page.getByLabel('Daily realized loss limit ($)', { exact: true }).fill('100');
+  await page.getByLabel('Require pre-trade checklist', { exact: true }).check();
+  await page.getByRole('button', { name: 'Save Paper Rules', exact: true }).click();
+  await expect.poll(async () => (await api('paper')).state.riskPolicy?.checklistRequired).toBe(true);
+  await page.reload(); await page.getByRole('tab', { name: 'Trading', exact: true }).click();
+  await expect(page.getByLabel('Risk per trade ($)', { exact: true })).toHaveValue('25'); record('Saved paper rules survive a production reload');
+  const checklist = { plan: true, size: true, exit: true };
+  let result = await api('paper', { id: crypto.randomUUID(), kind: 'submit', draft: { symbol: 'AAPL', side: 'BUY', type: 'LIMIT', quantity: 30, limitPrice: 100, stopLoss: 99, checklist, tif: 'GTC' } }, { limits: { maxOrderValue: 0, riskPerTrade: 0 } });
+  assert.equal(result.status, 422); assert.match(result.error, /maximum order value/);
+  result = await api('paper', { id: crypto.randomUUID(), kind: 'submit', draft: { symbol: 'AAPL', side: 'BUY', type: 'LIMIT', quantity: 1, limitPrice: 0.01, tif: 'DAY' } });
+  assert.equal(result.status, 422); assert.match(result.error, /checklist/); record('Production server rejects missing checklist and weaker request caps');
+  await navigate('Dashboard'); const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  await expect(ticket.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeDisabled();
+  await ticket.getByLabel('Paper order type').selectOption('LIMIT'); await ticket.getByLabel('Limit price', { exact: true }).fill('0.01'); await ticket.getByLabel('Paper quantity').fill('1');
+  await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('0.005'); await ticket.getByLabel('Paper setup').fill('QA waiting order');
+  for (const label of ['Setup and entry plan reviewed', 'Position size and loss reviewed', 'Exit and stop plan reviewed']) await ticket.getByLabel(label, { exact: true }).check();
+  await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click(); await expect(ticket.getByRole('status')).toContainText('WORKING');
+  const state = (await api('paper')).state; assert.deepEqual(state.positions, {}); assert.equal(state.orders[0].setup, 'QA waiting order');
+  assert.deepEqual(state.orders[0].checklist, checklist); assert.equal((await api('paper', { id: crypto.randomUUID(), kind: 'cancel-all' })).status, 200);
+  record('Checklist ticket submits an unmarketable paper limit and cancellation succeeds without a fabricated fill');
+  await navigate('Trade Journal'); await page.getByLabel('Journal record type').selectOption('trade');
+  await page.getByLabel('Journal quantity', { exact: true }).fill('1'); await page.getByLabel('Journal entry price', { exact: true }).fill('100');
+  await page.getByLabel('Journal exit price', { exact: true }).fill('110'); await page.getByLabel('Journal total fees', { exact: true }).fill('0');
+  await page.getByLabel('Journal setup', { exact: true }).fill('QA manual review'); await page.getByLabel('Journal entry time UTC').fill('2026-10-02T14:00');
+  await page.getByRole('button', { name: 'Save Record', exact: true }).click();
+  await expect.poll(async () => { const row = await admin.from('terminal_workspaces').select('data').eq('user_id', userId).single(); assert.ifError(row.error); return row.data.data.journalEntries?.some(entry => entry.setup === 'QA manual review'); }).toBe(true);
+  await page.getByRole('tab', { name: 'Statistics', exact: true }).click(); await page.getByLabel('Journal analysis dimension').selectOption('time');
+  await expect(page.getByText('10:00–10:59 ET', { exact: true })).toBeVisible(); await page.getByLabel('Journal analysis dimension').selectOption('session');
+  await expect(page.getByText('Regular', { exact: true })).toBeVisible(); await page.screenshot({ path: 'artifacts/deployment/discipline/journal.png' });
+  record('An explicitly manual QA journal record persists and uses its recorded entry hour/session');
+  await navigate('Alerts'); await page.getByLabel('Alert trigger price').fill('1000000'); await page.getByRole('button', { name: /Create/, exact: false }).click();
+  const monitoring = page.getByLabel('Enable background price alerts'); await expect(monitoring).toBeEnabled(); await monitoring.click(); await expect(monitoring).toBeChecked();
+  result = await api('alerts'); assert.equal(result.enabled, true); assert.equal(result.alerts.length, 1); assert.equal(result.alerts[0].trigger, 1000000);
+  const scanBefore = result.worker.lastScanAt;
+  await expect.poll(async () => (await api('alerts')).worker.lastScanAt, { timeout: 45000, intervals: [3000, 5000] }).not.toBe(scanBefore);
+  result = await api('alerts'); assert.equal(result.alerts[0].history.length, 0); record('Production background worker scans opted-in rules with real provider plumbing and no invented triggers');
+  await page.reload(); await expect(page.getByLabel('Enable background price alerts')).toBeChecked();
+  await page.screenshot({ path: 'artifacts/deployment/discipline/alerts.png' });
+  const ruleId = result.alerts[0].id;
+  const paused = await api('alerts', { id: crypto.randomUUID(), kind: 'pause', paused: true }); assert.equal(paused.paused, true);
+  const removed = await api('alerts', { id: crypto.randomUUID(), kind: 'remove', alertId: ruleId }); assert.equal(removed.alerts.length, 0);
+  await api('alerts', { id: crypto.randomUUID(), kind: 'monitoring', enabled: false });
+  const direct = await client.from('alert_accounts').select('user_id'); assert.ok(direct.error, 'Authenticated browser must not read backend-only alert storage');
+  record('Background rules persist, pause/delete succeed and direct browser access to alert storage is denied');
+  assert.deepEqual(errors, []); record('Production browser flows complete without runtime errors');
+} finally {
+  await browser?.close(); await client.auth.signOut();
+  if (userId) {
+    const removed = await admin.auth.admin.deleteUser(userId); assert.ifError(removed.error);
+    for (const table of ['terminal_workspaces', 'paper_accounts', 'alert_accounts']) { const row = await admin.from(table).select('user_id').eq('user_id', userId); assert.ifError(row.error); assert.equal(row.data.length, 0); }
+    record('Disposable QA account, manual journal, paper ledger and alerts were removed');
+  }
+  await fs.mkdir('artifacts/deployment/discipline', { recursive: true });
+  await fs.writeFile('artifacts/deployment/discipline/verification.json', JSON.stringify({ checkedAt: new Date().toISOString(), checks, errors }, null, 2));
+}

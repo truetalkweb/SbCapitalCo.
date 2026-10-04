@@ -90,7 +90,8 @@ function createPaperService({ repository, getQuotes, clock = Date.now, logger = 
       let state = engine.processPaperOrders(original, quotes, now);
       let result;
       if (command) {
-        result = applyPaperCommand(state, command, quotes, now, limits);
+        result = applyPaperCommand(state, command, quotes, now, state.riskPolicy
+          ? { ...state.riskPolicy, enforceStopForRisk: true } : limits);
         if (!result.error) state = { ...result.state, commands: { ...state.commands,
           [command.id]: { fingerprint: JSON.stringify(command), orderId: result.order?.id, at: new Date(now).toISOString() } } };
       }

@@ -5,6 +5,17 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createPaperService } = require('../support/paperService.cjs');
 const { memoryRepository } = require('../support/paperMemory.cjs');
+const { createAlertService } = require('../support/alertService.cjs');
+
+function alertMemory() {
+  const rows = new Map();
+  return {
+    async get(id) { return structuredClone(rows.get(id) || null); },
+    async insert(id, ledger) { if (!rows.has(id)) rows.set(id, { user_id: id, ledger: structuredClone(ledger), revision: 0, monitoring: false }); return this.get(id); },
+    async save(row, ledger) { if (rows.get(row.user_id)?.revision !== row.revision) return null; rows.set(row.user_id, { ...row, ledger: structuredClone(ledger), revision: row.revision + 1, monitoring: ledger.enabled && !ledger.paused && ledger.alerts.some(alert => alert.active) }); return this.get(row.user_id); },
+    async active(after = '') { return [...rows.values()].filter(row => row.monitoring && row.user_id > after).sort((a, b) => a.user_id.localeCompare(b.user_id)).map(row => structuredClone(row)); },
+  };
+}
 
 const start = 1788355800;
 const user = { id: "00000000-0000-4000-8000-000000000001", email: "correctness@example.test", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {} };
@@ -281,7 +292,8 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
   const errors = [];
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
-  let serverNow = Date.now();
+  let serverNow = await page.evaluate(() => Date.now());
+  const alertService = createAlertService({ repository: alertMemory(), clock: () => serverNow, getQuotes: async () => providerQuotes });
   const repository = memoryRepository(() => row.data.paperLedger || { orders: row.data.orders || [], positions: row.data.positions || {}, realizedPnL: row.data.realizedPnL || 0 });
   const paper = createPaperService({ repository, getQuotes: async () => providerQuotes, clock: () => serverNow });
   page.on("pageerror", error => errors.push(error.message));
@@ -289,6 +301,13 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
     const request = route.request();
     const url = new URL(request.url());
     if (url.origin === "http://127.0.0.1:4175") return route.continue();
+    if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/alerts/')) {
+      serverNow = await page.evaluate(() => Date.now());
+      try {
+        if (request.method() === 'GET') { await alertService.tick(); return route.fulfill({ json: await alertService.snapshot(user.id) }); }
+        return route.fulfill({ json: await alertService.transact(user.id, request.postDataJSON().command) });
+      } catch (error) { return route.fulfill({ status: error.status || 500, json: { error: error.message } }); }
+    }
     if (url.origin === "http://127.0.0.1:4999" && url.pathname === "/api/ai/summarize-news" && request.method() === "POST") {
       return route.fulfill(providerSummary ? await providerSummary(request.postDataJSON())
         : { status: 503, json: { error: "AI unavailable in this test" } });
@@ -343,7 +362,7 @@ async function setupApp(page, payload = initialWorkspace, { unavailableHistory =
     localStorage.setItem("sb_focused_terminal_workspace_v1", "true");
   }, { user, token, expiry });
   await page.goto("/");
-  return { errors, blocked, paper, repository, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
+  return { errors, blocked, paper, repository, alertService, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
 }
 
 test("news AI handles retry, provenance and article switching", async ({ page }) => {
@@ -978,7 +997,7 @@ test('server paper management edits, protects, flattens and exports realized his
   await expect(page.getByText('Position closed', { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('paper-realized-history.png') });
   await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Trade Journal', exact: true }).click();
-  await expect(page.getByText('Paper execution', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Unspecified', { exact: true }).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Exports', exact: true }).click();
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Journal CSV', exact: true }).click();
@@ -1089,6 +1108,7 @@ test('paper stop limit remains working after trigger and reload, then fills with
  await expect.poll(()=>evidence.workspace().paperLedger?.orders[0]?.status,{timeout:25000}).toBe('FILLED');
  expect(evidence.workspace().paperLedger.orders[0].price).toBe(105.51);
  await page.getByRole('navigation',{name:'Terminal workspaces'}).getByRole('button',{name:'Dashboard',exact:true}).click();
+ await expect(page.locator('.ws-symbol-price')).toContainText('105.50', { timeout: 25000 });
  await expect(page.locator('.ws-equity')).toContainText('$99,999.90');
  expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
 });
@@ -1111,10 +1131,12 @@ test('paper lost response survives reload and rapid retry without duplicate exec
  expect(evidence.workspace().paperLedger.positions.NVDA.quantity).toBe(10);
  await page.reload();
  await ticket.getByLabel('Paper order type').selectOption('MARKET'); await ticket.getByLabel('Paper quantity').fill('10');
+ await ticket.locator('summary').click(); await ticket.getByLabel('Paper setup').fill('Review metadata changed after reload');
  await expect(ticket.getByRole('button', { name: 'Place Paper Buy', exact: true })).toBeEnabled();
  await ticket.locator('form').evaluate(form => { form.requestSubmit(); form.requestSubmit(); });
  await expect(ticket.getByRole('status')).toContainText('FILLED');
  expect(ids).toHaveLength(2); expect(ids[1]).toBe(ids[0]);
+ expect(evidence.workspace().paperLedger.orders[0].setup).toBe('Unspecified');
  expect(evidence.workspace().paperLedger.orders).toHaveLength(1);
  expect(evidence.workspace().paperLedger.positions.NVDA.quantity).toBe(10);
  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
@@ -1183,4 +1205,75 @@ test('paper protective stop executes and cancels take profit on the next provide
  const ledger=evidence.workspace().paperLedger;expect(ledger.orders.find(o=>o.type==='STOP').status).toBe('FILLED');expect(ledger.orders.find(o=>o.id.endsWith('-target')).status).toBe('CANCELLED');expect(ledger.realizedPnL).toBe(-60.2);
  await page.getByRole('tab',{name:'Filled',exact:true}).click();await page.screenshot({path:testInfo.outputPath('paper-stop-filled.png')});
  expect(evidence.errors).toEqual([]);expect(evidence.blocked).toEqual([]);
+});
+
+for (const width of [390, 1536]) test(`paper discipline rules and checklist work at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 1024 }); await page.clock.setFixedTime(paperNow);
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'settings', selectedStock: 'NVDA', layoutMode: '1', orders: [], positions: {} }, { providerQuotes: [paperProviderQuote(100)] });
+  await page.getByRole('tab', { name: 'Trading', exact: true }).click();
+  await page.getByLabel('Maximum order value ($)', { exact: true }).fill('2000');
+  await page.getByLabel('Risk per trade ($)', { exact: true }).fill('25');
+  await page.getByLabel('Require pre-trade checklist', { exact: true }).check();
+  await page.getByRole('button', { name: 'Save Paper Rules', exact: true }).click();
+  await expect.poll(() => evidence.workspace().paperLedger?.riskPolicy?.checklistRequired).toBe(true);
+  if (width < 800) await page.getByRole('button', { name: 'Open workspace navigation' }).click();
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Dashboard', exact: true }).click();
+  const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
+  const submit = ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }); await expect(submit).toBeDisabled();
+  await ticket.getByLabel('Paper order type').selectOption('MARKET');
+  await ticket.getByText('Duration & protection', { exact: true }).click();
+  await ticket.getByLabel('Stop loss', { exact: true }).fill('99'); await ticket.getByLabel('Paper setup').fill('Opening breakout');
+  for (const label of ['Setup and entry plan reviewed', 'Position size and loss reviewed', 'Exit and stop plan reviewed']) await ticket.getByLabel(label, { exact: true }).check();
+  await expect(submit).toBeEnabled(); await ticket.getByLabel('Paper quantity').fill('11'); await expect(submit).toBeDisabled();
+  for (const label of ['Setup and entry plan reviewed', 'Position size and loss reviewed', 'Exit and stop plan reviewed']) await ticket.getByLabel(label, { exact: true }).check();
+  await submit.click(); await expect(ticket.getByRole('status')).toContainText('FILLED');
+  expect(evidence.workspace().paperLedger.positions.NVDA.setup).toBe('Opening breakout');
+  await page.screenshot({ path: testInfo.outputPath('paper-checklist.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('journal compares grouped positions by entry setup, hour and session', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(paperNow);
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'journal', layoutMode: '1', orders: [], positions: {} }, { providerQuotes: [paperProviderQuote(100)] });
+  const submit = (id, side, quantity) => evidence.paper.transact(user.id, { id, kind: 'submit', draft: { symbol: 'NVDA', side, type: 'MARKET', quantity, tif: 'GTC', setup: 'Opening breakout' } });
+  await submit('entry', 'BUY', 10); await submit('partial', 'SELL', 4); await submit('last', 'SELL', 6);
+  await page.reload(); await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  const analysis = page.getByLabel('Journal analysis dimension');
+  await expect(page.getByRole('row', { name: 'Select Opening breakout', exact: true })).toContainText('1');
+  await analysis.selectOption('time'); await expect(page.getByText('11:00–11:59 ET', { exact: true })).toBeVisible();
+  await analysis.selectOption('session'); await expect(page.getByText('Regular', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('journal-analysis.png') });
+  await page.getByRole('tab', { name: 'Trades', exact: true }).click();
+  await expect(page.getByText('2 realized exits · Position closed', { exact: true })).toBeVisible();
+  await page.getByLabel('Group paper partial exits').uncheck();
+  await expect(page.getByRole('row', { name: 'Select NVDA', exact: true })).toHaveCount(2);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
+});
+
+test('background alerts retain server activity after reload, respect pause and permit edits', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(paperNow);
+  const quotes = [paperProviderQuote(100, 'AAPL')];
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'alerts', selectedStock: 'AAPL', layoutMode: '1', alerts: [{ id: 'server-rule', symbol: 'AAPL', trigger: 110, direction: 'above', active: true, history: [] }] }, { providerQuotes: quotes });
+  const toggle = page.getByLabel('Enable background price alerts'); await expect(toggle).toBeEnabled(); await toggle.click(); await expect(toggle).toBeChecked();
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).enabled).toBe(true);
+  quotes[0] = paperProviderQuote(111, 'AAPL'); await evidence.alertService.tick();
+  await page.reload(); await page.getByRole('tab', { name: 'Triggered', exact: true }).click();
+  await expect(page.getByRole('row', { name: 'Select AAPL', exact: true })).toContainText('Triggered');
+  expect((await evidence.alertService.snapshot(user.id)).alerts[0].history).toHaveLength(1);
+  await page.getByRole('row', { name: 'Select AAPL', exact: true }).click();
+  await expect(page.getByText('AAPL triggered above', { exact: false }).first()).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('background-alert.png') });
+  await page.getByLabel('Alert trigger price').fill('200');
+  await page.getByRole('button', { name: 'Update & Reactivate', exact: true }).click();
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).alerts[0].trigger).toBe(200);
+  expect((await evidence.alertService.snapshot(user.id)).alerts[0].history).toHaveLength(1);
+  await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Notifications', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle price alert monitoring', exact: true }).click();
+  await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).paused).toBe(true);
+  await page.getByRole('button', { name: 'Notifications and alerts', exact: true }).click();
+  await expect(page.getByText('Server monitoring is paused by your price-alert setting.', { exact: true })).toBeVisible();
+  await toggle.click(); await expect(toggle).not.toBeChecked(); await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).enabled).toBe(false);
+  expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });

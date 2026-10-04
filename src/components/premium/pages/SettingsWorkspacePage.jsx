@@ -3,6 +3,7 @@ import AdminMonitoringPanel from "../../AdminMonitoringPanel";
 import { terminalSansFont } from "../../../config/terminalConfig";
 import { PLAN_LABELS, normalizePlan } from "../../../services/entitlements";
 import { saveSetting } from "../../../utils/storage";
+import PaperRiskSettings from '../../workstation/PaperRiskSettings.jsx';
 import { ActionButton, PremiumCard, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function SettingsWorkspacePage({
@@ -54,6 +55,7 @@ export default function SettingsWorkspacePage({
       updateNotificationPreference,
       updatePremiumPreference,
       paperCosts = {},
+      paperTrading,
       user
 }) {
     const backupInputRef = useRef(null);
@@ -228,6 +230,7 @@ export default function SettingsWorkspacePage({
               ["Currency display", settingSelect("Currency display", "USD", ["USD"], null, true)],
             ])}
             {group("Trading Preferences", [
+              ["Paper rules", <PaperRiskSettings key={JSON.stringify(paperTrading?.riskPolicy)} trading={paperTrading} />],
               ...[["Commission per fill ($)", "commissionPerOrder", 100, "0.01"], ["Commission per share ($)", "commissionPerShare", 1, "0.001"], ["Adverse slippage (bps)", "slippageBps", 100, "0.1"]].map(([label, key, max, step]) => [label, <input key={key} aria-label={label} type="number" min="0" max={max} step={step} value={paperCosts[key] ?? 0} style={{ ...selectStyle }} onChange={event => { const value = event.target.valueAsNumber; if (Number.isFinite(value) && value >= 0 && value <= max) updatePremiumPreference("paperCosts", { ...paperCosts, [key]: value }); }} />]),
               ["Simulated costs", <span style={{ color: theme.muted, fontSize: 11 }}>USD per executed fill. 1 bp = 0.01%. New orders keep these settings; limits cap slippage. Defaults are zero.</span>],
               ["Default order type", settingSelect("Default order type", defaultOrderType, [["MARKET", "Market review"], ["LIMIT", "Limit review"]], (value) => { updatePremiumPreference("defaultOrderType", value); setOrderMessage?.(`Default review order type saved: ${value}.`); })],
@@ -252,7 +255,7 @@ export default function SettingsWorkspacePage({
           </div>}
           {showSecondaryColumn && <div style={{ display: "grid", gap: 10 }}>
             {group("Broker & Data Connections", [["Broker status", <StatusPill key="b" theme={theme} tone={brokerConnected ? "good" : "warn"}>{brokerConnected ? "Connected" : "Review-only"}</StatusPill>], ["Market data status", <StatusPill key="d" theme={theme} tone="neutral">Current workspace feed</StatusPill>], ["Connection management", disabledSetting("Managed by the private backend; credentials are never exposed here")], ["Refresh guidance", <span key="a">Use the terminal Retry control to refresh provider health.</span>]], "Data & Connections")}
-            {group("Notification Settings", [["Price alert monitoring", settingToggle(notificationPreferences.priceAlerts, (value) => updateNotificationPreference("priceAlerts", value), false, "Toggle price alert monitoring")], ["News catalyst highlights", settingToggle(notificationPreferences.newsCatalysts, (value) => updateNotificationPreference("newsCatalysts", value), false, "Toggle news catalyst highlights")], ["Trigger sound", settingToggle(notificationPreferences.soundAlerts, (value) => updateNotificationPreference("soundAlerts", value), false, "Toggle trigger sound")], ["Delivery scope", disabledSetting("In-app while the terminal is open; no email or push delivery")]], "Notifications")}
+            {group("Notification Settings", [["Price alert monitoring", settingToggle(notificationPreferences.priceAlerts, (value) => updateNotificationPreference("priceAlerts", value), false, "Toggle price alert monitoring")], ["News catalyst highlights", settingToggle(notificationPreferences.newsCatalysts, (value) => updateNotificationPreference("newsCatalysts", value), false, "Toggle news catalyst highlights")], ["Trigger sound", settingToggle(notificationPreferences.soundAlerts, (value) => updateNotificationPreference("soundAlerts", value), false, "Toggle trigger sound")], ["Delivery scope", disabledSetting("In-app activity; optional server monitoring in Alerts. No email or closed-browser push delivery")]], "Notifications")}
             {group("Security", [
               ["Authentication", <StatusPill key="auth" theme={theme} tone="good">Supabase session</StatusPill>],
               ["Two-factor authentication", disabledSetting("Configure in Supabase Auth when required")],

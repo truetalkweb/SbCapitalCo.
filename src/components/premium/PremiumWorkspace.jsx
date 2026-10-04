@@ -89,6 +89,7 @@ function PremiumWorkspaceContent({
   allSymbols,
   accountSummary,
   paperTrading,
+  backgroundAlerts,
   paperDraft,
   setPaperDraft,
   realizedPnL,
@@ -762,6 +763,7 @@ function PremiumWorkspaceContent({
     return (
       <AlertsWorkspacePage
         {...{
+          backgroundAlerts,
           alertDraftDirection,
           alertDraftPrice,
           alertRows,
@@ -844,6 +846,7 @@ function PremiumWorkspaceContent({
     return (
       <RiskWorkspacePage
         {...{
+          paperTrading,
           alertRows,
           mainTwoCol,
           page,
@@ -1011,6 +1014,7 @@ function PremiumWorkspaceContent({
           updateNotificationPreference,
           updatePremiumPreference,
           paperCosts: premiumPreferences.paperCosts || {},
+          paperTrading,
           user,
         }}
       />

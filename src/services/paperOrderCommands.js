@@ -1,4 +1,5 @@
 import { cancelPaperOrder, isWorkingPaperOrder, normalizePaperCosts, paperQuote, submitPaperOrder } from './paperTradingEngine.js';
+import { normalizePaperRiskPolicy } from './paperRiskPolicy.js';
 
 // Pure commands run in a revision-checked server transaction. An error leaves
 // the entire original ledger intact, including reservations and protection.
@@ -6,6 +7,10 @@ export function applyPaperCommand(state, command, quotes, now, limits = {}) {
   const fail = error => ({ state, error });
   const { id, kind } = command;
   if (typeof id !== 'string' || !/^[\w-]{1,100}$/.test(id)) return fail('Invalid command ID.');
+  if (kind === 'risk-policy') {
+    try { return { state: { ...state, riskPolicy: normalizePaperRiskPolicy(command.policy) } }; }
+    catch (error) { return fail(error.message); }
+  }
   let paperCosts;
   try { paperCosts = normalizePaperCosts(command.paperCosts); } catch (error) { return fail(error.message); }
   if (kind === 'submit') return submitPaperOrder(state, { ...command.draft, id, paperCosts }, quotes, now, limits);
@@ -80,8 +85,9 @@ export function paperTradeHistory(state) {
       bias: (row.action || row.side) === 'BUY_TO_COVER' ? 'Short' : 'Long', quantity: row.filled,
       entryPrice: row.entryPrice ?? null, exitPrice: row.price, pnl: row.netTradePnL ?? row.realizedPnL,
       fees: (row.commission || 0) + (row.entryCommission || 0),
+      tradeGroupId: row.tradeGroupId || null, openedAt: row.openedAt || null, closesPosition: Boolean(row.closesPosition),
       closedAt: row.filledAt, createdAt: row.filledAt, currency: 'USD', source: 'Paper simulation',
-      setup: 'Paper execution', notes: row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)',
+      setup: row.setup || 'Unspecified', notes: row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)',
       immutable: true,
     }));
 }

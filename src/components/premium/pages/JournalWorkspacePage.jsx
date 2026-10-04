@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { journalStatistics } from "../../../utils/journalAccounting.js";
+import { journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { X } from "lucide-react";
 import { defaultJournalDraft, terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
-import { money, num } from "../premiumWorkspaceData";
+import { money, num, makeJournalTrades } from "../premiumWorkspaceData";
 import { ActionButton, FilterBar, MetricTile, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, SeriesSparkline, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function JournalWorkspacePage({
@@ -25,7 +25,11 @@ export default function JournalWorkspacePage({
 }) {
     const [search, setSearch] = useState("");
     const [kind, setKind] = useState("all");
-    const stats = journalStatistics(journalRows);
+    const [analysisDimension, setAnalysisDimension] = useState('setup');
+    const [groupExits, setGroupExits] = useState(true);
+    const presentedRows = groupExits ? makeJournalTrades(groupJournalTrades(journalRows)) : journalRows;
+    const stats = journalStatistics(presentedRows);
+    const breakdowns = journalBreakdowns(journalRows);
     const { wins, losses, breakeven } = stats;
     const tradeCount = stats.total;
     const journalNet = stats.net;
@@ -34,7 +38,7 @@ export default function JournalWorkspacePage({
     const journalAvgWin = stats.averageWin;
     const journalAvgLoss = stats.averageLoss;
     const journalProfitFactor = stats.profitFactor === null ? "Unavailable" : stats.profitFactor.toFixed(2);
-    const visibleRows = journalRows.filter(row => (kind === "all" || row.recordType === kind) && [row.symbol,row.setup,row.notes,row.tag].join(" ").toLowerCase().includes(search.toLowerCase()));
+    const visibleRows = presentedRows.filter(row => (kind === "all" || row.recordType === kind) && [row.symbol,row.setup,row.notes,row.tag].join(" ").toLowerCase().includes(search.toLowerCase()));
     const pagination = useRecordPage(visibleRows, 25, search + kind);
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
@@ -52,6 +56,8 @@ export default function JournalWorkspacePage({
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
             <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
+              <label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => setGroupExits(event.target.checked)} /> Group paper partial exits by position</label>
+              <span style={{ color: theme.muted, fontSize: 11 }}>{groupExits ? 'Grouped statistics count fully closed positions. Partial exits from positions still open are excluded; legacy exits without position IDs remain separate.' : 'Execution view counts each realized exit separately.'}</span>
               {journalView === "Trades" && <><FilterBar theme={theme} search="Search journal records" value={search} onSearchChange={setSearch} /><select aria-label="Journal record filter" value={kind} onChange={event => setKind(event.target.value)}><option value="all">All records</option><option value="note">Notes</option><option value="trade">Trades</option></select></>}
             </div>
           </PremiumCard>
@@ -59,6 +65,7 @@ export default function JournalWorkspacePage({
               <div style={{ padding: 14, display: "flex", gap: 12, flexWrap: "wrap", color: theme.muted }}>
                 <label>Record type <select aria-label="Journal record type" value={journalDraft.recordType || "note"} onChange={event => setJournalDraft(current => ({ ...current, recordType: event.target.value, status: event.target.value === "trade" ? "closed" : "note" }))}><option value="note">Note</option><option value="trade">Trade</option></select></label>
                 {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
+                {journalDraft.recordType === 'trade' && <label>Entry time (UTC)<input aria-label="Journal entry time UTC" type="datetime-local" value={journalDraft.openedAt ? String(journalDraft.openedAt).replace('Z', '').slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, openedAt: event.target.value ? `${event.target.value}:00Z` : null }))} /></label>}
                 <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
               </div>
               <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "minmax(90px, .8fr) minmax(130px, 1.2fr) minmax(80px, .7fr) minmax(100px, .9fr) minmax(180px, 2fr)", gap: 12, alignItems: "end" }}>
@@ -104,12 +111,23 @@ export default function JournalWorkspacePage({
                   ["Avg Win", money(journalAvgWin), "good"],
                   ["Avg Loss", money(journalAvgLoss === null ? null : -journalAvgLoss), "bad"],
                   ["Expectancy", tradeCount ? money(journalNet / tradeCount) : "Unavailable", "neutral"],
-                  ["Best Trade", tradeCount ? money(Math.max(...journalPnls)) : "Unavailable", "good"],
-                  ["Worst Trade", tradeCount ? money(Math.min(...journalPnls)) : "Unavailable", "bad"],
-                  ["Avg Hold Time", "Not calculated", "neutral"],
+                  ["Best Trade", tradeCount ? money(Math.max(...journalPnls)) : "Unavailable", stats.best >= 0 ? "good" : "bad"],
+                  ["Worst Trade", tradeCount ? money(Math.min(...journalPnls)) : "Unavailable", stats.worst >= 0 ? "good" : "bad"],
+                  ["Avg Hold Time", stats.averageHoldMs === null ? 'Unavailable' : `${(stats.averageHoldMs / 60000).toFixed(1)} min`, "neutral", `${stats.knownHoldCount} known entry times`],
                 ].map(([label, value, tone, detail]) => (
                   <MetricTile key={label} theme={theme} label={label} value={value} tone={value === "Unavailable" ? "neutral" : tone} detail={detail} />
                 ))}
+              </div>
+              <div style={{ padding: 14, borderTop: `1px solid ${theme.border}` }}>
+                <label style={{ color: theme.muted, fontSize: 12 }}>Compare completed positions by <select aria-label="Journal analysis dimension" value={analysisDimension} onChange={event => setAnalysisDimension(event.target.value)}><option value="setup">Setup</option><option value="time">Entry hour (ET)</option><option value="session">Entry session</option></select></label>
+                <p style={{ color: theme.muted, fontSize: 11 }}>Comparisons always group known paper position IDs. Entry time is never inferred from exit time.</p>
+                <PremiumTable theme={theme} keyField="label" rows={breakdowns[analysisDimension]} emptyMessage="No completed trades to compare." columns={[
+                  { key: 'label', label: 'Group', width: '1.5fr' }, { key: 'total', label: 'Trades', width: '70px' },
+                  { key: 'net', label: 'Net P&L', width: '110px', render: row => money(row.net) },
+                  { key: 'winRate', label: 'Win rate', width: '90px', render: row => `${row.winRate.toFixed(1)}%` },
+                  { key: 'expectancy', label: 'Expectancy', width: '110px', render: row => money(row.expectancy) },
+                  { key: 'profitFactor', label: 'Profit factor', width: '100px', render: row => row.profitFactor === null ? 'Unavailable' : row.profitFactor.toFixed(2) },
+                ]} />
               </div>
             </PremiumCard>}
             {showStatistics && <div className="ws-journal-charts" style={{ display: "grid", gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1.35fr) 300px minmax(0, .85fr)", gap: 10 }}>

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { paperQuote, paperSellAvailability, paperCoverAvailability, paperCommission } from '../../services/paperTradingEngine.js';
 import { currency } from './workstationFormat.js';
 import './paperTrading.css';
+import { PAPER_CHECKLIST, paperChecklistComplete } from '../../services/paperRiskPolicy.js';
 const labels = { BUY: 'Buy', SELL: 'Sell', SELL_SHORT: 'Sell Short', BUY_TO_COVER: 'Buy to Cover' };
 
 export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity, trading, initialDraft = {}, defaultType = 'MARKET', onTypeChange, onMessage }) {
@@ -14,14 +15,16 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [setup, setSetup] = useState('');
+  const [checklist, setChecklist] = useState({});
   const request = useRef(null);
   const receipt = useRef(null);
-  const clear = () => { setFeedback(null); request.current = null; };
+  const clear = () => { setFeedback(null); request.current = null; setChecklist({}); };
   const update = (setter, event) => { clear(); setter(event.target.value); };
   const fresh = paperQuote(quote);
   const isOpening = ['BUY', 'SELL_SHORT'].includes(side), isSell = ['SELL', 'SELL_SHORT'].includes(side);
   const available = side === 'BUY_TO_COVER' ? paperCoverAvailability(trading, symbol) : paperSellAvailability(trading, symbol);
-  const draft = { symbol, side, type, quantity, limitPrice: limit, stopPrice: stop, stopLoss: isOpening ? stopLoss : '', takeProfit: isOpening ? takeProfit : '', tif };
+  const draft = { symbol, side, type, quantity, limitPrice: limit, stopPrice: stop, stopLoss: isOpening ? stopLoss : '', takeProfit: isOpening ? takeProfit : '', tif, setup, checklist };
   const fingerprint = JSON.stringify(draft);
   const currentOrder = feedback?.id ? trading.orders.find(order => order.id === feedback.id) : null;
   useEffect(() => { receipt.current?.scrollIntoView({ block: 'nearest' }); }, [feedback, currentOrder?.status]);
@@ -46,16 +49,17 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
       </div>
       <details className="ws-paper-options"><summary>Duration & protection</summary><div className="ws-paper-grid">
         <label className="ws-paper-field">Duration<select aria-label="Paper duration" value={tif} onChange={event => update(setTif, event)}><option value="DAY">DAY</option><option value="GTC">GTC</option></select></label>
-        {isOpening && <>{field('Stop loss', stopLoss, setStopLoss)}{field('Take profit', takeProfit, setTakeProfit)}</>}
+        {isOpening && <>{field('Stop loss', stopLoss, setStopLoss)}{field('Take profit', takeProfit, setTakeProfit)}<label className="ws-paper-field">Setup<input aria-label="Paper setup" maxLength="100" value={setup} onChange={event => update(setSetup, event)} placeholder="Optional journal setup" /></label></>}
       </div><small>{side === 'SELL_SHORT' ? 'Short stop above entry; target below. Entry value is reserved as paper collateral; short proceeds are restricted.' : side === 'BUY' ? 'Optional linked exits activate after entry. One exit cancels the other.' : side === 'BUY_TO_COVER' ? 'Closes short shares only. Cannot open a long position.' : 'Closes long shares only. Use Sell Short to open a short position.'}</small></details>
       <div className="ws-paper-meta">{!isOpening ? <>Available to {side === 'SELL' ? 'sell' : 'cover'} <b>{available.available} / {available.held} {symbol}</b></> : <>Buying power <b>{currency(trading.balances.buyingPower)}</b></>}</div>
+      {isOpening && trading.riskPolicy?.checklistRequired && <fieldset className="ws-paper-checklist" style={{ border: '1px solid var(--ws-border)', margin: 0, padding: 8, display: 'grid', gap: 6, fontSize: 11 }}><legend>Pre-trade checklist</legend>{PAPER_CHECKLIST.map(([key, label]) => <label key={key}><input type="checkbox" aria-label={label} checked={Boolean(checklist[key])} onChange={event => { setFeedback(null); request.current = null; setChecklist(current => ({ ...current, [key]: event.target.checked })); }} /> {label}</label>)}</fieldset>}
       <small className="ws-paper-costs">Simulated commission: {currency(paperCommission(trading.paperCosts, Math.max(0, Number(quantity) || 0)))} per fill · adverse slippage: {trading.paperCosts?.slippageBps || 0} bps. Working orders keep their saved costs.</small>
       {side === 'SELL' && available.held === 0 && <div className="ws-paper-position-help">No {symbol} shares owned. <button type="button" onClick={() => { clear(); setSide('BUY'); }}>Switch to Buy</button></div>}
       {!isOpening && available.available > 0 && Number(quantity) > available.available && <button className="ws-paper-new" type="button" onClick={() => { clear(); setQuantity(available.available); }}>Use available quantity ({available.available})</button>}
       {(feedback?.error || currentOrder) && <div ref={receipt} role="status" className="ws-paper-feedback">{feedback?.error || <><strong>{currentOrder.status.replaceAll('_',' ')}</strong> · {(currentOrder.action || currentOrder.side).replaceAll('_',' ')} {currentOrder.filled || currentOrder.quantity} {currentOrder.symbol}{currentOrder.price ? ` @ ${currency(currentOrder.price)}` : ''}<br />{currentOrder.reason}{currentOrder.status === 'FILLED' && <><br />Commission {currency(currentOrder.commission || 0)} · slippage {currency(currentOrder.slippageCost || 0)}{currentOrder.netTradePnL != null ? ` · net exit P&L ${currency(currentOrder.netTradePnL)}` : ''}</>}</>}</div>}
       {currentOrder && <button type="button" className="ws-paper-new" onClick={clear}>New order</button>}
       </div>
-      <button type="submit" className={`ws-order-button ${isSell ? 'is-sell' : ''}`} disabled={!trading.ready || trading.busy || Boolean(currentOrder)}>{trading.busy ? 'Submitting…' : `Place Paper ${labels[side]}`}</button>
+      <button type="submit" className={`ws-order-button ${isSell ? 'is-sell' : ''}`} disabled={!trading.ready || trading.busy || Boolean(currentOrder) || isOpening && trading.riskPolicy?.checklistRequired && !paperChecklistComplete(checklist)}>{trading.busy ? 'Submitting…' : `Place Paper ${labels[side]}`}</button>
       <small className="ws-paper-note" role={trading.error ? 'status' : undefined}>{trading.error || `Simulated fills · ${fresh ? `${fresh.quality} quotes` : 'waiting for a fresh quote'}. Server execution continues when you close the terminal.`}</small>
     </form>
   </section>;

@@ -11,10 +11,12 @@ function sync(source, destination, transform = value => value) {
     if (fs.readFileSync(destination, 'utf8').replaceAll('\r\n', '\n') !== expected) throw new Error(`Paper source drift: ${destination}`);
   } else { fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, expected); }
 }
-for (const relative of ['services/paperTradingEngine.js', 'services/paperOrderCommands.js', 'utils/marketDataContract.js', 'utils/marketNumbers.js', 'utils/marketSession.js']) {
+for (const relative of ['services/paperTradingEngine.js', 'services/paperOrderCommands.js', 'services/paperRiskPolicy.js', 'utils/priceAlerts.js', 'utils/marketDataContract.js', 'utils/marketNumbers.js', 'utils/marketSession.js']) {
   sync(path.join(frontend, 'src', relative), path.join(backend, 'lib/paper', relative));
 }
 sync(path.join(backend, 'lib/paperService.cjs'), path.join(frontend, 'e2e/support/paperService.cjs'), source =>
   '// Test-only mirror of backend/lib/paperService.cjs; refresh with scripts/sync-paper-core.mjs.\n' + source.replaceAll('./paper/services/', '../../src/services/'));
 sync(path.join(backend, 'test/helpers/paperMemory.cjs'), path.join(frontend, 'e2e/support/paperMemory.cjs'));
+sync(path.join(backend, 'lib/alertService.cjs'), path.join(frontend, 'e2e/support/alertService.cjs'), source =>
+  '// Test-only mirror of backend/lib/alertService.cjs.\n' + source.replaceAll('./paper/utils/', '../../src/utils/'));
 console.log(check ? 'Paper runtime and test fixture parity verified.' : 'Paper runtime and test fixtures synchronized.');

@@ -80,7 +80,7 @@ export function usePaperTrading({ state, setState, quotes, enabled, limits, user
   const history = useMemo(() => paperTradeHistory(state), [state]);
   const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const dailyRealized = state.orders.filter(row => row.engine === 'paper-v1' && row.status === 'FILLED' && row.filledAt && new Date(row.filledAt).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today).reduce((sum, row) => sum + (Number(row.realizedPnL) || 0), 0);
-  return { submit, cancel, command, busy, balances, history, dailyRealized, paperCosts,
+  return { submit, cancel, command, busy, balances, history, dailyRealized, paperCosts, riskPolicy: state.riskPolicy, legacyLimits: limits,
     ready: enabled && connection.userId === userId && connection.ready,
     error: connection.userId === userId ? connection.error : '', worker: connection.worker,
     session: getUsMarketStatus(sessionClock), orders: state.orders, positions: state.positions };

@@ -8,6 +8,10 @@ function intent(request) {
   if (command.draft) {
     const draft = { ...command.draft };
     delete draft.id;
+    // Review metadata does not change the economic intent. An unconfirmed
+    // command keeps its original setup/checklist just as it keeps its costs.
+    delete draft.setup;
+    delete draft.checklist;
     command.draft = draft;
   }
   return JSON.stringify(command);
@@ -17,7 +21,9 @@ export function preparePaperCommand(request, userId, storage = sessionStorage) {
   const pending = JSON.parse(storage.getItem(key) || '[]');
   if (!Array.isArray(pending)) throw new Error('Paper request recovery storage requires repair.');
   const fingerprint = intent(request);
-  const existing = pending.find(row => row.fingerprint === fingerprint);
+  // Recompute stored intents so pending commands from older client versions
+  // remain recoverable when optional metadata fields are introduced.
+  const existing = pending.find(row => row.command && intent(row.command) === fingerprint);
   if (existing) return existing.command;
   if (pending.length >= 100) throw new Error('Too many unconfirmed paper requests. Check Orders before continuing.');
   const command = { ...request, id: request.id || crypto.randomUUID() };

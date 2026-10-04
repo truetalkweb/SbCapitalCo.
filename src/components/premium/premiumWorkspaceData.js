@@ -170,7 +170,7 @@ export function makeJournalTrades(entries) {
       pnl: record.pnl,
       pnlPct: entry.pnlPct ?? "Not recorded",
       r: entry.rMultiple ?? entry.r ?? "Not recorded",
-      hold: entry.holdTime || "Not recorded",
+      hold: entry.holdTime || (entry.openedAt && record.timestamp !== null && Number.isFinite(Date.parse(entry.openedAt)) && record.timestamp >= Date.parse(entry.openedAt) ? `${((record.timestamp - Date.parse(entry.openedAt)) / 60000).toFixed(1)} min` : "Not recorded"),
       outcome: record.eligible ? record.pnl > 0 ? "Win" : record.pnl < 0 ? "Loss" : "Breakeven" : record.recordType === "note" ? "Note" : record.status === "open" ? "Open" : "Incomplete",
       tag: entry.tags || entry.setup || "Review",
       notes: entry.notes || entry.review || "No notes",

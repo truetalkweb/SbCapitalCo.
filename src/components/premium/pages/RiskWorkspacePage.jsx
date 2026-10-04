@@ -1,10 +1,12 @@
 import { terminalMonoFont } from "../../../config/terminalConfig";
+import PaperRiskSettings from '../../workstation/PaperRiskSettings.jsx';
 import { summarizePositions } from "../../../utils/portfolioAccounting.js";
 import { money } from "../premiumWorkspaceData";
 import { EmptyWorkspace, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
 
 export default function RiskWorkspacePage({
   alertRows,
+      paperTrading,
       mainTwoCol,
       page,
       positionRows,
@@ -16,7 +18,7 @@ export default function RiskWorkspacePage({
       theme
 }) {
     if (positionRows.length === 0) {
-      return <div className="terminal-page" style={page}><SectionTitle theme={theme} title="Risk" /><EmptyWorkspace theme={theme} title="Risk data unavailable" detail="Risk, exposure, beta, and VaR require known workspace positions. The terminal will not manufacture portfolio metrics when no account data exists." /></div>;
+      return <div className="terminal-page" style={page}><SectionTitle theme={theme} title="Risk" /><PremiumCard theme={theme}><PaperRiskSettings key={JSON.stringify(paperTrading?.riskPolicy)} trading={paperTrading} /></PremiumCard><EmptyWorkspace theme={theme} title="Risk data unavailable" detail="Risk, exposure, beta, and VaR require known workspace positions. The terminal will not manufacture portfolio metrics when no account data exists." /></div>;
     }
     const summary = summarizePositions(positionRows);
     const totalMarketValue = summary.grossExposure;
@@ -72,7 +74,7 @@ export default function RiskWorkspacePage({
     const riskContent = riskView === "Exposure"
       ? <PremiumTable theme={theme} columns={exposureColumns} rows={exposureRows} selectedKey={selectedPosition?.symbol} onSelect={selectRiskPosition} />
       : riskView === "Limits"
-        ? <PremiumTable theme={theme} columns={limitColumns} rows={limitRows} keyField="metric" />
+        ? <><PaperRiskSettings key={JSON.stringify(paperTrading?.riskPolicy)} trading={paperTrading} /><PremiumTable theme={theme} columns={limitColumns} rows={limitRows} keyField="metric" /></>
         : riskView === "Stress Test"
           ? <EmptyWorkspace theme={theme} title="Stress model unavailable" detail="Scenario stress testing needs verified historical correlations and account risk inputs. The terminal will not synthesize a stress result." />
           : riskView === "Margin"

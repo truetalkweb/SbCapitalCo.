@@ -22,3 +22,13 @@ test('distinct intents and users cannot reuse an unconfirmed receipt', () => {
 test('unavailable storage fails before a command can be sent', () => {
   assert.throws(() => preparePaperCommand(buy('one'), 'a', { getItem() { throw new Error('disabled'); } }), /disabled/);
 });
+
+test('optional checklist/setup metadata cannot duplicate an older unconfirmed order after upgrade', () => {
+  const store = storage(), first = preparePaperCommand(buy('original'), 'user', store);
+  const next = { ...buy('new'), draft: { ...buy('new').draft, setup: 'Reviewed setup', checklist: { plan: true, size: true, exit: true } } };
+  assert.deepEqual(preparePaperCommand(next, 'user', store), first);
+  acknowledgePaperCommand(first, 'user', store);
+  const accepted = preparePaperCommand(next, 'user', store);
+  assert.equal(accepted.draft.setup, 'Reviewed setup');
+  assert.deepEqual(preparePaperCommand({ ...next, draft: { ...next.draft, setup: 'Changed review', checklist: {} } }, 'user', store), accepted);
+});

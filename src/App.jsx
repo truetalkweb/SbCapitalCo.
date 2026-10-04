@@ -58,6 +58,7 @@ import { useReplayEngine } from "./hooks/useReplayEngine";
 import { captureChartCanvas } from "./utils/chartCapture.js";
 import { useScannerData } from "./hooks/useScannerData";
 import { useTerminalAlerts } from "./hooks/useTerminalAlerts";
+import { useBackgroundAlerts } from './hooks/useBackgroundAlerts.js';
 import { useTerminalWorkspace } from "./hooks/useTerminalWorkspace";
 import { useTerminalSymbols } from "./hooks/useTerminalSymbols";
 import {
@@ -171,6 +172,8 @@ export default function App() {
     subscribeToSymbols,
   } = useMarketData();
   const [marketSnapshotQuotes, setMarketSnapshotQuotes] = useState({});
+  const serverAlertController = useRef(null);
+  const [serverAlertState, setServerAlertState] = useState({ enabled: false });
 
   const [timeframe, setTimeframe] = useState(() =>
     loadSetting("sb_timeframe", "15m")
@@ -645,6 +648,7 @@ export default function App() {
     toggleAlert,
     updateAlert,
   } = useTerminalAlerts({
+    serverController: serverAlertController, serverState: serverAlertState,
     selectedStock,
     selectedStockData,
     quotes: allSymbols,
@@ -925,6 +929,9 @@ export default function App() {
   const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
     paperCosts: premiumPreferences.paperCosts || {},
     userId: user?.id, enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
+  const backgroundAlerts = useBackgroundAlerts({ userId: user?.id, enabled: Boolean(user && workspaceReady),
+    alerts, setAlerts, controllerRef: serverAlertController, onState: setServerAlertState,
+    activityEnabled: premiumPreferences.notificationPreferences?.priceAlerts !== false });
   const accountJournalEntries = [...paperTrading.history, ...journalEntries];
   const paperAccountSummary = { source: "Paper account · $100,000 starting balance", rows: [
     { label: "Account Equity", value: paperTrading.balances.equity },
@@ -1701,7 +1708,7 @@ export default function App() {
 
   function exportJournalCsv() {
     const headers = [
-      "createdAt",
+      "createdAt", "openedAt", "tradeGroupId", "closesPosition",
       "recordType", "status", "currency", "source", "quantity", "entryPrice", "exitPrice", "fees", "pnl",
       "symbol",
       "bias",
@@ -3696,6 +3703,7 @@ export default function App() {
         brokerApiUrl={BROKER_API_URL}
         alerts={alerts}
         createPriceAlert={createPriceAlert}
+        backgroundAlerts={backgroundAlerts}
         toggleAlert={toggleAlert}
         updateAlert={updateAlert}
         removeAlert={removeAlert}

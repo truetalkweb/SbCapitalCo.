@@ -1,14 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { loadSetting } from "../utils/storage.js";
-import { isEligibleAlertQuote, normalizeMarketQuote } from "../utils/marketDataContract.js";
+import { normalizeMarketQuote } from "../utils/marketDataContract.js";
 
-export function shouldTriggerPriceAlert(alert, quote, enabled = true, now = Date.now()) {
-  if (!enabled || !alert?.active || !isEligibleAlertQuote(quote, alert.symbol, now)) return false;
-  const trigger = Number(alert.trigger);
-  if (!Number.isFinite(trigger) || trigger <= 0 || !["above", "below"].includes(alert.direction)) return false;
-  const { price } = normalizeMarketQuote(quote, { symbol: alert.symbol, now });
-  return alert.direction === "below" ? price <= trigger : price >= trigger;
-}
+export { shouldTriggerPriceAlert } from '../utils/priceAlerts.js';
+import { shouldTriggerPriceAlert } from '../utils/priceAlerts.js';
 
 export function makePriceAlert({ symbol, trigger, direction = "above" }) {
   const cleanSymbol = String(symbol || "").trim().toUpperCase();
@@ -40,24 +35,39 @@ function playTerminalAlertSound() {
   }
 }
 
-export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [], alertActivityEnabled = true, soundAlertsEnabled = false }) {
+export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [], alertActivityEnabled = true, soundAlertsEnabled = false, serverController, serverState }) {
   const [alerts, setAlerts] = useState(() => loadSetting("sb_alerts", []));
   const [alertInput, setAlertInput] = useState("");
   const [alertDirection, setAlertDirection] = useState("above");
   const [alertNotifications, setAlertNotifications] = useState(false);
+  const serverSeen = useRef(null);
+  const pendingCreate = useRef(null);
 
   const createPriceAlert = useCallback(({ symbol = selectedStock, trigger, direction = "above" }) => {
     const next = makePriceAlert({ symbol, trigger, direction });
     if (!next) return false;
+    if (serverController?.current) {
+      const fingerprint = JSON.stringify([serverState?.userId, next.symbol, next.trigger, next.direction]);
+      if (pendingCreate.current?.fingerprint !== fingerprint) pendingCreate.current = { fingerprint, alert: next };
+      return serverController.current.command({ kind: 'upsert', alert: pendingCreate.current.alert }).then(result => {
+        if (!result.error) pendingCreate.current = null;
+        return !result.error;
+      });
+    }
     setAlerts(prev => [next, ...prev]);
     return true;
-  }, [selectedStock]);
+  }, [selectedStock, serverController, serverState?.userId]);
 
   const addPriceAlert = useCallback(() => {
     if (createPriceAlert({ symbol: selectedStock, trigger: alertInput, direction: alertDirection })) setAlertInput("");
   }, [alertDirection, alertInput, createPriceAlert, selectedStock]);
 
   const updateAlert = useCallback((id, updates) => {
+    if (serverController?.current) {
+      const old = alerts.find(alert => alert.id === id);
+      if (old) void serverController.current.command({ kind: 'upsert', alert: { ...old, ...updates } });
+      return;
+    }
     setAlerts((prev) => prev.map((alert) => {
       if (alert.id !== id) return alert;
       const trigger = Number(updates?.trigger ?? alert.trigger);
@@ -69,9 +79,14 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
         updatedAt: new Date().toISOString(),
       };
     }));
-  }, []);
+  }, [serverController, alerts]);
 
   const toggleAlert = useCallback((id) => {
+    if (serverController?.current) {
+      const old = alerts.find(alert => alert.id === id);
+      if (old) void serverController.current.command({ kind: 'upsert', alert: { ...old, active: !old.active } });
+      return;
+    }
     setAlerts((prev) => prev.map((alert) => alert.id === id
       ? {
           ...alert,
@@ -80,7 +95,7 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
           updatedAt: new Date().toISOString(),
         }
       : alert));
-  }, []);
+  }, [serverController, alerts]);
 
   const enableAlertNotifications = useCallback(async () => {
     if (!("Notification" in window)) {
@@ -93,11 +108,28 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
   }, []);
 
   const removeAlert = useCallback((id) => {
+    if (serverController?.current) { void serverController.current.command({ kind: 'remove', alertId: id }); return; }
     setAlerts((prev) => prev.filter((alert) => alert.id !== id));
-  }, []);
+  }, [serverController]);
 
   useEffect(() => {
-    if (!alertActivityEnabled) return undefined;
+    if (!serverState?.enabled) { serverSeen.current = null; return; }
+    const events = alerts.flatMap(alert => (alert.history || []).map(event => ({ ...event, symbol: alert.symbol })));
+    const keys = new Set(events.map(event => event.id));
+    if (serverSeen.current?.userId === serverState.userId) {
+      const fresh = events.filter(event => !serverSeen.current.keys.has(event.id));
+      if (fresh.length && alertActivityEnabled) {
+        if (soundAlertsEnabled) playTerminalAlertSound();
+        if (alertNotifications && 'Notification' in window && Notification.permission === 'granted') {
+          for (const event of fresh) new Notification(`${event.symbol} alert triggered`, { body: `${event.direction} $${Number(event.trigger).toFixed(2)}` });
+        }
+      }
+    }
+    serverSeen.current = { userId: serverState.userId, keys };
+  }, [alerts, serverState?.enabled, serverState?.userId, alertActivityEnabled, soundAlertsEnabled, alertNotifications]);
+
+  useEffect(() => {
+    if (!alertActivityEnabled || serverState?.enabled || serverState && !serverState.ready) return undefined;
 
     const quoteMap = new Map(
       [...quotes, selectedStockData]
@@ -155,7 +187,7 @@ export function useTerminalAlerts({ selectedStock, selectedStockData, quotes = [
     }, 0);
 
     return () => window.clearTimeout(timeout);
-  }, [alertActivityEnabled, alertNotifications, alerts, quotes, selectedStockData, soundAlertsEnabled]);
+  }, [alertActivityEnabled, alertNotifications, alerts, quotes, selectedStockData, soundAlertsEnabled, serverState?.enabled, serverState?.ready, serverState]);
 
   return {
     alertDirection,

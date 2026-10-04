@@ -1,5 +1,57 @@
 import { parseNullableMarketNumber as number } from "./marketNumbers.js";
 import { sumKnown } from "./portfolioAccounting.js";
+import { getUsEquitySession, getNyDateParts } from './marketSession.js';
+
+// Only explicit position identities are grouped. Legacy exits are never guessed
+// together by symbol/date, since a trader may reopen a symbol many times.
+export function groupJournalTrades(records = []) {
+  const groups = new Map(), result = [];
+  for (const raw of records) {
+    const row = normalizeJournalRecord(raw);
+    if (!row.eligible || !row.tradeGroupId || row.source !== 'Paper simulation') { result.push(row); continue; }
+    const key = JSON.stringify([row.tradeGroupId, row.symbol, row.bias || row.side, row.currency]);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  for (const exits of groups.values()) {
+    exits.sort((a, b) => (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity) || String(a.id).localeCompare(String(b.id)));
+    const last = exits.at(-1), closed = exits.some(row => row.closesPosition);
+    const quantity = exits.reduce((sum, row) => sum + (row.quantity || 0), 0);
+    const weighted = key => quantity > 0 && exits.every(row => row[key] !== null)
+      ? exits.reduce((sum, row) => sum + row[key] * row.quantity, 0) / quantity : null;
+    result.push({ ...last, id: `group-${last.tradeGroupId}`, status: closed ? 'closed' : 'open',
+      eligible: closed, pnl: sumKnown(exits.map(row => row.pnl)), fees: sumKnown(exits.map(row => row.fees)),
+      quantity, entryPrice: weighted('entryPrice'), exitPrice: weighted('exitPrice'),
+      exitCount: exits.length, notes: `${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`,
+      openedAt: exits[0].openedAt || null, setup: exits[0].setup || 'Unspecified',
+    });
+  }
+  return result;
+}
+
+export function journalBreakdowns(records = [], currency = 'USD') {
+  const trades = groupJournalTrades(records).map(normalizeJournalRecord).filter(row => row.eligible && row.currency === currency);
+  const buckets = dimension => {
+    const groups = new Map();
+    for (const trade of trades) {
+      const label = dimension(trade);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(trade);
+    }
+    return [...groups].map(([label, rows]) => ({ label, ...journalStatistics(rows, currency) }));
+  };
+  // Analysis attributes the whole position to its initial entry, not each exit.
+  const entryDate = row => { const timestamp = recordTimestamp(row.openedAt); return timestamp === null ? null : new Date(timestamp); };
+  return {
+    setup: buckets(row => String(row.setup || 'Unspecified').trim() || 'Unspecified'),
+    time: buckets(row => {
+      const date = entryDate(row); if (!date) return 'Entry time unknown';
+      const { hour } = getNyDateParts(date);
+      return `${String(hour).padStart(2, '0')}:00–${String(hour).padStart(2, '0')}:59 ET`;
+    }),
+    session: buckets(row => { const date = entryDate(row); return date ? getUsEquitySession(date).label : 'Entry session unknown'; }),
+  };
+}
 
 export function recordTimestamp(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -42,6 +94,10 @@ export function journalStatistics(records = [], currency = "USD") {
     maxDrawdown = Math.max(maxDrawdown, peak - equity); return equity;
   })] : [];
   const net = trades.length ? sumKnown(values) : null;
+  const holdTimes = trades.map(row => {
+    const opened = recordTimestamp(row.openedAt);
+    return opened !== null && row.timestamp !== null && row.timestamp >= opened ? row.timestamp - opened : null;
+  }).filter(value => value !== null);
   return { trades, values, curve, currency, total: trades.length,
     excluded: records.length - trades.length, wins: wins.length, losses: losses.length,
     breakeven: values.filter(value => value === 0).length, net,
@@ -53,5 +109,6 @@ export function journalStatistics(records = [], currency = "USD") {
     expectancy: trades.length ? net / trades.length : null,
     best: trades.length ? Math.max(...values) : null, worst: trades.length ? Math.min(...values) : null,
     maxDrawdown: chronologyKnown && trades.length ? maxDrawdown : null,
+    averageHoldMs: holdTimes.length ? sumKnown(holdTimes) / holdTimes.length : null, knownHoldCount: holdTimes.length,
   };
 }

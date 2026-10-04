@@ -62,6 +62,7 @@ try {
   assert.deepEqual(state.orders[0].checklist, checklist); assert.equal((await api('paper', { id: crypto.randomUUID(), kind: 'cancel-all' })).status, 200);
   record('Checklist ticket submits an unmarketable paper limit and cancellation succeeds without a fabricated fill');
   await navigate('Trade Journal'); await page.getByLabel('Journal record type').selectOption('trade');
+  await page.getByLabel('Journal symbol', { exact: true }).fill('AAPL');
   await page.getByLabel('Journal quantity', { exact: true }).fill('1'); await page.getByLabel('Journal entry price', { exact: true }).fill('100');
   await page.getByLabel('Journal exit price', { exact: true }).fill('110'); await page.getByLabel('Journal total fees', { exact: true }).fill('0');
   await page.getByLabel('Journal setup', { exact: true }).fill('QA manual review'); await page.getByLabel('Journal entry time UTC').fill('2026-10-02T14:00');

@@ -48,7 +48,13 @@ export const PERSISTED_WORKSPACE_FIELDS = Object.freeze([
 
 export function createWorkspacePayload(values = {}) {
   return PERSISTED_WORKSPACE_FIELDS.reduce((payload, field) => {
-    payload[field] = values[field];
+    // Per-rule feed diagnostics belong to the alert ledger. Their scan timestamps
+    // must not cause full workspace saves while the user's rules are unchanged.
+    payload[field] = field === "alerts" && Array.isArray(values[field])
+      ? values[field].map(row => row && typeof row === "object" && !Array.isArray(row)
+        ? Object.fromEntries(Object.entries(row).filter(([key]) => key !== "diagnostics"))
+        : row)
+      : values[field];
     return payload;
   }, {});
 }

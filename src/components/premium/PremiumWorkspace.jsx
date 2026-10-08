@@ -230,6 +230,7 @@ function PremiumWorkspaceContent({
         created: alert.createdAt || "Not recorded",
         next: alert.triggeredAt || "Not triggered",
         history: Array.isArray(alert.history) ? alert.history : [],
+        diagnostics: alert.diagnostics || null,
       }))
     : [];
   const journalRows = makeJournalTrades(journalEntries);

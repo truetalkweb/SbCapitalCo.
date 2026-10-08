@@ -1738,6 +1738,7 @@ export default function App() {
       "screenshotUrl",
       "plan",
       "review",
+      "plannedRiskAmount", "entryChecklistStatus", "mistakeTags",
     ];
     const exportRows = (filtered ? rows : accountJournalEntries).map(normalizeJournalRecord);
     if (filtered) {

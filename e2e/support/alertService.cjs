@@ -1,6 +1,7 @@
 // Test-only mirror of backend/lib/alertService.cjs.
 const { randomUUID } = require('node:crypto');
 const rulesPromise = import('../../src/utils/priceAlerts.js');
+const diagnosticsPromise = import('../../src/utils/alertDiagnostics.js');
 const failure = (message, status = 503) => Object.assign(new Error(message), { status });
 
 function createSupabaseAlertRepository(db) {
@@ -48,7 +49,7 @@ function createAlertService({ repository, getQuotes, clock = Date.now, logger = 
             let rule; try { rule = normalizePriceAlert(raw); } catch (error) { throw failure(error.message, 400); }
             if (seen.has(rule.id)) throw failure('Duplicate alert ID.', 400); seen.add(rule.id);
             const old = ledger.alerts.find(alert => alert.id === rule.id);
-            return { ...rule, createdAt: old?.createdAt || now, triggeredAt: null, history: old?.history || [] };
+            return { ...rule, createdAt: old?.createdAt || now, triggeredAt: null, diagnostics: null, history: old?.history || [] };
           });
         }
         ledger.enabled = command.enabled;
@@ -64,7 +65,7 @@ function createAlertService({ repository, getQuotes, clock = Date.now, logger = 
         let rule; try { rule = normalizePriceAlert(command.alert); } catch (error) { throw failure(error.message, 400); }
         const old = ledger.alerts.find(alert => alert.id === rule.id);
         if (!old && ledger.alerts.length >= 50) throw failure('Background monitoring supports up to 50 alerts per account.', 400);
-        const next = { ...old, ...rule, createdAt: old?.createdAt || now, updatedAt: now, triggeredAt: rule.active ? null : old?.triggeredAt || null, history: old?.history || [] };
+        const next = { ...old, ...rule, createdAt: old?.createdAt || now, updatedAt: now, triggeredAt: rule.active ? null : old?.triggeredAt || null, diagnostics: null, history: old?.history || [] };
         ledger.alerts = [next, ...ledger.alerts.filter(alert => alert.id !== rule.id)];
       } else throw failure('Unsupported alert command.', 400);
       ledger.receipts[command.id] = fingerprint;
@@ -80,6 +81,7 @@ function createAlertService({ repository, getQuotes, clock = Date.now, logger = 
     if (running) return; running = true; status.lastScanAt = new Date(clock()).toISOString(); status.error = null;
     try {
       const { shouldTriggerPriceAlert, isEligibleAlertQuote, normalizeMarketQuote } = await rulesPromise;
+      const { evaluateAlertQuote } = await diagnosticsPromise;
       let rows = await repository.active(cursor);
       if (!rows.length && cursor) { cursor = ''; rows = await repository.active(); }
       // Bound each scan to 100 accounts / 200 unique symbols, rotating fairly.
@@ -89,10 +91,10 @@ function createAlertService({ repository, getQuotes, clock = Date.now, logger = 
         if (new Set([...symbols, ...next]).size > 200) break;
         next.forEach(symbol => symbols.add(symbol)); selected.push(row); cursor = row.user_id;
       }
-      const list = [...symbols], quotes = new Map();
+      const list = [...symbols], quotes = new Map(), failedSymbols = new Set();
       for (let i = 0; i < list.length; i += 20) {
         try { for (const quote of await getQuotes(list.slice(i, i + 20))) quotes.set(quote.symbol, quote); }
-        catch { status.error = 'Provider unavailable; alerts wait for fresh live data.'; }
+        catch { list.slice(i, i + 20).forEach(symbol => failedSymbols.add(symbol)); status.error = 'Provider unavailable; alerts wait for fresh live data.'; }
       }
       for (const initial of selected) {
         let row = initial;
@@ -100,15 +102,18 @@ function createAlertService({ repository, getQuotes, clock = Date.now, logger = 
           if (!row?.ledger.enabled || row.ledger.paused) break;
           const now = clock(), ledger = structuredClone(row.ledger); let changed = false;
           ledger.alerts = ledger.alerts.map(alert => {
+            if (!alert.active) return alert;
             const quote = quotes.get(alert.symbol);
+            const diagnostics = evaluateAlertQuote(quote, alert.symbol, now, alert.diagnostics, failedSymbols.has(alert.symbol));
+            if (JSON.stringify(diagnostics) !== JSON.stringify(alert.diagnostics)) changed = true;
             if (!shouldTriggerPriceAlert(alert, quote, true, now)) {
               if (alert.active && (quote?.isHalted || !isEligibleAlertQuote(quote, alert.symbol, now))) status.error ||= 'Some symbols lack fresh live quotes; those alerts wait.';
-              return alert;
+              return { ...alert, diagnostics };
             }
             changed = true;
             const normalized = normalizeMarketQuote(quote, { symbol: alert.symbol, now });
             const price = normalized.price, time = new Date(now).toISOString();
-            return { ...alert, active: false, triggeredAt: time, lastTriggerPrice: price,
+            return { ...alert, diagnostics: { ...diagnostics, state: 'triggered', reason: 'Target reached on a fresh live quote.' }, active: false, triggeredAt: time, lastTriggerPrice: price,
               history: [{ id: randomUUID(), type: 'triggered', price, trigger: alert.trigger, direction: alert.direction,
                 occurredAt: time, source: normalized.source, marketTimestamp: normalized.asOf, monitoring: 'server' }, ...alert.history].slice(0, 100) };
           });

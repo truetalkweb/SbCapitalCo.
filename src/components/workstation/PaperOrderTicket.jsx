@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { paperQuote, paperSellAvailability, paperCoverAvailability, paperCommission } from '../../services/paperTradingEngine.js';
+import { paperQuote, paperSellAvailability, paperCoverAvailability, paperCommission, paperPlannedRisk } from '../../services/paperTradingEngine.js';
 import { currency } from './workstationFormat.js';
 import './paperTrading.css';
 import { PAPER_CHECKLIST, paperChecklistComplete } from '../../services/paperRiskPolicy.js';
@@ -23,9 +23,14 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
   const update = (setter, event) => { clear(); setter(event.target.value); };
   const fresh = paperQuote(quote);
   const isOpening = ['BUY', 'SELL_SHORT'].includes(side), isSell = ['SELL', 'SELL_SHORT'].includes(side);
+  const riskLimit = (trading.riskPolicy || trading.legacyLimits)?.riskPerTrade;
   const available = side === 'BUY_TO_COVER' ? paperCoverAvailability(trading, symbol) : paperSellAvailability(trading, symbol);
   const draft = { symbol, side, type, quantity, limitPrice: limit, stopPrice: stop, stopLoss: isOpening ? stopLoss : '', takeProfit: isOpening ? takeProfit : '', tif, setup, checklist };
   const fingerprint = JSON.stringify(draft);
+  const plannedRisk = isOpening ? paperPlannedRisk({ ...draft, limitPrice: ['LIMIT', 'STOP_LIMIT'].includes(type) ? Number(limit) : null,
+    stopPrice: ['STOP', 'STOP_LIMIT'].includes(type) ? Number(stop) : null,
+    referencePrice: ['LIMIT', 'STOP_LIMIT'].includes(type) ? Number(limit) : type === 'STOP' ? Number(stop) : isSell ? fresh?.sell : fresh?.buy,
+    paperCosts: trading.paperCosts }) : null;
   const currentOrder = feedback?.id ? trading.orders.find(order => order.id === feedback.id) : null;
   useEffect(() => { receipt.current?.scrollIntoView({ block: 'nearest' }); }, [feedback, currentOrder?.status]);
   const submit = async event => {
@@ -54,6 +59,7 @@ export default function PaperOrderTicket({ symbol, quote, quantity, setQuantity,
       <div className="ws-paper-meta">{!isOpening ? <>Available to {side === 'SELL' ? 'sell' : 'cover'} <b>{available.available} / {available.held} {symbol}</b></> : <>Buying power <b>{currency(trading.balances.buyingPower)}</b></>}</div>
       {isOpening && trading.riskPolicy?.checklistRequired && <fieldset className="ws-paper-checklist" style={{ border: '1px solid var(--ws-border)', margin: 0, padding: 8, display: 'grid', gap: 6, fontSize: 11 }}><legend>Pre-trade checklist</legend>{PAPER_CHECKLIST.map(([key, label]) => <label key={key}><input type="checkbox" aria-label={label} checked={Boolean(checklist[key])} onChange={event => { setFeedback(null); request.current = null; setChecklist(current => ({ ...current, [key]: event.target.checked })); }} /> {label}</label>)}</fieldset>}
       <small className="ws-paper-costs">Simulated commission: {currency(paperCommission(trading.paperCosts, Math.max(0, Number(quantity) || 0)))} per fill · adverse slippage: {trading.paperCosts?.slippageBps || 0} bps. Working orders keep their saved costs.</small>
+      {isOpening && <small className="ws-paper-costs" aria-label="Planned paper risk">{plannedRisk ? <>Planned loss at stop: {currency(plannedRisk.amount)} · stop distance {currency(plannedRisk.stopDistance)} · slippage {currency(plannedRisk.entrySlippage + plannedRisk.exitSlippage)} · round-trip commissions {currency(plannedRisk.commissions)}{riskLimit > 0 ? ` · limit ${currency(riskLimit)}` : ''}. Gaps can exceed this estimate.</> : 'Planned risk unavailable until quantity, entry reference and attached stop are known.'}</small>}
       {side === 'SELL' && available.held === 0 && <div className="ws-paper-position-help">No {symbol} shares owned. <button type="button" onClick={() => { clear(); setSide('BUY'); }}>Switch to Buy</button></div>}
       {!isOpening && available.available > 0 && Number(quantity) > available.available && <button className="ws-paper-new" type="button" onClick={() => { clear(); setQuantity(available.available); }}>Use available quantity ({available.available})</button>}
       {(feedback?.error || currentOrder) && <div ref={receipt} role="status" className="ws-paper-feedback">{feedback?.error || <><strong>{currentOrder.status.replaceAll('_',' ')}</strong> · {(currentOrder.action || currentOrder.side).replaceAll('_',' ')} {currentOrder.filled || currentOrder.quantity} {currentOrder.symbol}{currentOrder.price ? ` @ ${currency(currentOrder.price)}` : ''}<br />{currentOrder.reason}{currentOrder.status === 'FILLED' && <><br />Commission {currency(currentOrder.commission || 0)} · slippage {currency(currentOrder.slippageCost || 0)}{currentOrder.netTradePnL != null ? ` · net exit P&L ${currency(currentOrder.netTradePnL)}` : ''}</>}</>}</div>}

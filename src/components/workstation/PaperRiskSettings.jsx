@@ -12,7 +12,7 @@ export default function PaperRiskSettings({ trading }) {
   };
   return <div className="ws-paper-risk-settings" style={{ display: 'grid', gap: 10, padding: 14 }}>
     <strong>Paper risk rules</strong>
-    <small>Saved rules apply across devices and to waiting entries. Zero disables a numeric cap. Sells, covers and cancellations remain available. Risk per trade requires an attached stop; planned stop-distance loss excludes fees and cannot guarantee a stop fill price.</small>
+    <small>Saved rules apply across devices and to waiting entries. Zero disables a numeric cap. Sells, covers and cancellations remain available. Risk per entry includes stop distance, configured adverse slippage and one entry plus one stop-fill commission. Gaps and multiple exit fills can exceed the estimate; a stop fill price is not guaranteed.</small>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
       {[['maxOrderValue', 'Maximum order value ($)'], ['riskPerTrade', 'Risk per trade ($)'], ['dailyLossLimit', 'Daily realized loss limit ($)']].map(([key, label]) => <label key={key} className="ws-paper-field">{label}<input aria-label={label} type="number" min="0" max="1000000000" step="any" value={draft[key]} onChange={event => setDraft(current => ({ ...current, [key]: event.target.value }))} /></label>)}
     </div>

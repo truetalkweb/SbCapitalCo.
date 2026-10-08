@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
 import { DEFAULT_JOURNAL_FILTERS, normalizeJournalFilters, filterJournalRecords } from '../../../utils/journalFilters.js';
+import { journalDiscipline } from '../../../utils/journalDiscipline.js';
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { X } from "lucide-react";
@@ -34,7 +35,9 @@ export default function JournalWorkspacePage({
     const scope = filterJournalRecords(groupExits ? grouped : journalRows, filters);
     const presentedRows = scope.rows;
     const stats = journalStatistics(presentedRows);
-    const breakdowns = journalBreakdowns(filterJournalRecords(grouped, filters).rows);
+    const comparisonRows = filterJournalRecords(grouped, filters).rows;
+    const breakdowns = { ...journalBreakdowns(comparisonRows), ...journalDiscipline(comparisonRows) };
+    const disciplineView = ['risk', 'checklist', 'mistakes'].includes(analysisDimension);
     const { wins, losses, breakeven } = stats;
     const tradeCount = stats.total;
     const journalNet = stats.net;
@@ -47,6 +50,7 @@ export default function JournalWorkspacePage({
     const symbols = [...new Set(journalRows.map(row => String(row.symbol || '').toUpperCase()).filter(Boolean))].sort();
     const setups = [...new Set(journalRows.map(row => String(row.setup || 'Unspecified').trim()))].sort();
     const filterStyle = { height: 32, minWidth: 0, maxWidth: '100%', background: theme.panel2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 5, padding: '0 8px', colorScheme: theme.isDark ? 'dark' : 'light' };
+    const invalidDraftRisk = journalDraft.recordType === 'trade' && journalDraft.plannedRiskAmount != null && journalDraft.plannedRiskAmount !== '' && (!Number.isFinite(Number(journalDraft.plannedRiskAmount)) || Number(journalDraft.plannedRiskAmount) <= 0 || Number(journalDraft.plannedRiskAmount) > 1e9);
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
     const showTrades = journalView === "Overview" || journalView === "Trades";
@@ -57,7 +61,7 @@ export default function JournalWorkspacePage({
             <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
             <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
               <ActionButton theme={theme} onClick={() => setJournalDraft?.({ ...defaultJournalDraft, symbol: selectedStock, setup: '' })}>Clear Draft</ActionButton>
-              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Record</ActionButton>
+              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim() || invalidDraftRisk} title={invalidDraftRisk ? 'Enter a positive planned risk up to $1 billion or leave it blank' : !journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Record</ActionButton>
             </div>
           </div>
           <PremiumCard theme={theme}>
@@ -83,6 +87,9 @@ export default function JournalWorkspacePage({
                 {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
                 {journalDraft.recordType === 'trade' && <label>Entry time (UTC)<input aria-label="Journal entry time UTC" type="datetime-local" value={journalDraft.openedAt ? String(journalDraft.openedAt).replace('Z', '').slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, openedAt: event.target.value ? `${event.target.value}:00Z` : null }))} /></label>}
                 <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
+                {invalidDraftRisk && <span role="status">Enter a positive planned risk up to $1 billion, or leave it blank for unknown.</span>}
+                {journalDraft.recordType === 'trade' && <><label>Recorded planned risk ($)<input aria-label="Journal planned risk" type="number" min="0" step="any" value={journalDraft.plannedRiskAmount ?? ''} onChange={event => setJournalDraft(current => ({ ...current, plannedRiskAmount: event.target.value }))} style={{ display: 'block', width: 110 }} /></label><label>Recorded checklist<select aria-label="Journal recorded checklist" value={journalDraft.entryChecklistStatus || 'unknown'} onChange={event => setJournalDraft(current => ({ ...current, entryChecklistStatus: event.target.value }))}><option value="unknown">Unknown</option><option value="complete">Complete</option><option value="incomplete">Incomplete</option></select></label></>}
+                <label>Mistake tags<input aria-label="Journal mistake tags" maxLength="500" placeholder="Comma-separated; optional" value={journalDraft.mistakeTags || ''} onChange={event => setJournalDraft(current => ({ ...current, mistakeTags: event.target.value }))} style={{ display: 'block', width: 200 }} /></label>
               </div>
               <div style={{ padding: 14, display: "grid", gridTemplateColumns: isNarrowWorkspace ? "1fr" : "minmax(90px, .8fr) minmax(130px, 1.2fr) minmax(80px, .7fr) minmax(100px, .9fr) minmax(180px, 2fr)", gap: 12, alignItems: "end" }}>
                 {[
@@ -135,14 +142,15 @@ export default function JournalWorkspacePage({
                 ))}
               </div>
               <div style={{ padding: 14, borderTop: `1px solid ${theme.border}` }}>
-                <label style={{ color: theme.muted, fontSize: 12 }}>Compare completed positions by <select aria-label="Journal analysis dimension" value={analysisDimension} onChange={event => setAnalysisDimension(event.target.value)}><option value="setup">Setup</option><option value="time">Entry hour (ET)</option><option value="session">Entry session</option></select></label>
-                <p style={{ color: theme.muted, fontSize: 11 }}>Comparisons always group known paper position IDs. Entry time is never inferred from exit time.</p>
+                <label style={{ color: theme.muted, fontSize: 12 }}>Compare completed positions by <select aria-label="Journal analysis dimension" value={analysisDimension} onChange={event => setAnalysisDimension(event.target.value)}><option value="setup">Setup</option><option value="time">Entry hour (ET)</option><option value="session">Entry session</option><option value="risk">Planned versus actual risk</option><option value="checklist">Checklist acknowledgements</option><option value="mistakes">Recorded mistakes</option></select></label>
+                <p style={{ color: theme.muted, fontSize: 11 }}>Comparisons always group known paper position IDs. Entry time is never inferred from exit time.{disciplineView ? ' Risk and R use only positive recorded plans; missing legacy plans stay unknown. Actual loss is net realized loss for those known plans. Checklist acknowledgements are recorded evidence, not proof of discipline. Mistake categories can overlap and must not be added together.' : ''}</p>
                 <PremiumTable theme={theme} keyField="label" rows={breakdowns[analysisDimension]} emptyMessage="No completed trades to compare." columns={[
                   { key: 'label', label: 'Group', width: '1.5fr' }, { key: 'total', label: 'Trades', width: '70px' },
                   { key: 'net', label: 'Net P&L', width: '110px', render: row => money(row.net) },
                   { key: 'winRate', label: 'Win rate', width: '90px', render: row => `${row.winRate.toFixed(1)}%` },
                   { key: 'expectancy', label: 'Expectancy', width: '110px', render: row => money(row.expectancy) },
                   { key: 'profitFactor', label: 'Profit factor', width: '100px', render: row => row.profitFactor === null ? 'Unavailable' : row.profitFactor.toFixed(2) },
+                  ...(disciplineView ? [{ key: 'riskKnown', label: 'Known plans', width: '95px' }, { key: 'plannedRiskTotal', label: 'Planned risk', width: '110px', render: row => money(row.plannedRiskTotal) }, { key: 'realizedLoss', label: 'Actual loss', width: '110px', render: row => money(row.realizedLoss) }, { key: 'exceededRisk', label: 'Loss > plan', width: '95px' }, { key: 'averageR', label: 'Average R', width: '95px', render: row => row.averageR === null ? 'Unavailable' : `${row.averageR.toFixed(2)}R` }] : []),
                 ]} />
               </div>
             </PremiumCard>}
@@ -187,7 +195,7 @@ export default function JournalWorkspacePage({
                 </div>
               </PremiumCard>
             </div>}
-            {showTrades && <PremiumCard theme={theme} title="Journal Records" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim()} title={!journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
+            {showTrades && <PremiumCard theme={theme} title="Journal Records" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim() || invalidDraftRisk} title={invalidDraftRisk ? 'Enter a positive planned risk up to $1 billion or leave it blank' : !journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[

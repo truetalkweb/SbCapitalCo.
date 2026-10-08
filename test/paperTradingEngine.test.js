@@ -90,7 +90,7 @@ test('short exposure respects buying power, risk caps and opposite working entry
 test('paper market fills without a broker, uses ask/bid, and closes exact shares with realized P&L', () => {
  const buy = submit(empty(), {}, [quote(100, { bidPrice:99.9, askPrice:100.1 })]);
  assert.equal(buy.order.price,100.1); assert.equal(buy.order.status,'FILLED');
- assert.deepEqual(buy.state.positions.AAPL,{quantity:10,average:100.1,source:'Paper simulation',currency:'USD',tradeGroupId:'order-1',openedAt:new Date(now).toISOString(),setup:'Unspecified'});
+ assert.deepEqual(buy.state.positions.AAPL,{quantity:10,average:100.1,source:'Paper simulation',currency:'USD',tradeGroupId:'order-1',openedAt:new Date(now).toISOString(),setup:'Unspecified',plannedRiskRemaining:null,entryChecklistStatus:'unknown'});
  const sell=submit(buy.state,{id:'sell',side:'SELL',quantity:4},[quote(102,{bidPrice:101.9,askPrice:102.1})]);
  assert.equal(sell.state.positions.AAPL.quantity,6);assert.equal(sell.state.realizedPnL,7.2);
  assert.equal(paperBalances(sell.state,[quote()],now).cash,99406.6);

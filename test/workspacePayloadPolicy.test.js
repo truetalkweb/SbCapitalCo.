@@ -66,3 +66,13 @@ test("workspace contract includes every user-owned terminal capability", () => {
     "replayNotes",
   ].forEach((field) => assert.equal(payload[field], `${field}-value`));
 });
+
+test("alert diagnostics do not change workspace saves, but rule and history changes do", () => {
+  const rule = { id: "watch", symbol: "AAPL", trigger: 100, history: [], diagnostics: { checkedAt: "first" } };
+  const first = JSON.stringify(createWorkspacePayload({ alerts: [rule] }));
+  const checked = JSON.stringify(createWorkspacePayload({ alerts: [{ ...rule, diagnostics: { checkedAt: "next", state: "waiting" } }] }));
+  assert.equal(checked, first);
+  assert.deepEqual(rule.diagnostics, { checkedAt: "first" });
+  assert.notEqual(JSON.stringify(createWorkspacePayload({ alerts: [{ ...rule, trigger: 101 }] })), first);
+  assert.notEqual(JSON.stringify(createWorkspacePayload({ alerts: [{ ...rule, history: [{ price: 100 }] }] })), first);
+});

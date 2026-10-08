@@ -85,6 +85,7 @@ export function paperTradeHistory(state) {
       bias: (row.action || row.side) === 'BUY_TO_COVER' ? 'Short' : 'Long', quantity: row.filled,
       entryPrice: row.entryPrice ?? null, exitPrice: row.price, pnl: row.netTradePnL ?? row.realizedPnL,
       fees: (row.commission || 0) + (row.entryCommission || 0),
+      plannedRiskAmount: row.plannedRiskAmount ?? null, entryChecklistStatus: row.entryChecklistStatus || 'unknown',
       tradeGroupId: row.tradeGroupId || null, openedAt: row.openedAt || null, closesPosition: Boolean(row.closesPosition),
       closedAt: row.filledAt, createdAt: row.filledAt, currency: 'USD', source: 'Paper simulation',
       setup: row.setup || 'Unspecified', notes: row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)',

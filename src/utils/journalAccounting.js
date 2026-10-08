@@ -23,6 +23,9 @@ export function groupJournalTrades(records = []) {
       eligible: closed, pnl: sumKnown(exits.map(row => row.pnl)), fees: sumKnown(exits.map(row => row.fees)),
       quantity, entryPrice: weighted('entryPrice'), exitPrice: weighted('exitPrice'),
       groupedPosition: true, exitCount: exits.length,
+      plannedRiskAmount: exits.every(row => number(row.plannedRiskAmount) > 0) ? Math.round(exits.reduce((sum, row) => sum + number(row.plannedRiskAmount), 0) * 1e6) / 1e6 : null,
+      entryChecklistStatus: exits.some(row => row.entryChecklistStatus === 'incomplete') ? 'incomplete' : exits.every(row => row.entryChecklistStatus === 'complete') ? 'complete' : 'unknown',
+      mistakeTags: [...new Set(exits.flatMap(row => String(row.mistakeTags || '').split(/[;,]/).map(tag => tag.trim()).filter(Boolean)))].join(', '),
       searchText: exits.map(row => [row.notes, row.review, row.tags, row.tag].join(' ')).join(' '),
       notes: `${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`,
       openedAt: exits[0].openedAt || null, setup: exits[0].setup || 'Unspecified',
@@ -73,6 +76,8 @@ export function normalizeJournalRecord(entry) {
   const canCalculate = kind === "trade" && status === "closed" && quantity > 0 && entryPrice > 0 && exitPrice > 0 && fees !== null && fees >= 0 && ["long", "short"].includes(side);
   const pnl = explicit ?? (canCalculate ? Math.round(((exitPrice - entryPrice) * quantity * (side === "short" ? -1 : 1) - fees) * 1e6) / 1e6 : null);
   return { ...entry, recordType: kind, status, pnl,
+    plannedRiskAmount: number(entry.plannedRiskAmount) > 0 ? number(entry.plannedRiskAmount) : null,
+    entryChecklistStatus: ['complete', 'incomplete'].includes(entry.entryChecklistStatus) ? entry.entryChecklistStatus : 'unknown',
     timestamp: recordTimestamp(entry.closedAt || entry.createdAt || entry.date),
     eligible: kind === "trade" && status === "closed" && pnl !== null,
     currency: String(entry.currency || "USD").toUpperCase(),

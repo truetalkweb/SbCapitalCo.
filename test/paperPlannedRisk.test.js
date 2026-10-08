@@ -38,3 +38,17 @@ test('partial exits allocate risk without duplication, keep checklist evidence a
   const legacy = { ...empty(), positions: { AAPL: { quantity: 1, average: 100 } } };
   assert.equal(submitPaperOrder(legacy, draft({ side: 'SELL', quantity: 1, stopLoss: null }), quote(100), now).order.plannedRiskAmount, null);
 });
+
+test('scaling into known plans pools remaining budgets and mixed legacy entries stay unknown', () => {
+  const complete = { plan: true, size: true, exit: true };
+  let result = submitPaperOrder(empty(), draft({ checklist: complete }), quote(100), now);
+  result = submitPaperOrder(result.state, draft({ id: 'scale', quantity: 5, checklist: { ...complete, size: false } }), quote(100), now);
+  assert.equal(result.state.positions.AAPL.plannedRiskRemaining, 22.285);
+  assert.equal(result.state.positions.AAPL.entryChecklistStatus, 'incomplete');
+  result = submitPaperOrder(result.state, draft({ id: 'exit', side: 'SELL', quantity: 15, stopLoss: null }), quote(102), now);
+  assert.equal(paperTradeHistory(result.state)[0].plannedRiskAmount, 22.285);
+  const legacy = { ...empty(), positions: { AAPL: { quantity: 1, average: 100 } } };
+  const added = submitPaperOrder(legacy, draft({ id: 'legacy-scale', checklist: complete }), quote(100), now);
+  assert.equal(added.state.positions.AAPL.plannedRiskRemaining, null);
+  assert.equal(added.state.positions.AAPL.entryChecklistStatus, 'unknown');
+});

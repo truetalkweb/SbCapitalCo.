@@ -48,6 +48,9 @@ try {
   await page.getByLabel('Require pre-trade checklist', { exact: true }).check();
   await page.getByRole('button', { name: 'Save Paper Rules', exact: true }).click();
   await expect.poll(async () => (await api('paper')).state.riskPolicy?.checklistRequired).toBe(true);
+  // Costs use workspace autosave; risk rules use a separate server transaction.
+  // Wait for both persisted authorities before testing a reload.
+  await expect.poll(async () => { const row = await admin.from('terminal_workspaces').select('data').eq('user_id', userId).single(); assert.ifError(row.error); return row.data.data.premiumPreferences?.paperCosts; }, { timeout: 15000 }).toEqual({ commissionPerOrder: 1, commissionPerShare: .01, slippageBps: 10 });
   await page.reload(); await page.getByRole('tab', { name: 'Trading', exact: true }).click();
   await expect(page.getByLabel('Risk per trade ($)', { exact: true })).toHaveValue('25'); record('Saved paper rules survive a production reload');
   await expect(page.getByLabel('Commission per fill ($)', { exact: true })).toHaveValue('1');

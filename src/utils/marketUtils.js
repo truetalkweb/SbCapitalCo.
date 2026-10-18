@@ -225,6 +225,9 @@ export function formatQuoteSourceStatus(quote) {
 }
 
 export function formatScannerSourceStatus(scannerMeta = {}) {
+  const age = scannerMeta.updatedAt ? Date.now() - Date.parse(scannerMeta.updatedAt) : NaN;
+  if (age > 600000) return 'SCANNER STALE';
+  if (/LIVE/i.test(scannerMeta.statusLabel || scannerMeta.providerStatus?.label || '') && (!Number.isFinite(age) || age < -5000)) return 'SCANNER UNAVAILABLE';
   if (scannerMeta.statusLabel) return scannerMeta.statusLabel;
   if (scannerMeta.providerStatus?.label) {
     const label = String(scannerMeta.providerStatus.label).toUpperCase();
@@ -244,12 +247,15 @@ export function formatScannerSourceStatus(scannerMeta = {}) {
   if (source.includes("LOCAL")) return "SCANNER FALLBACK";
   if (scannerMeta.fallback) return "SCANNER FALLBACK";
   if (source.includes("FALLBACK")) return "SCANNER FALLBACK";
-  if (source.includes("FMP")) return "SCANNER LIVE";
+  if (source.includes("FMP")) return Number.isFinite(age) && age >= -5000 ? "SCANNER LIVE" : "SCANNER PENDING";
 
   return scannerMeta.degraded ? "SCANNER FALLBACK" : "SCANNER PENDING";
 }
 
 export function formatNewsSourceStatus(newsMeta = {}) {
+  const age = newsMeta.updatedAt ? Date.now() - Date.parse(newsMeta.updatedAt) : NaN;
+  if (age > 900000) return 'NEWS STALE';
+  if (/LIVE/i.test(newsMeta.statusLabel || newsMeta.providerStatus?.label || '') && (!Number.isFinite(age) || age < -5000)) return 'NEWS UNAVAILABLE';
   if (newsMeta.statusLabel) return newsMeta.statusLabel;
   if (newsMeta.providerStatus?.label) {
     const label = String(newsMeta.providerStatus.label).toUpperCase();
@@ -259,7 +265,7 @@ export function formatNewsSourceStatus(newsMeta = {}) {
   if (newsMeta.degraded) return "NEWS FALLBACK";
   if ((newsMeta.providerWarnings || []).length || newsMeta.warning) return "NEWS PROVIDER LIMITED";
   if (newsMeta.cached) return "NEWS CACHED";
-  if (newsMeta.source) return "NEWS LIVE";
+  if (newsMeta.source) return Number.isFinite(age) && age >= -5000 ? "NEWS LIVE" : "NEWS PENDING";
 
   return "NEWS PENDING";
 }
@@ -268,7 +274,7 @@ export function getStatusColor(label, theme) {
   const value = String(label || "").toUpperCase();
 
   if (value.includes("DISCONNECTED") || value.includes("ERROR") || value.includes("UNAVAILABLE")) return theme.red;
-  if (value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("LIMITED") || value.includes("DEGRADED") || value.includes("TIMEOUT") || value.includes("UPDATING")) {
+  if (value.includes("STALE") || value.includes("CACHED") || value.includes("DELAYED") || value.includes("FALLBACK") || value.includes("SIM") || value.includes("PENDING") || value.includes("LIMITED") || value.includes("DEGRADED") || value.includes("TIMEOUT") || value.includes("UPDATING")) {
     return theme.amber;
   }
   if (value.includes("LIVE") || value.includes("QTRD") || value.includes("CONNECTED") || value.includes("FMP") || value.includes("NEWS")) {

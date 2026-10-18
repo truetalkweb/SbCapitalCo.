@@ -1,6 +1,7 @@
 import { useState } from "react";
+import ScannerCoverageNotice from './ScannerCoverageNotice.jsx';
 import { getCleanProviderMessage } from "../utils/healthStatus";
-import { formatTerminalStatusLabel, getScannerSourceType } from "../utils/marketUtils";
+import { formatTerminalStatusLabel, getScannerSourceType, formatScannerSourceStatus } from "../utils/marketUtils";
 
 const monoFont = '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace';
 
@@ -342,7 +343,8 @@ export default function ProfessionalScanner({
   const detailStock = detailPair?.stock || selectedScannerStock || null;
   const detailAnalysis = detailPair?.analysis || (detailStock ? analyzeStock(detailStock) : null);
   const rawSourceLabel = scannerMeta.provider || scannerMeta.source || detailStock?.source || "Scanner engine";
-  const degraded = Boolean(scannerMeta.degraded || scannerMeta.fallback || detailStock?.degraded);
+  const freshnessLabel = formatScannerSourceStatus(scannerMeta);
+  const degraded = Boolean(scannerMeta.degraded || scannerMeta.fallback || detailStock?.degraded || /STALE|UNAVAILABLE/.test(freshnessLabel));
   const freshness = formatFreshness(scannerMeta.updatedAt || scannerMeta.lastSuccessAt);
   const cacheAge = formatCacheAge(scannerMeta.cacheAgeMs);
   const warnings = Array.isArray(scannerMeta.warnings)
@@ -375,7 +377,7 @@ export default function ProfessionalScanner({
             : degraded
               ? "SCANNER FALLBACK"
               : rawSourceLabel;
-  const displaySourceLabel = formatTerminalStatusLabel(sourceLabel);
+  const displaySourceLabel = formatTerminalStatusLabel(/STALE|UNAVAILABLE/.test(freshnessLabel) ? freshnessLabel : sourceLabel);
   const statusDetail = [
     displaySourceLabel,
     freshness,
@@ -414,6 +416,7 @@ export default function ProfessionalScanner({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <ScannerCoverageNotice meta={scannerMeta} theme={theme} />
       <div
         title={scannerStatusDetail}
         style={{

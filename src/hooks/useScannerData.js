@@ -63,7 +63,7 @@ function buildScannerMeta(data) {
     cached: Boolean(data.cached),
     persisted: Boolean(data.persisted),
     restoredAt: data.restoredAt || null,
-    updatedAt: data.updatedAt || new Date().toISOString(),
+    updatedAt: data.updatedAt || null,
     cacheAgeMs: data.cacheAgeMs ?? null,
     counts: data.counts || null,
     fmpConfigured: Boolean(data.fmpConfigured),
@@ -79,6 +79,9 @@ function buildScannerMeta(data) {
     contractVersion: data.contractVersion || null,
     marketSession: data.marketSession || null,
     coverageLabel: data.coverageLabel || null,
+    coverage: data.coverage || null,
+    refreshing: Boolean(data.refreshing),
+    pending: Boolean(data.pending),
   };
 }
 
@@ -202,6 +205,16 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   useEffect(() => {
     saveSetting("sb_selected_scanner_stock", selectedScannerStock);
   }, [selectedScannerStock]);
+
+  useEffect(() => {
+    if (!scannerMeta.refreshing) return undefined;
+    let checks = 0;
+    const stop = createVisibilityAwarePoller(() => {
+      if (++checks > 12) { stop(); return; }
+      return loadScanner({ silent: true });
+    }, 5000, { immediate: false });
+    return stop;
+  }, [scannerMeta.refreshing, loadScanner]);
 
   return {
     fmpGainers: scannerGroups.gainers,

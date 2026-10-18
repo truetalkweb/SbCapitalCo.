@@ -57,7 +57,7 @@ await check("backend public health contract", async () => {
   const response = await request(`${backendUrl}/api/platform/health`);
   if (response.status !== 200) return `HTTP ${response.status}`;
   publicHealth = await response.json();
-  const allowedModes = new Set(["Live", "Delayed", "Cached", "Simulated", "Degraded", "Unavailable"]);
+  const allowedModes = new Set(["Live", "Delayed", "Cached", "Stale", "Simulated", "Degraded", "Unavailable"]);
   const services = ["broker", "marketData", "scanner", "ai", "news"];
   const invalid = services.filter((service) => !allowedModes.has(publicHealth?.[service]?.mode));
   if (invalid.length) return `invalid provider modes: ${invalid.join(", ")}`;

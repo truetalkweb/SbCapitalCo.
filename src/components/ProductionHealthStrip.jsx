@@ -66,7 +66,7 @@ function resolveDataLabel(scannerLabel, newsLabel) {
   const statusText = `${scannerLabel || ""} ${newsLabel || ""}`.toUpperCase();
 
   if (statusText.includes("ERROR") || statusText.includes("FAILED")) return "Data Limited";
-  if (statusText.includes("LIMITED") || statusText.includes("CACHED") || statusText.includes("FALLBACK")) return "Data Limited";
+  if (statusText.includes("STALE") || statusText.includes("UNAVAILABLE") || statusText.includes("LIMITED") || statusText.includes("CACHED") || statusText.includes("FALLBACK")) return "Data Limited";
   if (statusText.includes("LIVE")) return "Data Live";
 
   return "Data Pending";

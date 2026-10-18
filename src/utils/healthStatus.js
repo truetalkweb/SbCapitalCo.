@@ -104,11 +104,11 @@ export function getQuestradeHealth({
 export function getHealthLabelStatus(label) {
   const value = String(label || "").toUpperCase();
 
-  if (value.includes("LIVE") || value.includes("CONNECTED") || value.includes("ONLINE")) return "ok";
-  if (value.includes("TIMEOUT") || value.includes("DEGRADED") || value.includes("DELAYED") || value.includes("LIMITED") || value.includes("FALLBACK") || value.includes("PENDING")) {
+  if (value.includes("DISCONNECTED") || value.includes("UNAVAILABLE") || value.includes("ERROR")) return "bad";
+  if (value.includes("STALE") || value.includes("CACHED") || value.includes("TIMEOUT") || value.includes("DEGRADED") || value.includes("DELAYED") || value.includes("LIMITED") || value.includes("FALLBACK") || value.includes("PENDING")) {
     return "warn";
   }
-  if (value.includes("DISCONNECTED") || value.includes("UNAVAILABLE") || value.includes("ERROR")) return "bad";
+  if (value.includes("LIVE") || value.includes("CONNECTED") || value.includes("ONLINE")) return "ok";
 
   return "info";
 }
@@ -122,13 +122,13 @@ export function normalizeProviderStatus(input = {}, {
   const providerTimestamp = input.providerTimestamp || input.updatedAt || input.lastSuccessAt || null;
   const receivedTimestamp = input.receivedTimestamp || input.backendTime || null;
   const timestampMs = providerTimestamp ? new Date(providerTimestamp).getTime() : NaN;
-  const explicitCacheAge = Number(input.cacheAgeMs);
+  const explicitCacheAge = input.cacheAgeMs == null || input.cacheAgeMs === '' ? NaN : Number(input.cacheAgeMs);
   const cacheAgeMs = Number.isFinite(explicitCacheAge)
-    ? Math.max(0, explicitCacheAge)
+    ? Math.max(0, explicitCacheAge, Number.isFinite(timestampMs) ? now - timestampMs : 0)
     : Number.isFinite(timestampMs)
       ? Math.max(0, now - timestampMs)
       : null;
-  const unavailable = Boolean(input.unavailable) || String(input.label || "").toUpperCase().includes("UNAVAILABLE");
+  const unavailable = Boolean(input.unavailable) || String(input.label || "").toUpperCase().includes("UNAVAILABLE") || !Number.isFinite(timestampMs) || timestampMs > now + 5000;
   const providerLimited = Boolean(input.providerLimited) || String(input.label || "").toUpperCase().includes("LIMITED");
   const delayed = Boolean(input.delayed) || String(input.label || "").toUpperCase().includes("DELAYED");
   const cached = Boolean(input.cached) || cacheAgeMs !== null && cacheAgeMs > 0;

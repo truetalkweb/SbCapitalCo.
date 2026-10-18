@@ -1,4 +1,5 @@
-export function getNewsStatusLabel(meta = {}) {
+export function getNewsStatusLabel(meta = {}, now = Date.now()) {
+  if (meta.updatedAt && now - Date.parse(meta.updatedAt) > 900000) return 'NEWS STALE';
   if (meta.degraded) return 'NEWS FALLBACK';
   if (meta.cached) return 'NEWS CACHED';
   if (meta.providerStatus?.providerLimited || (meta.providerWarnings || []).length || meta.warning) return 'NEWS PROVIDER LIMITED';
@@ -20,7 +21,7 @@ export function buildNewsMeta(meta, rows, now = Date.now()) {
     fallbackRows, rowCount: rows.length };
   result.warning = meta.warning || result.providerWarnings[0] || null;
   result.userMessage = meta.userMessage || result.userWarnings[0] || null;
-  const status = getNewsStatusLabel(result);
+  const status = getNewsStatusLabel(result, now);
   result.confidenceLabel = status === 'NEWS LIVE' ? 'Live' : status === 'NEWS FRESHNESS UNKNOWN' ? 'Freshness unknown'
     : status === 'NEWS PENDING' ? 'Pending' : status === 'NEWS FALLBACK' ? 'Fallback Context' : status.replace(/^NEWS /, '');
   return result;

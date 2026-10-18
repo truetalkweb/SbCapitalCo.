@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithTimeout } from "../utils/marketUtils.js";
 import { buildNewsMeta, getNewsStatusLabel } from '../utils/newsMetadata.js';
+import { createVisibilityAwarePoller } from '../utils/visibilityScheduler.js';
 export { getNewsStatusLabel } from '../utils/newsMetadata.js';
 import {
   createNormalizedNewsFallback,
@@ -79,6 +80,7 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
               ? {
                   ...marketPayload,
                   source: `${meta.source || "Ticker News"} + Market`,
+                  refreshing: Boolean(meta.refreshing || marketPayload.refreshing),
                   providerWarnings: [
                     ...(meta.providerWarnings || []),
                     ...(marketPayload.providerWarnings || []),
@@ -156,6 +158,16 @@ export function useMarketNews({ selectedStock, brokerApiUrl, scannerRows = [], l
       if (initialLoad) window.clearTimeout(initialLoad);
     };
   }, [brokerApiUrl, fetchNews, selectedStock]);
+
+  useEffect(() => {
+    if (!newsMeta.refreshing) return undefined;
+    let checks = 0;
+    const stop = createVisibilityAwarePoller(() => {
+      if (++checks > 12) { stop(); return; }
+      return fetchNews();
+    }, 5000, { immediate: false });
+    return stop;
+  }, [newsMeta.refreshing, selectedStock, fetchNews]);
 
   return {
     news,

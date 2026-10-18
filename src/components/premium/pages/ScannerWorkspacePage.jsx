@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ScannerCoverageNotice from '../../ScannerCoverageNotice.jsx';
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { buildCsv } from "../../../utils/csvExport.js";
@@ -49,6 +50,7 @@ export default function ScannerWorkspacePage({
           <PremiumCard theme={theme}>
             <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
               <SectionTitle theme={theme} title="Scanner" subtitle="Find high-quality trading opportunities" />
+              <ScannerCoverageNotice meta={scannerMeta} theme={theme} />
               <PremiumTabs theme={theme} tabs={["Gainers", "Losers", "Active", "Momentum", "High RVOL", "News Movers", "New Highs", "New Lows", "Premarket"]} active={scannerTab} onChange={setScannerTab} />
               <div style={{ marginTop: 18, display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
                 <select aria-label="Scanner preset" value={activeScannerPreset} onChange={(event) => {

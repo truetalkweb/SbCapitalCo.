@@ -38,6 +38,14 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
   const blocked = [];
   let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
   let serverNow = await page.evaluate(() => Date.now());
+  const syncFixtureClock = async () => {
+    try { serverNow = await page.evaluate(() => Date.now()); }
+    catch (error) {
+      // A reload can destroy the old request's browser context. Keep the last
+      // observed fixture time for that request; never substitute wall-clock time.
+      if (!/Execution context was destroyed/.test(error.message)) throw error;
+    }
+  };
   const alertService = createAlertService({ repository: alertMemory(), clock: () => serverNow, getQuotes: async () => providerQuotes });
   const repository = memoryRepository(() => row.data.paperLedger || { orders: row.data.orders || [], positions: row.data.positions || {}, realizedPnL: row.data.realizedPnL || 0 });
   const paper = createPaperService({ repository, getQuotes: async () => providerQuotes, clock: () => serverNow });
@@ -47,7 +55,7 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
     const url = new URL(request.url());
     if (url.origin === baseUrl) return route.continue();
     if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/alerts/')) {
-      serverNow = await page.evaluate(() => Date.now());
+      await syncFixtureClock();
       try {
         if (request.method() === 'GET') { await alertService.tick(); return route.fulfill({ json: await alertService.snapshot(user.id) }); }
         return route.fulfill({ json: await alertService.transact(user.id, request.postDataJSON().command) });
@@ -58,7 +66,7 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
         : { status: 503, json: { error: "AI unavailable in this test" } });
     }
     if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/paper/')) {
-      serverNow = await page.evaluate(() => Date.now());
+      await syncFixtureClock();
       if (request.method() === 'GET' && url.pathname === '/api/paper/account') {
         await paper.tick();
         return route.fulfill({ json: await paper.snapshot(user.id) });

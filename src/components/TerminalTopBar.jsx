@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { createDisplayClockFormatters } from "../utils/displayClock.js";
 import { formatTerminalStatusLabel } from "../utils/marketUtils";
 
 import { getUsMarketStatus } from "../utils/marketSession";
@@ -50,6 +52,7 @@ export default function TerminalTopBar({
   onOpenHelp,
   premiumShell = false,
   quotes = [],
+  timeZone = "America/New_York",
 }) {
   const switchWorkspace = (event, workspaceId) => {
     event.preventDefault();
@@ -58,10 +61,8 @@ export default function TerminalTopBar({
   };
   const now = useMarketClock();
 
-  const pacificTime = now.toLocaleTimeString("en-US", {
-    timeZone: "America/Los_Angeles",
-    hour12: false,
-  });
+  const displayClock = useMemo(() => createDisplayClockFormatters(timeZone), [timeZone]);
+  const displayTime = displayClock.time.format(now);
 
   const marketStatus = getUsMarketStatus(now);
   const marketColor = marketStatus === 'OPEN' ? theme.green : marketStatus === 'PREMARKET' ? '#f59e0b' : marketStatus === 'AFTER HOURS' ? theme.blue : theme.red;
@@ -105,12 +106,7 @@ export default function TerminalTopBar({
   const chartDisplayLabel = formatTerminalStatusLabel(resolvedChartLabel);
   const brokerDisplayLabel = formatTerminalStatusLabel(resolvedBrokerLabel);
   const modeDisplayLabel = formatTerminalStatusLabel(resolvedModeLabel);
-  const marketDateLabel = now.toLocaleDateString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const marketDateLabel = displayClock.date.format(now);
   const topStatusLaneStyle = {
     display: "inline-flex",
     alignItems: "center",
@@ -171,7 +167,7 @@ export default function TerminalTopBar({
     return true;
   }
 
-  if (premiumShell) return <WorkstationHeader {...{ activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes, setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions, setMarketRegion }} />;
+  if (premiumShell) return <WorkstationHeader {...{ timeZone, activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes, setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions, setMarketRegion }} />;
   return (
     <div
       className="terminal-top-bar"
@@ -303,7 +299,7 @@ export default function TerminalTopBar({
             Market {marketStatus.toLowerCase()}
           </div>
           <div style={{ fontSize: "11px", color: theme.muted, fontWeight: 800, marginTop: "2px" }}>
-            {marketDateLabel} - <span style={{ display: "inline-block", minWidth: "74px", fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>{pacificTime} PT</span>
+            {marketDateLabel} - <span style={{ display: "inline-block", minWidth: "74px", fontFamily: monoFont, fontVariantNumeric: "tabular-nums" }}>{displayTime}</span>
           </div>
         </div>
       </div>

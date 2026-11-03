@@ -3869,6 +3869,7 @@ export default function App() {
     >
         <TerminalTopBar
         theme={theme}
+        timeZone={timeZone}
         workspaceViews={visibleWorkspaceViews}
         activeWorkspace={activeWorkspace}
         setActiveWorkspace={setActiveWorkspace}

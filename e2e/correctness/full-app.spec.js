@@ -790,7 +790,7 @@ test('holiday calendar shows closed and DAY queues until the next regular sessio
   expect(evidence.workspace().paperLedger.positions).toEqual({}); expect(evidence.errors).toEqual([]);
 });
 
-test('chart saved timezone controls tooltip labels while market-session clock stays Eastern', async ({ page }, testInfo) => {
+test('saved timezone controls chart tooltip labels and the header clock', async ({ page }, testInfo) => {
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'AAPL', layoutMode: '1', timeZone: 'America/New_York' });
   const chart = page.getByRole('region', { name: 'Primary trading chart', exact: true });
   const showTime = async () => {
@@ -803,7 +803,7 @@ test('chart saved timezone controls tooltip labels while market-session clock st
   await page.getByLabel('Time zone', { exact: true }).selectOption('UTC');
   await expect.poll(() => evidence.workspace().timeZone).toBe('UTC');
   await page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name: 'Dashboard', exact: true }).click();
-  await expect(await showTime()).toContainText('UTC'); await expect(page.locator('.ws-clock')).toContainText('ET');
+  await expect(await showTime()).toContainText('UTC'); await expect(page.locator('.ws-clock')).toContainText('UTC');
   await page.screenshot({ path: testInfo.outputPath('chart-timezone-utc.png') });
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });

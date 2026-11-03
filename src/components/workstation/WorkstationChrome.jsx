@@ -1,3 +1,4 @@
+import { createDisplayClockFormatters } from "../../utils/displayClock.js";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Bell, BookOpen, BriefcaseBusiness, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, House, ListFilter, LogOut, Menu, Search, Settings, ShieldCheck, SlidersHorizontal, Wrench } from "lucide-react";
 import "./workstation.css";
@@ -7,7 +8,7 @@ export function Brand() {
   return <div className="ws-brand"><span className="ws-logo-window"><img src="/sb-terminal-logo.png" alt="SB logo" /></span><span><strong>TERMINAL</strong><small>TRADE&nbsp; ANALYZE&nbsp; EXECUTE&nbsp; EVOLVE</small></span></div>;
 }
 
-export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions = {}, setMarketRegion }) {
+export function WorkstationHeader({ timeZone = "America/New_York", activeWorkspace, selectedSymbol, selectedSymbolContext, onSymbolCommit, quotes = [], setActiveWorkspace, handleLogout, onOpenHelp, saveWorkspaceToCloud, loadWorkspaceFromCloud, advancedMode, setAdvancedMode, syncCharts, setSyncCharts, marketRegion, marketRegions = {}, setMarketRegion }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [profile, setProfile] = useState(false);
@@ -16,6 +17,7 @@ export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSym
   const mobileControl = useDismissPopover(mobileNavigation, setMobileNavigation);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
+  const displayClock = useMemo(() => createDisplayClockFormatters(timeZone), [timeZone]);
   const matches = useMemo(() => [...new Map(quotes.map(row => [row.symbol, row])).values()].filter(row => `${row.symbol} ${row.name || ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 7), [quotes, query]);
   const pick = symbol => { if (/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbol)) { onSymbolCommit?.(symbol, null, "global-search"); setQuery(""); setFocused(false); } };
   return <header className="ws-header terminal-top-bar" data-selected-symbol={selectedSymbolContext?.symbol || selectedSymbol} data-selection-source={selectedSymbolContext?.selectionSource || "terminal"}>
@@ -32,7 +34,7 @@ export function WorkstationHeader({ activeWorkspace, selectedSymbol, selectedSym
       const row = quotes.find(item => item.symbol === symbol); const move = Number.parseFloat(row?.changePercent ?? row?.change);
       return <button key={symbol} onClick={() => pick(symbol)}>{symbol}<span className={Number.isFinite(move) ? move < 0 ? "ws-negative" : "ws-positive" : ""}>{Number.isFinite(move) ? `${move >= 0 ? "+" : ""}${move.toFixed(2)}%` : "—"}</span></button>;
     })}</div>
-    <time className="ws-clock" dateTime={now.toISOString()}>{now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}<br />{now.toLocaleTimeString("en-US", { hourCycle: 'h23', timeZone: "America/New_York" })} ET</time>
+    <time className="ws-clock" dateTime={now.toISOString()} title={displayClock.timeZone}>{displayClock.date.format(now)}<br />{displayClock.time.format(now)}</time>
     <button className="ws-icon" aria-label="Notifications and alerts" onClick={() => setActiveWorkspace?.("alerts")}><Bell size={20} /></button>
     <div className="ws-profile" ref={profileControl}><button aria-label="Account menu" aria-expanded={profile} onClick={() => setProfile(value => !value)}><span>SB</span><ChevronDown size={13} /></button>{profile && <div className="ws-profile-menu"><small>SB TERMINAL</small>
       {saveWorkspaceToCloud && <button onClick={() => { saveWorkspaceToCloud(); setProfile(false); }}>Save workspace</button>}

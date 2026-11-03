@@ -245,7 +245,7 @@ export default function SettingsWorkspacePage({
               ["Theme", settingSelect("Theme", themeMode || "dark", [["dark", "Dark"], ["light", "Light"]], (value) => setThemeMode?.(value))],
               ["Compact mode", settingToggle(compactMode, (value) => updatePremiumPreference("compactMode", value), false, "Toggle compact mode")],
               ["Default landing tab", settingSelect("Default landing tab", defaultLandingTab, landingOptions, (value) => { updatePremiumPreference("defaultLandingTab", value); saveSetting("sb_default_landing_tab", value); setOrderMessage?.(`Default landing tab saved: ${landingOptions.find(([id]) => id === value)?.[1] || value}.`); })],
-              ["Time zone", settingSelect("Time zone", timeZone, [["America/Vancouver", "Pacific (PT)"], ["America/New_York", "Eastern (ET)"], ["Europe/London", "London"], ["UTC", "UTC"]], (value) => setTimeZone?.(value))],
+              ["Time zone", settingSelect("Time zone", timeZone, [["America/Dawson_Creek", "Mountain Standard (MST, UTC−7)"], ["America/Vancouver", "Pacific (PT)"], ["America/New_York", "Eastern (ET)"], ["Europe/London", "London"], ["UTC", "UTC"]], (value) => setTimeZone?.(value))],
               ["Currency display", settingSelect("Currency display", "USD", ["USD"], null, true)],
             ])}
             {group("Trading Preferences", [

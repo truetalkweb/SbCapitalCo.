@@ -1,5 +1,5 @@
 import { RefreshCw } from "lucide-react";
-import { formatHealthTime, getCleanProviderMessage, getHealthLabelStatus } from "../utils/healthStatus";
+import { formatHealthTime, getCleanProviderMessage, getHealthLabelStatus, resolveDataHealthLabel } from "../utils/healthStatus";
 import { formatTerminalStatusLabel, getStatusColor } from "../utils/marketUtils";
 
 function statusDotColor(status, theme) {
@@ -62,16 +62,6 @@ function HealthCell({ theme, terminalMonoFont, label, value, detail, status }) {
   );
 }
 
-function resolveDataLabel(scannerLabel, newsLabel) {
-  const statusText = `${scannerLabel || ""} ${newsLabel || ""}`.toUpperCase();
-
-  if (statusText.includes("ERROR") || statusText.includes("FAILED")) return "Data Limited";
-  if (statusText.includes("STALE") || statusText.includes("UNAVAILABLE") || statusText.includes("LIMITED") || statusText.includes("CACHED") || statusText.includes("FALLBACK")) return "Data Limited";
-  if (statusText.includes("LIVE")) return "Data Live";
-
-  return "Data Pending";
-}
-
 export default function ProductionHealthStrip({
   theme,
   terminalMonoFont,
@@ -89,7 +79,7 @@ export default function ProductionHealthStrip({
   brokerToolsEnabled = true,
 }) {
   const checkedLabel = formatHealthTime(lastCheckedAt);
-  const dataLabel = resolveDataLabel(scannerLabel, newsLabel);
+  const dataLabel = resolveDataHealthLabel(scannerLabel, newsLabel);
   const detailsTitle = [
     `Backend: ${formatTerminalStatusLabel(backendLabel)}`,
     `${brokerToolsEnabled ? "Questrade" : "Market Data"}: ${formatTerminalStatusLabel(qtrdHealth.label)}`,

@@ -8,6 +8,27 @@ import { expect, test } from "@playwright/test";
 const fixtureUrl = (view, extra = "") => `/e2e/fixture/index.html?view=${view}${extra}`;
 const artifactDir = path.resolve("release-gate-artifacts");
 
+test('an account restriction does not tell an already eligible plan to upgrade', async ({ page }) => {
+  await page.goto(fixtureUrl('journal', '&plan=premium&denyJournal=1'));
+  await expect(page.getByRole('heading', { name: 'Account access restricted', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Upgrade required', exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Contact the platform operator to request access/)).toBeVisible();
+});
+
+test('health panel distinguishes limited coverage, ready AI and private broker with recovery guidance', async ({ page }) => {
+  await page.goto(fixtureUrl('health'));
+  await expect(page.getByText('LIMITED', { exact: true })).toBeVisible();
+  await expect(page.getByText('SCANNER DEGRADED', { exact: true })).toBeVisible();
+  await expect(page.getByText(/29 verified symbols/)).toContainText('Check provider endpoint plan access.');
+  await expect(page.getByText('AI READY', { exact: true })).toBeVisible();
+  await expect(page.getByText('NEWS CACHED', { exact: true })).toBeVisible();
+  await expect(page.getByText('BROKER PRIVATE', { exact: true })).toBeVisible();
+  await expect(page.getByText('Token Persistence', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: path.join(artifactDir, 'health-panel.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Retry Broker + Health', exact: true }).click();
+  await expect(page.locator('output')).toHaveText('Health refresh requested');
+});
+
 test("scanner pagination and export cover all 65 results and named presets do not overwrite",async({page})=>{
   await page.goto(fixtureUrl("scanner","&largeScanner=1"));
   const pagination=page.getByRole("navigation",{name:"scanner results pagination"});

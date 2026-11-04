@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
+import { useMemo, useRef, useState } from "react";
+import { createJournalDayFormatter } from "../../../utils/journalCalendar.js";
+import JournalCalendar from "./JournalCalendar";
+import { normalizeJournalRecord, recordTimestamp, journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
 import { DEFAULT_JOURNAL_FILTERS, normalizeJournalFilters, filterJournalRecords } from '../../../utils/journalFilters.js';
 import { journalDiscipline } from '../../../utils/journalDiscipline.js';
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { defaultJournalDraft, terminalMonoFont, terminalSansFont } from "../../../config/terminalConfig";
 import { money, num, makeJournalTrades } from "../premiumWorkspaceData";
 import { ActionButton, FilterBar, MetricTile, PremiumCard, PremiumTable, PremiumTabs, SectionTitle, SeriesSparkline, StatusPill } from "../PremiumWorkspacePrimitives";
@@ -15,7 +17,7 @@ export default function JournalWorkspacePage({
       exportJournalCsv,
       exportWeeklyReport,
       isNarrowWorkspace,
-      journalDraft,
+      journalDraft: preparedDraft,
       journalRows,
       journalView,
       journalFilters,
@@ -23,16 +25,28 @@ export default function JournalWorkspacePage({
       page,
       removeJournalEntry,
       selectedStock,
-      setJournalDraft,
+      setJournalDraft: setPreparedDraft,
       setJournalView,
-      theme
+      theme,
+      timeZone,
+      updateJournalEntry,
 }) {
     const [analysisDimension, setAnalysisDimension] = useState('setup');
+    const [editing, setEditing] = useState(null);
+    const setupInput = useRef(null);
+    const reportingDay = useMemo(() => createJournalDayFormatter(timeZone), [timeZone]);
+    const isCalendar = journalView === "Calendar";
+    const journalDraft = editing?.draft ?? preparedDraft;
+    const setJournalDraft = editing
+      ? update => setEditing(current => ({ ...current, draft: update(current.draft) }))
+      : setPreparedDraft;
     const filters = normalizeJournalFilters(journalFilters);
     const { groupExits } = filters;
     const updateFilters = changes => setJournalFilters?.({ ...filters, ...changes });
     const grouped = makeJournalTrades(groupJournalTrades(journalRows));
-    const scope = filterJournalRecords(groupExits ? grouped : journalRows, filters);
+    const scope = isCalendar
+      ? filterJournalRecords(journalRows, filters, reportingDay.dayKey)
+      : filterJournalRecords(groupExits ? grouped : journalRows, filters);
     const presentedRows = scope.rows;
     const stats = journalStatistics(presentedRows);
     const comparisonRows = filterJournalRecords(grouped, filters).rows;
@@ -51,6 +65,61 @@ export default function JournalWorkspacePage({
     const setups = [...new Set(journalRows.map(row => String(row.setup || 'Unspecified').trim()))].sort();
     const filterStyle = { height: 32, minWidth: 0, maxWidth: '100%', background: theme.panel2, color: theme.text, border: `1px solid ${theme.border}`, borderRadius: 5, padding: '0 8px', colorScheme: theme.isDark ? 'dark' : 'light' };
     const invalidDraftRisk = journalDraft.recordType === 'trade' && journalDraft.plannedRiskAmount != null && journalDraft.plannedRiskAmount !== '' && (!Number.isFinite(Number(journalDraft.plannedRiskAmount)) || Number(journalDraft.plannedRiskAmount) <= 0 || Number(journalDraft.plannedRiskAmount) > 1e9);
+    const editChanges = editing ? Object.fromEntries(Object.entries(editing.draft).filter(([key, value]) => key !== 'pnl' && value !== editing.original[key])) : {};
+    const financialChange = ['recordType', 'status', 'bias', 'quantity', 'entryPrice', 'exitPrice', 'fees'].some(key => key in editChanges);
+    const closedTrade = journalDraft.recordType === 'trade' && journalDraft.status === 'closed';
+    const opened = recordTimestamp(journalDraft.openedAt);
+    const closed = recordTimestamp(journalDraft.closedAt);
+    const isNewClose = !editing || editChanges.status === 'closed' || editChanges.recordType === 'trade';
+    const effectiveClose = closed ?? (isNewClose ? null : editing?.timestamp);
+    const invalidTime = closedTrade && (!editing || 'closedAt' in editChanges || 'openedAt' in editChanges || 'status' in editChanges)
+      && opened !== null && effectiveClose != null && opened > effectiveClose;
+    const invalidPnl = closedTrade && (!editing || financialChange)
+      && !normalizeJournalRecord({ ...journalDraft, pnl: null }).eligible;
+    const saveError = invalidDraftRisk ? 'Enter a positive planned risk up to $1 billion or leave it blank.'
+      : invalidTime ? 'Entry time must be on or before close time.'
+      : invalidPnl ? 'Enter positive quantity and prices, and fees of zero or more.'
+      : !journalDraft.setup?.trim() ? 'Enter a setup before saving.' : '';
+
+    function startEdit(row) {
+      const original = {
+        recordType: row.recordType, status: row.status, symbol: row.symbol, setup: row.setup,
+        bias: row.side, quantity: row.quantity, entryPrice: row.entryPrice, exitPrice: row.exitPrice,
+        fees: row.fees, openedAt: row.openedAt, closedAt: row.closedAt, grade: row.grade,
+        result: row.result, review: row.notes === 'No notes' ? '' : row.notes,
+        plannedRiskAmount: row.plannedRiskAmount, entryChecklistStatus: row.entryChecklistStatus,
+        mistakeTags: row.mistakeTags,
+      };
+      setEditing({ id: row.id, timestamp: row.timestamp, original, draft: original });
+      setJournalView("Trades");
+      requestAnimationFrame(() => setupInput.current?.focus());
+    }
+
+    function saveRecord() {
+      if (saveError) return;
+      const now = Date.now();
+      if (closedTrade && isNewClose && closed === null && opened !== null && opened > now) {
+        setJournalDraft(current => ({ ...current, closedAt: new Date(now).toISOString() }));
+        return;
+      }
+      if (!editing) {
+        addJournalEntry();
+        return;
+      }
+      const changes = { ...editChanges };
+      if (financialChange) {
+        const { quantity, entryPrice, exitPrice, fees, bias } = journalDraft;
+        Object.assign(changes, { pnl: null, quantity, entryPrice, exitPrice, fees, bias });
+      }
+      if (closedTrade && !journalDraft.closedAt && isNewClose) {
+        changes.closedAt = new Date(now).toISOString();
+      } else if (!closedTrade && ('status' in changes || 'recordType' in changes)) {
+        changes.closedAt = null;
+      }
+      if (Object.keys(changes).length) updateJournalEntry?.(editing.id, changes);
+      setEditing(null);
+    }
+
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
     const showTrades = journalView === "Overview" || journalView === "Trades";
@@ -58,36 +127,38 @@ export default function JournalWorkspacePage({
       <div className="terminal-page" style={page}>
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", gap: 16 }}>
-            <SectionTitle theme={theme} title="Journal" subtitle="Track, review and improve your trading performance." />
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
-              <ActionButton theme={theme} onClick={() => setJournalDraft?.({ ...defaultJournalDraft, symbol: selectedStock, setup: '' })}>Clear Draft</ActionButton>
-              <ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim() || invalidDraftRisk} title={invalidDraftRisk ? 'Enter a positive planned risk up to $1 billion or leave it blank' : !journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Record</ActionButton>
-            </div>
+            <SectionTitle theme={theme} title="Journal Pro" subtitle="Track, review and improve your trading performance." />
+            {showDraft && <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 8 }}>
+              <ActionButton theme={theme} onClick={() => editing ? setEditing(null) : setPreparedDraft({ ...defaultJournalDraft, symbol: selectedStock, setup: '' })}>{editing ? 'Cancel Edit' : 'Clear Draft'}</ActionButton>
+              <ActionButton theme={theme} active disabled={Boolean(saveError)} title={saveError || "Save this journal record"} onClick={saveRecord}>{editing ? 'Save Changes' : 'Save Record'}</ActionButton>
+            </div>}
           </div>
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
-            <PremiumTabs theme={theme} tabs={["Overview", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
-              <label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => updateFilters({ groupExits: event.target.checked })} /> Group paper partial exits by position</label>
-              <span style={{ color: theme.muted, fontSize: 11 }}>{groupExits ? 'Grouped statistics count fully closed positions. Partial exits from positions still open are excluded; legacy exits without position IDs remain separate.' : 'Execution view counts each realized exit separately.'}</span>
+            <PremiumTabs theme={theme} tabs={["Overview", "Calendar", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
+              {!isCalendar && <><label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => updateFilters({ groupExits: event.target.checked })} /> Group paper partial exits by position</label>
+              <span style={{ color: theme.muted, fontSize: 11 }}>{groupExits ? 'Grouped statistics count fully closed positions. Partial exits from positions still open are excluded; legacy exits without position IDs remain separate.' : 'Execution view counts each realized exit separately.'}</span></>}
               <div style={{ display: 'grid', gridTemplateColumns: isNarrowWorkspace ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
-                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>From (ET)<input type="date" aria-label="Journal from date ET" value={filters.from} onChange={event => updateFilters({ from: event.target.value })} style={filterStyle} /></label>
-                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Through (ET)<input type="date" aria-label="Journal through date ET" value={filters.to} onChange={event => updateFilters({ to: event.target.value })} style={filterStyle} /></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>{isCalendar ? 'From (reporting day)' : 'From (ET)'}<input type="date" aria-label={isCalendar ? 'Calendar from date' : 'Journal from date ET'} value={filters.from} onChange={event => updateFilters({ from: event.target.value })} style={filterStyle} /></label>
+                <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>{isCalendar ? 'Through (reporting day)' : 'Through (ET)'}<input type="date" aria-label={isCalendar ? 'Calendar through date' : 'Journal through date ET'} value={filters.to} onChange={event => updateFilters({ to: event.target.value })} style={filterStyle} /></label>
                 <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Symbol<select aria-label="Journal symbol filter" value={filters.symbol} onChange={event => updateFilters({ symbol: event.target.value })} style={filterStyle}><option value="">All symbols</option>{[...new Set([...symbols, ...(filters.symbol ? [filters.symbol] : [])])].map(symbol => <option key={symbol}>{symbol}</option>)}</select></label>
                 <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Setup<select aria-label="Journal setup filter" value={filters.setup} onChange={event => updateFilters({ setup: event.target.value })} style={filterStyle}><option value="">All setups</option>{[...new Set([...setups, ...(filters.setup ? [filters.setup] : [])])].map(setup => <option key={setup}>{setup}</option>)}</select></label>
                 <label style={{ display: 'grid', gap: 4, color: theme.muted, fontSize: 11 }}>Records<select aria-label="Journal record filter" value={filters.kind} onChange={event => updateFilters({ kind: event.target.value })} style={filterStyle}><option value="all">All records</option><option value="note">Notes</option><option value="trade">Trades</option></select></label>
               </div>
               <FilterBar theme={theme} search="Search journal records" value={filters.search} onSearchChange={search => updateFilters({ search })} />
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><ActionButton theme={theme} onClick={() => setJournalFilters?.({ ...DEFAULT_JOURNAL_FILTERS })}>Clear Filters</ActionButton><span role="status" style={{ color: scope.error ? theme.amber : theme.muted, fontSize: 11 }}>{scope.error || `${presentedRows.length} matching records · ${stats.total} completed USD trades${scope.unknownDateCount ? ` · ${scope.unknownDateCount} records excluded because their date is unknown` : ''}`}</span></div>
-              <span style={{ color: theme.muted, fontSize: 11 }}>Date range uses the Eastern close/record day. Grouped positions include every partial exit and use their final close date. Table times are Pacific. Filters apply to records, statistics and comparisons.</span>
+              {!isCalendar && <span style={{ color: theme.muted, fontSize: 11 }}>Date range uses the Eastern close/record day. Grouped positions include every partial exit and use their final close date. Table times are Pacific. Filters apply to records, statistics and comparisons.</span>}
             </div>
           </PremiumCard>
-          {showDraft && <PremiumCard theme={theme} title="Prepared Journal Draft">
+          {isCalendar && <JournalCalendar records={presentedRows} reportingDay={reportingDay} theme={theme} />}
+          {showDraft && <PremiumCard theme={theme} title={editing ? `Edit ${editing.original.symbol} journal record` : "Prepared Journal Draft"}>
               <div style={{ padding: 14, display: "flex", gap: 12, flexWrap: "wrap", color: theme.muted }}>
                 <label>Record type <select aria-label="Journal record type" value={journalDraft.recordType || "note"} onChange={event => setJournalDraft(current => ({ ...current, recordType: event.target.value, status: event.target.value === "trade" ? "closed" : "note" }))}><option value="note">Note</option><option value="trade">Trade</option></select></label>
                 {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
                 {journalDraft.recordType === 'trade' && <label>Entry time (UTC)<input aria-label="Journal entry time UTC" type="datetime-local" value={journalDraft.openedAt ? String(journalDraft.openedAt).replace('Z', '').slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, openedAt: event.target.value ? `${event.target.value}:00Z` : null }))} /></label>}
+                {closedTrade && <label>Close time (UTC)<input aria-label="Journal close time UTC" type="datetime-local" value={journalDraft.closedAt ? String(journalDraft.closedAt).slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, closedAt: event.target.value ? `${event.target.value}:00Z` : null }))} />{!editing && <small> Defaults to save time</small>}</label>}
                 <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
-                {invalidDraftRisk && <span role="status">Enter a positive planned risk up to $1 billion, or leave it blank for unknown.</span>}
+                {saveError && journalDraft.setup?.trim() && <span role="status">{saveError}</span>}
                 {journalDraft.recordType === 'trade' && <><label>Recorded planned risk ($)<input aria-label="Journal planned risk" type="number" min="0" step="any" value={journalDraft.plannedRiskAmount ?? ''} onChange={event => setJournalDraft(current => ({ ...current, plannedRiskAmount: event.target.value }))} style={{ display: 'block', width: 110 }} /></label><label>Recorded checklist<select aria-label="Journal recorded checklist" value={journalDraft.entryChecklistStatus || 'unknown'} onChange={event => setJournalDraft(current => ({ ...current, entryChecklistStatus: event.target.value }))}><option value="unknown">Unknown</option><option value="complete">Complete</option><option value="incomplete">Incomplete</option></select></label></>}
                 <label>Mistake tags<input aria-label="Journal mistake tags" maxLength="500" placeholder="Comma-separated; optional" value={journalDraft.mistakeTags || ''} onChange={event => setJournalDraft(current => ({ ...current, mistakeTags: event.target.value }))} style={{ display: 'block', width: 200 }} /></label>
               </div>
@@ -100,7 +171,8 @@ export default function JournalWorkspacePage({
                     {label}
                     <input
                       aria-label={`Journal ${label.toLowerCase()}`}
-                      value={value}
+                      ref={key === "setup" ? setupInput : undefined}
+                      value={value ?? ""}
                       onChange={(event) => setJournalDraft?.((current) => ({ ...current, [key]: key === "symbol" ? event.target.value.toUpperCase() : event.target.value }))}
                       style={{ height: 34, minWidth: 0, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 9px", fontFamily: key === "symbol" ? terminalMonoFont : terminalSansFont }}
                     />
@@ -195,7 +267,7 @@ export default function JournalWorkspacePage({
                 </div>
               </PremiumCard>
             </div>}
-            {showTrades && <PremiumCard theme={theme} title="Journal Records" action={<ActionButton theme={theme} active disabled={!journalDraft?.setup?.trim() || invalidDraftRisk} title={invalidDraftRisk ? 'Enter a positive planned risk up to $1 billion or leave it blank' : !journalDraft?.setup?.trim() ? "Enter a setup before saving" : "Save this journal draft"} onClick={addJournalEntry}>Save Draft</ActionButton>}>
+            {showTrades && <PremiumCard theme={theme} title="Journal Records" action={<ActionButton theme={theme} active disabled={Boolean(saveError)} title={saveError} onClick={saveRecord}>{editing ? 'Apply Edit' : 'Save Draft'}</ActionButton>}>
               <PremiumTable
                 theme={theme}
                 columns={[
@@ -213,8 +285,8 @@ export default function JournalWorkspacePage({
                   { key: "hold", label: "Hold Time", width: "90px" },
                   { key: "outcome", label: "Outcome", width: "80px", color: (row) => row.outcome === "Loss" ? theme.red : theme.green },
                   { key: "tag", label: "Notes", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.outcome === "Loss" ? "warn" : "neutral"}>{row.tag || row.setup}</StatusPill> },
-                  { key: "notes", label: "Review", width: "1fr" },
-                  { key: "actions", label: "", width: "54px", align: "center", render: (row) => row.immutable ? <span title="Execution history is retained by the paper account">Auto</span> : <button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button> },
+                  { key: "notes", label: "Review", width: "1fr", render: row => <div style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}><span>{row.notes}</span>{row.tradePlan && <details><summary>Entry plan</summary><div>First entry stop: {row.tradePlan.stopLoss > 0 ? money(row.tradePlan.stopLoss) : 'Not recorded'} · target: {row.tradePlan.takeProfit > 0 ? money(row.tradePlan.takeProfit) : 'Not recorded'}</div></details>}</div> },
+                  { key: "actions", label: "", width: "80px", align: "center", render: (row) => row.immutable ? <span title="Execution history is retained by the paper account">Auto</span> : <div style={{ display: 'flex', gap: 4 }}><ActionButton theme={theme} aria-label={`Edit journal entry ${row.symbol}`} onClick={() => startEdit(row)}><Pencil size={13} aria-hidden="true" /></ActionButton><button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button></div> },
                 ]}
                 rows={pagination.rows} keyField="id"
               />

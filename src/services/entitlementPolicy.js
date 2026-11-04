@@ -12,6 +12,13 @@ export const PLAN_LABELS = {
   admin: "Admin",
 };
 
+export const PLAN_DESCRIPTIONS = {
+  free: 'Charts, scanner, watchlists, news, alerts, order-flow tools, Orders and Positions, including paper simulation.',
+  pro: 'Everything in Free, plus AI summaries, replay and journal.',
+  premium: 'Everything in Pro, plus risk and performance analytics.',
+  admin: 'Premium features plus owner-only administration and private broker diagnostics.',
+};
+
 export const FEATURE_MIN_PLAN = {
   dashboard: "free",
   scanner: "free",

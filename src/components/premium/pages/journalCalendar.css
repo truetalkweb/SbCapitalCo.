@@ -1,0 +1,52 @@
+.journal-calendar {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  min-width: 0;
+}
+.journal-calendar p {
+  margin: 0;
+  color: var(--calendar-muted);
+  font-size: 12px;
+}
+.journal-calendar-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.journal-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.journal-calendar-weekday {
+  text-align: center;
+  color: var(--calendar-muted);
+  font-size: 11px;
+}
+.journal-calendar-cell {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  min-height: 62px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--calendar-border);
+  border-radius: 5px;
+  padding: 4px;
+  background: var(--calendar-panel);
+  text-align: left;
+  font: inherit;
+  font-size: clamp(9px, 1.4vw, 13px);
+  font-variant-numeric: tabular-nums;
+}
+button.journal-calendar-cell {
+  cursor: pointer;
+}
+.journal-calendar-cell[aria-pressed='true'] {
+  border-color: currentColor;
+}
+.journal-calendar-empty {
+  color: var(--calendar-muted);
+}

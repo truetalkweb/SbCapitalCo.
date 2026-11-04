@@ -15,6 +15,8 @@ export function usePremiumWorkspaceActions({
   review: externalReview,
   setReview: externalSetReview,
   setPaperDraft,
+  paperDraft,
+  setQuantity,
 }) {
   const [localReview, setLocalReview] = useState(null);
   const review = externalReview === undefined ? localReview : externalReview;
@@ -41,11 +43,17 @@ export function usePremiumWorkspaceActions({
   }, [selectedSymbol, setOrderConfirmed, setOrderMessage, setPremiumDockTab, selectMainSymbol, setActiveWorkspace, orderRows, positionRows, setReview]);
 
   const prepareOrderReview = useCallback((side, symbol = selectedSymbol, draft = {}) => {
-    setPaperDraft?.({ ...draft, side, symbol, id: crypto.randomUUID() });
+    const saved = paperDraft?.symbol === symbol ? paperDraft : {};
+    const prepared = { ...saved, ...draft, side, symbol, id: crypto.randomUUID() };
+    const reviewQuantity = prepared.quantity ?? quantity;
+    const plannedPrice = ['LIMIT', 'STOP_LIMIT'].includes(prepared.type) ? Number(prepared.limitPrice || prepared.price)
+      : prepared.type === 'STOP' ? Number(prepared.stopPrice || prepared.price) : null;
+    setPaperDraft?.(prepared);
+    if (Number(prepared.quantity) > 0) setQuantity?.(prepared.quantity);
     selectMainSymbol?.(symbol);
     setActiveWorkspace?.("orders");
-    setReview({ label:`${side}${draft.type ? ` ${draft.type}` : ""} order review`,symbol,createdAt:new Date().toISOString(),quantity,referencePrice: typeof draft.price === "number" && draft.price > 0 ? draft.price : symbol === selectedSymbol ? referencePrice : null,
-      targets:[{id:"draft",symbol,quantity,kind:`${side} draft`,source:"Workspace / review"}] });
+    setReview({ label:`${side}${prepared.type ? ` ${prepared.type}` : ""} order review`,symbol,createdAt:new Date().toISOString(),quantity:reviewQuantity,referencePrice: plannedPrice > 0 ? plannedPrice : symbol === selectedSymbol ? referencePrice : null,
+      targets:[{id:"draft",symbol,quantity:reviewQuantity,kind:`${side} draft`,source:"Workspace / review"}] });
     setOrderSide?.(side);
     setOrderConfirmed?.(false);
     setPremiumDockTab?.("orders");
@@ -62,6 +70,8 @@ export function usePremiumWorkspaceActions({
     setActiveWorkspace,
     setReview,
     setPaperDraft,
+    paperDraft,
+    setQuantity,
   ]);
 
   return { openChart, prepareOrderReview, prepareReviewAction, review, dismissReview: () => setReview(null) };

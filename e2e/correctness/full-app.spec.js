@@ -663,7 +663,7 @@ const secondaryWorkspaces = [
   ["watchlist", "Watchlist"], ["scanner", "Market Scanner"], ["chart-analysis", "Charts"],
   ["news", "News & Calendar"], ["alerts", "Alerts"], ["orders", "Orders"],
   ["positions", "Positions"], ["risk", "Risk Manager"], ["performance", "Performance"],
-  ["replay", "Replay"], ["journal", "Trade Journal"], ["settings", "Settings"],
+  ["replay", "Replay"], ["journal", "Journal Pro"], ["settings", "Settings"],
 ];
 for (const width of [1536, 1280]) {
   for (const [view, title] of secondaryWorkspaces) {
@@ -1185,6 +1185,11 @@ test('journal compares grouped positions by entry setup, hour and session', asyn
   await expect(page.getByText('2 realized exits · Position closed', { exact: true })).toBeVisible();
   await page.getByLabel('Group paper partial exits').uncheck();
   await expect(page.getByRole('row', { name: 'Select NVDA', exact: true })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Edit journal entry NVDA' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Calendar', exact: true }).click();
+  await page.getByRole('button', { name: '2026-09-21, $-0.20, 2 trades', exact: true }).click();
+  const day = page.getByRole('region', { name: 'Trades closed on 2026-09-21' });
+  await expect(day.getByRole('cell', { name: 'Paper simulation', exact: true })).toHaveCount(2);
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });
 

@@ -16,6 +16,7 @@ export default function ChartsWorkspacePage({
   selectMainSymbol,
   selected,
   selectedActions,
+  tradePlanEditor,
   setGridMode,
   setLayoutMode,
   setOrderMessage,
@@ -163,6 +164,7 @@ export default function ChartsWorkspacePage({
             }}
           >
             <DetailRail theme={theme} selected={selected} actions={selectedActions} compact detailStats={chartStats}>
+              {tradePlanEditor}
               <PremiumCard theme={theme} title="Watchlist">
                 <PremiumTable
                   theme={theme}

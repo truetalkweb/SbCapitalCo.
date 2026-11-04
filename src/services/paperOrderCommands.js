@@ -88,7 +88,8 @@ export function paperTradeHistory(state) {
       plannedRiskAmount: row.plannedRiskAmount ?? null, entryChecklistStatus: row.entryChecklistStatus || 'unknown',
       tradeGroupId: row.tradeGroupId || null, openedAt: row.openedAt || null, closesPosition: Boolean(row.closesPosition),
       closedAt: row.filledAt, createdAt: row.filledAt, currency: 'USD', source: 'Paper simulation',
-      setup: row.setup || 'Unspecified', notes: row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)',
+      tradePlan: row.tradePlan || null,
+      setup: row.setup || 'Unspecified', notes: [row.closesPosition ? 'Position closed' : 'Realized exit (may be partial)', row.tradePlan?.notes].filter(Boolean).join(' · '),
       immutable: true,
     }));
 }

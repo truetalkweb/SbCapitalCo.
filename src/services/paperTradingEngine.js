@@ -181,7 +181,9 @@ export function submitPaperOrder(state, draft, quotes = [], now = Date.now(), li
     createdAt: iso(now), submittedAt: iso(now), expiresAt: (draft.tif || 'DAY') === 'DAY' ? dayExpiry(now) : null,
     maxOrderValue: Number(limits.maxOrderValue) || 0, riskPerTrade: Number(limits.riskPerTrade) || 0,
     dailyLossLimit: Number(limits.dailyLossLimit) || 0, paperCosts, submittedRisk: plannedRisk,
-    setup: String(draft.setup || '').trim().slice(0, 100), checklist: draft.checklist || null };
+    setup: String(draft.setup || '').trim().slice(0, 100), checklist: draft.checklist || null,
+    tradePlan: isOpening ? { setup: String(draft.setup || '').trim().slice(0, 100),
+      notes: String(draft.notes ?? draft.tradePlan?.notes ?? '').trim().slice(0, 2000), stopLoss, takeProfit } : null };
   const next = processPaperOrders({ ...state, orders: [order, ...(state.orders || [])] }, quotes, now);
   return { state: next, order: next.orders.find(row => row.id === order.id) };
 }
@@ -273,6 +275,7 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       tradeGroupId: position.tradeGroupId || (!held ? order.id : null),
       openedAt: position.openedAt || (!held ? iso(now) : null),
       setup: !held ? order.setup || 'Unspecified' : position.setup || 'Unspecified',
+      tradePlan: !held ? order.tradePlan || null : position.tradePlan || null,
       plannedRiskRemaining: plannedRisk && (!held || Number.isFinite(position.plannedRiskRemaining)) ? round((held ? position.plannedRiskRemaining : 0) + plannedRisk.amount) : null,
       entryChecklistStatus: !held ? checklistStatus(order.checklist) : [position.entryChecklistStatus, checklistStatus(order.checklist)].includes('incomplete') ? 'incomplete' : position.entryChecklistStatus === 'complete' && checklistStatus(order.checklist) === 'complete' ? 'complete' : 'unknown',
       average: round((Number(position.average) * Math.abs(held) + fillPrice * qty) / (Math.abs(held) + qty)), ...(entryFees + commission > 0 ? { entryFeesRemaining: round(entryFees + commission) } : {}), source: 'Paper simulation', currency: 'USD' };
@@ -292,6 +295,7 @@ export function processPaperOrders(state, quotes = [], now = Date.now()) {
       tradeGroupId: isOpening ? next.positions[order.symbol].tradeGroupId : position.tradeGroupId || null,
       openedAt: isOpening ? next.positions[order.symbol].openedAt : position.openedAt || null,
       setup: isOpening ? next.positions[order.symbol].setup : position.setup || 'Unspecified',
+      tradePlan: isOpening ? next.positions[order.symbol].tradePlan : position.tradePlan || null,
       plannedRisk: isOpening ? plannedRisk : null,
       plannedRiskAmount: isOpening ? plannedRisk?.amount ?? null : Number.isFinite(position.plannedRiskRemaining) ? Math.abs(held) === qty ? position.plannedRiskRemaining : round(position.plannedRiskRemaining * qty / Math.abs(held)) : null,
       entryChecklistStatus: isOpening ? next.positions[order.symbol].entryChecklistStatus : position.entryChecklistStatus || 'unknown',

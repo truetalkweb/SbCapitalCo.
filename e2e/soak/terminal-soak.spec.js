@@ -13,7 +13,7 @@ test('ten-minute isolated browser soak switches all workspaces, recovers outages
     new PerformanceObserver(list => { for (const entry of list.getEntries()) { window.__qaLongTasks.push(entry.duration); if (window.__qaLongTasks.length > 2000) window.__qaLongTasks.shift(); } }).observe({ type: 'longtask', buffered: true });
   });
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'dashboard', selectedStock: 'AAPL', layoutMode: '1', positions: {}, orders: [], journalEntries: [] },
-    { baseUrl: 'http://127.0.0.1:4176', providerQuotes: [{ symbol: 'AAPL', price: 100, source: 'Isolated soak provider', timestamp: marketTime / 1000 }] });
+    { baseUrl: info.project.use.baseURL, providerQuotes: [{ symbol: 'AAPL', price: 100, source: 'Isolated soak provider', timestamp: marketTime / 1000 }] });
   const nav = async name => name === 'Alerts' ? page.getByRole('button', { name: 'Notifications and alerts' }).click() : page.getByRole('navigation', { name: 'Terminal workspaces' }).getByRole('button', { name, exact: true }).click();
   for (const name of names) await nav(name); await nav('Alerts'); await nav('Dashboard');
   const cdp = await page.context().newCDPSession(page), samples = []; let switches = 15, offline = false, outageRecoveries = 0;

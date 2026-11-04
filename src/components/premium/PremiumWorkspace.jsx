@@ -5,7 +5,6 @@ import { workstationTheme, workstationPages } from "../workstation/workstationTh
 import { useWatchlistCollections } from "../../hooks/useWatchlistCollections.js";
 import { Star } from "lucide-react";
 import { buildPositionRows } from "../../utils/portfolioAccounting.js";
-import { journalStatistics } from "../../utils/journalAccounting.js";
 import { terminalMonoFont, terminalSansFont } from "../../config/terminalConfig";
 import { useDashboardData } from "../../hooks/useDashboardData";
 import { usePremiumScannerRows } from "../../hooks/usePremiumScannerRows";
@@ -14,6 +13,7 @@ import { usePremiumWorkspaceState } from "../../hooks/usePremiumWorkspaceState";
 import { usePremiumWorkspaceViews } from "../../hooks/usePremiumWorkspaceViews";
 import WorkstationDashboard from "../workstation/WorkstationDashboard";
 import PaperOrderTicket from "../workstation/PaperOrderTicket";
+import TradePlanEditor from "../workstation/TradePlanEditor.jsx";
 import {
   formatCompactNumber,
   formatMultiple,
@@ -167,6 +167,7 @@ function PremiumWorkspaceContent({
   setJournalDraft,
   addJournalEntry,
   removeJournalEntry,
+  updateJournalEntry,
   exportJournalCsv,
   exportTradeSummaryCsv,
   exportDailyReport,
@@ -235,7 +236,6 @@ function PremiumWorkspaceContent({
     : [];
   const journalRows = makeJournalTrades(journalEntries);
   const replayRows = makeReplayTrades(replayTrades, selectedStock);
-  const journalNet = journalStatistics(journalRows).net;
   const replayNet = num(replayStats?.netPnL, 0);
   const replayWinRate = replayStats?.winRate || "0.00";
   const workspaceState = usePremiumWorkspaceState();
@@ -461,6 +461,8 @@ function PremiumWorkspaceContent({
     review: workspaceOrderReview,
     setReview: setWorkspaceOrderReview,
     setPaperDraft,
+    paperDraft,
+    setQuantity,
     selectedSymbol: selected.symbol,
     orderRows, positionRows, quantity, referencePrice: selected.price,
     selectMainSymbol,
@@ -565,6 +567,7 @@ function PremiumWorkspaceContent({
     <PremiumCard theme={theme} title="Quick Order" style={{ minWidth: 0, overflow: "hidden" }}>
       {paperTrading ? <PaperOrderTicket key={`${selectedStock}-${paperDraft?.id || ''}`} symbol={selectedStock} quote={selectedStockData}
         quantity={quantity} setQuantity={setQuantity} trading={paperTrading} initialDraft={paperDraft?.symbol === selectedStock ? paperDraft : {}}
+        onDraftChange={setPaperDraft}
         defaultType={defaultOrderType} onMessage={setOrderMessage} /> : <>
       <div style={{ padding: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7, minWidth: 0 }}>
@@ -610,11 +613,12 @@ function PremiumWorkspaceContent({
       <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", selected.symbol)}>
         Alert Review
       </ActionButton>
-      <ActionButton theme={theme} good onClick={() => prepareOrderReview("BUY", selected.symbol)}>
+      <ActionButton theme={theme} good onClick={() => prepareOrderReview(paperDraft?.side === 'SELL_SHORT' ? 'SELL_SHORT' : "BUY", selected.symbol)}>
         Review Order
       </ActionButton>
     </div>
   );
+  const tradePlanEditor = <TradePlanEditor symbol={selected.symbol} draft={paperDraft?.symbol === selected.symbol ? paperDraft : {}} onChange={setPaperDraft} theme={theme} />;
   function scannerTable(rows = stocks.slice(0, 8), selectedKey = selected.symbol, tableProps = {}) {
     return (
       <PremiumTable
@@ -642,6 +646,7 @@ function PremiumWorkspaceContent({
   function selectedRail(extra = null, selectedOverride = selected) {
     return (
       <DetailRail theme={theme} selected={selectedOverride} actions={selectedActions}>
+        {activeWorkspace === 'scanner' && tradePlanEditor}
         {extra}
       </DetailRail>
     );
@@ -662,6 +667,7 @@ function PremiumWorkspaceContent({
           selectMainSymbol,
           selected,
           selectedActions,
+          tradePlanEditor,
           setGridMode,
           setLayoutMode,
           setOrderMessage,
@@ -893,7 +899,6 @@ function PremiumWorkspaceContent({
           exportWeeklyReport,
           isNarrowWorkspace,
           journalDraft,
-          journalNet,
           journalRows,
           journalView,
           journalFilters: premiumPreferences.journalFilters,
@@ -904,6 +909,8 @@ function PremiumWorkspaceContent({
           setJournalDraft,
           setJournalView,
           theme,
+          timeZone,
+          updateJournalEntry,
         }}
       />
     );
@@ -1031,7 +1038,7 @@ function PremiumWorkspaceContent({
     return <WorkstationDashboard selected={dashboard.selected} chart={renderChartGrid?.({ layoutMode: "1", embeddedChart: true })}
       account={accountSummary} marketIndexes={marketIndexes} positions={positionRows} orders={orderRows} rawOrders={orders}
       news={dashboard.newsRows.filter(row => !row.fallback && !row.isSynthetic)} alerts={alerts} quantity={quantity} setQuantity={setQuantity}
-      onReview={prepareOrderReview} paperTrading={paperTrading} onSelect={selectMainSymbol} onNavigate={setActiveWorkspace} onAddWatch={addSymbolToWatchlist}
+      onReview={prepareOrderReview} paperTrading={paperTrading} paperDraft={paperDraft} setPaperDraft={setPaperDraft} onSelect={selectMainSymbol} onNavigate={setActiveWorkspace} onAddWatch={addSymbolToWatchlist}
       watched={collections.active.symbols.includes(selectedStock)} timeframe={timeframe} setTimeframe={setTimeframe}
       indicators={chartIndicators} setIndicators={setChartIndicators} takeScreenshot={takeScreenshot} toggleAlert={toggleAlert}
       preferences={premiumPreferences} setPreference={updatePremiumPreference} />;

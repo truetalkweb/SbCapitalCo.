@@ -5,10 +5,12 @@ const frontendPort = Number(process.env.RELEASE_FRONTEND_PORT || 4173);
 const backendPort = Number(process.env.RELEASE_BACKEND_PORT || 4012);
 const frontendUrl = `http://127.0.0.1:${frontendPort}`;
 const backendUrl = process.env.RELEASE_BACKEND_URL || `http://127.0.0.1:${backendPort}`;
+const authUrl = "http://127.0.0.1:4998";
+const authKey = "isolated-test-publishable-key";
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: "**/correctness/**",
+  testIgnore: ["**/correctness/**", "**/soak/**"],
   outputDir: "./test-results",
   timeout: 45_000,
   expect: { timeout: 10_000 },
@@ -35,6 +37,8 @@ export default defineConfig({
       env: {
         ...process.env,
         VITE_BROKER_API_URL: backendUrl,
+        VITE_SUPABASE_URL: authUrl,
+        VITE_SUPABASE_PUBLISHABLE_KEY: authKey,
       },
     },
     {
@@ -48,6 +52,8 @@ export default defineConfig({
         PORT: String(backendPort),
         ALLOW_LOCAL_CORS: "true",
         DISABLE_QUESTRADE_AUTH: "true",
+        SUPABASE_URL: authUrl,
+        SUPABASE_PUBLISHABLE_KEY: authKey,
       },
     },
   ],

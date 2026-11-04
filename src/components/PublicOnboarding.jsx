@@ -1,29 +1,11 @@
 import { useState } from "react";
 import { useModalFocus } from "../hooks/useModalFocus";
 import { terminalMonoFont, terminalSansFont } from "../config/terminalConfig";
+import { firstSessionSteps } from '../utils/firstSessionGuide.js';
 import {
   PUBLIC_INFORMATION_EFFECTIVE_DATE,
   PUBLIC_INFORMATION_SECTIONS,
 } from "../config/publicInformation";
-
-const steps = [
-  {
-    title: "Scanner",
-    detail: "Finds active movers using price action, volume, relative volume, and gap context.",
-  },
-  {
-    title: "Market News",
-    detail: "Shows ticker-related headlines first, then broader market headlines when coverage is limited.",
-  },
-  {
-    title: "Intelligence",
-    detail: "Combines chart, scanner, and headline context so stronger setups stand out faster.",
-  },
-  {
-    title: "Watchlist",
-    detail: "Keeps the names you care about close to their chart, news, and context.",
-  },
-];
 
 const dataSources = [
   ["Scanner", "Ranked movers from available market data, volume, relative volume, gaps, and intraday movement."],
@@ -47,6 +29,8 @@ export default function PublicOnboarding({
   onClose,
   onDontShowAgain,
   onReportIssue,
+  entitlements,
+  onOpenWorkspace,
 }) {
   const [activeView, setActiveView] = useState("quick");
   const dialogRef = useModalFocus(isOpen, onClose, '[role="tab"][aria-selected="true"]');
@@ -64,6 +48,7 @@ export default function PublicOnboarding({
   const overlayBg = isDark ? "rgba(2,6,12,0.56)" : "rgba(15,23,42,0.18)";
   const panelBg = isDark ? "#080d14" : "#ffffff";
   const stepBg = isDark ? "rgba(255,255,255,0.025)" : "#f7f9fc";
+  const steps = firstSessionSteps(entitlements);
 
   return (
     <div
@@ -273,6 +258,9 @@ export default function PublicOnboarding({
                   <div style={{ marginTop: "3px", color: theme.muted, fontSize: "11px", lineHeight: 1.45 }}>
                     {step.detail}
                   </div>
+                  <div style={{ marginTop: 8, color: theme.muted, fontSize: 10 }}>{step.access}</div>
+                  {onOpenWorkspace && <button type="button" className="public-focus-control" onClick={() => onOpenWorkspace(step.destination)}
+                    style={{ marginTop: 8, padding: '8px 10px', borderRadius: 5, border: `1px solid ${theme.borderSoft || theme.border}`, background: theme.panel2, color: theme.text, cursor: 'pointer' }}>{step.action}</button>}
                 </div>
               </div>
             ))}

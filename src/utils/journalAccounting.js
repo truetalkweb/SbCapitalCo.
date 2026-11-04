@@ -27,7 +27,7 @@ export function groupJournalTrades(records = []) {
       entryChecklistStatus: exits.some(row => row.entryChecklistStatus === 'incomplete') ? 'incomplete' : exits.every(row => row.entryChecklistStatus === 'complete') ? 'complete' : 'unknown',
       mistakeTags: [...new Set(exits.flatMap(row => String(row.mistakeTags || '').split(/[;,]/).map(tag => tag.trim()).filter(Boolean)))].join(', '),
       searchText: exits.map(row => [row.notes, row.review, row.tags, row.tag].join(' ')).join(' '),
-      notes: `${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`,
+      notes: [`${exits.length} realized exit${exits.length === 1 ? '' : 's'} · ${closed ? 'Position closed' : 'Position still open'}`, exits[0].tradePlan?.notes].filter(Boolean).join(' · '),
       openedAt: exits[0].openedAt || null, setup: exits[0].setup || 'Unspecified',
     });
   }
@@ -64,6 +64,30 @@ export function recordTimestamp(value) {
   return Number.isFinite(result) ? result : null;
 }
 
+// Work in decimal integers and round the result once to the journal's
+// existing six-place USD precision.
+function decimalParts(value) {
+  const [mantissa, exponent = '0'] = String(value).split('e');
+  const [whole, fraction = ''] = mantissa.split('.');
+  return { units: BigInt(whole + fraction), places: fraction.length - Number(exponent) };
+}
+
+function calculateJournalPnl(entryPrice, exitPrice, quantity, fees, side) {
+  const [entry, exit, size, commission] = [entryPrice, exitPrice, quantity, fees].map(decimalParts);
+  const pricePlaces = Math.max(entry.places, exit.places);
+  const scale = (decimal, places) => decimal.units * 10n ** BigInt(places - decimal.places);
+  const gross = {
+    units: (scale(exit, pricePlaces) - scale(entry, pricePlaces)) * size.units * (side === 'short' ? -1n : 1n),
+    places: pricePlaces + size.places,
+  };
+  const places = Math.max(6, gross.places, commission.places);
+  const net = scale(gross, places) - scale(commission, places);
+  const divisor = 10n ** BigInt(places - 6);
+  const rounded = net < 0n ? (net - divisor / 2n) / divisor : (net + divisor / 2n) / divisor;
+  return rounded > BigInt(Number.MAX_SAFE_INTEGER) || rounded < BigInt(Number.MIN_SAFE_INTEGER)
+    ? null : Number(rounded) / 1e6;
+}
+
 export function normalizeJournalRecord(entry) {
   const explicit = number(entry.pnl ?? entry.netPnl ?? entry.resultAmount);
   const quantity = number(entry.quantity ?? entry.qty);
@@ -74,7 +98,7 @@ export function normalizeJournalRecord(entry) {
   const kind = entry.recordType || (explicit !== null ? "trade" : "note");
   const status = entry.status || (kind === "trade" && explicit !== null ? "closed" : kind === "trade" ? "open" : "note");
   const canCalculate = kind === "trade" && status === "closed" && quantity > 0 && entryPrice > 0 && exitPrice > 0 && fees !== null && fees >= 0 && ["long", "short"].includes(side);
-  const pnl = explicit ?? (canCalculate ? Math.round(((exitPrice - entryPrice) * quantity * (side === "short" ? -1 : 1) - fees) * 1e6) / 1e6 : null);
+  const pnl = explicit ?? (canCalculate ? calculateJournalPnl(entryPrice, exitPrice, quantity, fees, side) : null);
   return { ...entry, recordType: kind, status, pnl,
     plannedRiskAmount: number(entry.plannedRiskAmount) > 0 ? number(entry.plannedRiskAmount) : null,
     entryChecklistStatus: ['complete', 'incomplete'].includes(entry.entryChecklistStatus) ? entry.entryChecklistStatus : 'unknown',

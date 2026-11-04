@@ -60,6 +60,11 @@ export function getQuestradeHealth({
   const quality = aggregateQuoteQuality(quoteRows.filter(quote => /QTRD|QUESTRADE/i.test(String(quote?.source || ""))));
   const timeout = /timeout|ECONNABORTED/i.test(rawMessage);
 
+  if (quality === "unavailable" && platformHealth?.marketData?.mode) {
+    const summary = getServiceHealthSummary('marketData', platformHealth.marketData);
+    return { ...summary, label: summary.label.replace(/^MARKET /, 'QTRD '), rawMessage, tokenPersisted };
+  }
+
   if (quality !== "unavailable" || platformReportsLive) {
     return {
       label: quality === "unavailable" ? "QTRD AVAILABLE" : `QTRD ${quality.toUpperCase()}`,
@@ -111,6 +116,36 @@ export function getHealthLabelStatus(label) {
   if (value.includes("LIVE") || value.includes("CONNECTED") || value.includes("ONLINE")) return "ok";
 
   return "info";
+}
+
+export function getServiceHealthSummary(name, health = {}) {
+  const title = { scanner: 'Scanner', news: 'News', ai: 'AI', marketData: 'Market', broker: 'Broker' }[name] || name;
+  if (health.status === 'private') return { label: `${title.toUpperCase()} PRIVATE`, status: 'info', message: 'Broker diagnostics are restricted to the account owner.' };
+  if (name === 'ai' && health.configured && health.status === 'pending' && !health.lastSuccessAt) {
+    return { label: 'AI READY', status: 'info', message: 'AI is configured. Request a summary to verify generation.' };
+  }
+  const mode = health.mode === 'Unavailable' && health.status === 'pending' ? 'Pending'
+    : health.mode || (health.stale ? 'Stale' : health.degraded || health.fallback || health.providerLimited ? 'Degraded' : health.cached ? 'Cached' : health.live ? 'Live' : 'Pending');
+  const status = mode === 'Live' ? 'ok' : mode === 'Unavailable' && health.status !== 'pending' ? 'bad'
+    : ['Degraded', 'Stale', 'Delayed', 'Cached'].includes(mode) ? 'warn' : 'info';
+  const guidance = {
+    Stale: 'Last successful data is too old. Refresh status and check timestamps before using it.',
+    Degraded: 'Coverage or service is limited. Check available results and their timestamps.',
+    Unavailable: 'No confirmed service result is available. Retry shortly.',
+    Cached: 'Showing a saved provider response. Check timestamps for freshness.',
+    Delayed: 'Provider data is delayed. Check timestamps before using it.',
+    Pending: 'Waiting for the first confirmed service response.',
+    Live: 'Recent provider data is available. Check individual timestamps for freshness.',
+  };
+  return { label: `${title.toUpperCase()} ${mode.toUpperCase()}`, status,
+    message: [health.userMessage || guidance[mode] || guidance.Pending, health.recoveryAction].filter(Boolean).join(' ') };
+}
+
+export function resolveDataHealthLabel(scannerLabel, newsLabel) {
+  const labels = [scannerLabel, newsLabel].map(value => String(value || '').toUpperCase());
+  if (labels.some(value => /ERROR|FAILED|STALE|UNAVAILABLE|LIMITED|CACHED|FALLBACK|DEGRADED|DELAYED/.test(value))) return 'Data Limited';
+  if (labels.every(value => value.includes('LIVE'))) return 'Data Live';
+  return 'Data Pending';
 }
 
 export function normalizeProviderStatus(input = {}, {

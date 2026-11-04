@@ -32,6 +32,6 @@ export const workstationPages = {
   risk: ["Risk Manager", "Review exposure and account limits"],
   performance: ["Performance", "Results from your recorded trades"],
   replay: ["Replay", "Practice and review historical sessions"],
-  journal: ["Trade Journal", "Record and review your trading decisions"],
+  journal: ["Journal Pro", "Record and review your trading decisions"],
   settings: ["Settings", "Manage your workspace preferences"],
 };

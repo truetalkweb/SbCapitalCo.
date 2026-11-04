@@ -40,14 +40,14 @@ for (const width of [390, 1536]) test(`cost-aware ticket rejects above budget an
   await expect.poll(() => evidence.workspace().paperLedger?.riskPolicy?.riskPerTrade).toBe(14);
   await navigate(page, 'Dashboard', width); const ticket = page.getByRole('region', { name: 'Paper trade ticket', exact: true });
   await ticket.getByLabel('Paper order type').selectOption('MARKET');
-  await ticket.getByLabel('Paper quantity').fill('10'); await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('99');
+  await ticket.getByLabel('Paper quantity').fill('10'); if (await ticket.locator('details').getAttribute('open') === null) await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('99');
   await expect(ticket.getByLabel('Planned paper risk')).toContainText('$14.19');
   await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click(); await expect(ticket.getByRole('status')).toContainText('planned loss $14.19 > $14.00');
   expect(evidence.workspace().paperLedger.orders).toHaveLength(0);
   await navigate(page, 'Settings', width); await page.getByRole('tab', { name: 'Trading', exact: true }).click();
   await page.getByLabel('Risk per trade ($)', { exact: true }).fill('15'); await page.getByRole('button', { name: 'Save Paper Rules', exact: true }).click();
   await expect.poll(() => evidence.workspace().paperLedger.riskPolicy.riskPerTrade).toBe(15);
-  await navigate(page, 'Dashboard', width); await ticket.getByLabel('Paper quantity').fill('10'); await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('99');
+  await navigate(page, 'Dashboard', width); await ticket.getByLabel('Paper quantity').fill('10'); if (await ticket.locator('details').getAttribute('open') === null) await ticket.locator('summary').click(); await ticket.getByLabel('Stop loss', { exact: true }).fill('99');
   await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click(); await expect(ticket.getByRole('status')).toContainText('FILLED');
   await expect.poll(() => evidence.workspace().paperLedger.positions.AAPL?.plannedRiskRemaining).toBe(14.19);
   await page.screenshot({ path: info.outputPath('cost-aware-risk.png'), fullPage: true }); expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);

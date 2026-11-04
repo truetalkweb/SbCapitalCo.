@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import AdminMonitoringPanel from "../../AdminMonitoringPanel";
 import { terminalSansFont } from "../../../config/terminalConfig";
-import { PLAN_LABELS, normalizePlan } from "../../../services/entitlements";
+import { PLAN_LABELS, PLAN_DESCRIPTIONS, normalizePlan } from "../../../services/entitlements";
 import { saveSetting } from "../../../utils/storage";
 import PaperRiskSettings from '../../workstation/PaperRiskSettings.jsx';
 import { ActionButton, PremiumCard, PremiumTabs, SectionTitle, StatusPill } from "../PremiumWorkspacePrimitives";
@@ -172,7 +172,6 @@ export default function SettingsWorkspacePage({
     );
     const disabledSetting = (text = "Coming later") => <span style={{ color: theme.muted, fontSize: 11 }}>{text}</span>;
     const accountPlan = normalizePlan(entitlements?.plan);
-    const entitlementSource = entitlements?.source || "default";
     const planPill = (plan, active = false) => (
       <div
         key={plan}
@@ -187,10 +186,7 @@ export default function SettingsWorkspacePage({
       >
         <div style={{ fontWeight: 600, color: active ? theme.blue : theme.text }}>{PLAN_LABELS[plan]}</div>
         <div style={{ fontSize: 11, marginTop: 5, lineHeight: 1.35 }}>
-          {plan === "free" && "Core market terminal access."}
-          {plan === "pro" && "AI summaries, replay, and journal."}
-          {plan === "premium" && "Risk and performance analytics."}
-          {plan === "admin" && "Owner-only administration and private diagnostics."}
+          {PLAN_DESCRIPTIONS[plan]}
         </div>
       </div>
     );
@@ -225,7 +221,7 @@ export default function SettingsWorkspacePage({
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <div>
                     <div style={{ color: theme.text, fontSize: 15, fontWeight: 600 }}>{user?.email || "Authenticated workspace"}</div>
-                    <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>Plan source: {entitlementSource === "user_entitlements" ? "Supabase entitlement table" : entitlementSource === "app_metadata" ? "Supabase app metadata" : "Default free access"}</div>
+                    <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>Access follows your account's current permissions. Individual features may be restricted.</div>
                   </div>
                   <StatusPill theme={theme} tone={accountPlan === "free" ? "neutral" : "good"}>{PLAN_LABELS[accountPlan] || "Free"}</StatusPill>
                 </div>
@@ -233,8 +229,8 @@ export default function SettingsWorkspacePage({
                   {["free", "pro", "premium", "admin"].map((plan) => planPill(plan, plan === accountPlan))}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">Upgrade to Pro</ActionButton>
-                  <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">Upgrade to Premium</ActionButton>
+                  <ActionButton theme={theme} disabled title="Self-service plan changes are unavailable">Upgrade to Pro</ActionButton>
+                  <ActionButton theme={theme} disabled title="Self-service plan changes are unavailable">Upgrade to Premium</ActionButton>
                 </div>
                 <div style={{ color: theme.muted, fontSize: 12, lineHeight: 1.5 }}>
                   Market data can be delayed, cached, or provider-limited. SbCapitalCo is an information and review workspace, not financial advice. Confirm liquidity, risk, and broker state before acting.

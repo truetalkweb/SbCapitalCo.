@@ -12,6 +12,7 @@ function intent(request) {
     // command keeps its original setup/checklist just as it keeps its costs.
     delete draft.setup;
     delete draft.checklist;
+    delete draft.notes;
     command.draft = draft;
   }
   return JSON.stringify(command);

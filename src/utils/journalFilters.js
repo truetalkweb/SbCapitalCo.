@@ -16,7 +16,7 @@ function easternDay(timestamp) {
 }
 // Call after grouping to keep all exits in a position together. Execution view
 // deliberately calls this on each raw exit instead, using its own realization day.
-export function filterJournalRecords(records, options = {}) {
+export function filterJournalRecords(records, options = {}, dayKey = easternDay) {
   const filters = normalizeJournalFilters(options);
   if ((filters.from && !validDate(filters.from)) || (filters.to && !validDate(filters.to))) return { rows: [], error: 'Choose valid calendar dates for the journal range.', unknownDateCount: 0 };
   if (filters.from && filters.to && filters.from > filters.to) return { rows: [], error: 'The journal start date must be on or before the end date.', unknownDateCount: 0 };
@@ -29,7 +29,7 @@ export function filterJournalRecords(records, options = {}) {
     if (query && ![row.symbol, row.setup, row.notes, row.review, row.tags, row.tag, row.searchText].join(' ').toLowerCase().includes(query)) return false;
     if (!filters.from && !filters.to) return true;
     if (row.timestamp === null) { unknownDateCount += 1; return false; }
-    const date = easternDay(row.timestamp);
+    const date = dayKey(row.timestamp);
     return (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to);
   });
   return { rows, error: '', unknownDateCount };

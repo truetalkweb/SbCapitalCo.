@@ -8,6 +8,7 @@ import {
   WORKSPACE_FEATURES,
   getFeatureMinPlan,
   normalizePlan,
+  planMeets,
 } from "../../services/entitlements";
 import {
   formatDetailValue,
@@ -108,6 +109,7 @@ export function LockedWorkspace({ theme, activeWorkspace, entitlements, status }
   const requiredPlan = getFeatureMinPlan(feature);
   const currentPlan = normalizePlan(entitlements?.plan);
   const title = PLAN_LABELS[requiredPlan] || "Premium";
+  const accountRestricted = planMeets(currentPlan, requiredPlan);
 
   return (
     <div
@@ -142,9 +144,9 @@ export function LockedWorkspace({ theme, activeWorkspace, entitlements, status }
               <Lock size={18} />
             </div>
             <div>
-              <h2 style={{ margin: 0, color: theme.text, fontSize: 18 }}>Upgrade required</h2>
+              <h2 style={{ margin: 0, color: theme.text, fontSize: 18 }}>{status === 'loading' ? 'Checking access' : accountRestricted ? 'Account access restricted' : 'Upgrade required'}</h2>
               <div style={{ color: theme.muted, fontSize: 12, marginTop: 4 }}>
-                This workspace is part of the {title} plan.
+                {accountRestricted ? 'This feature is not enabled for your account. Contact the platform operator to review access.' : `This workspace is part of the ${title} plan.`}
               </div>
             </div>
           </div>
@@ -180,15 +182,15 @@ export function LockedWorkspace({ theme, activeWorkspace, entitlements, status }
             ))}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <ActionButton theme={theme} active disabled title="Stripe checkout will be connected in the payments phase">
+            <ActionButton theme={theme} active disabled title="Self-service plan changes are unavailable">
               View Pro
             </ActionButton>
-            <ActionButton theme={theme} disabled title="Stripe checkout will be connected in the payments phase">
+            <ActionButton theme={theme} disabled title="Self-service plan changes are unavailable">
               View Premium
             </ActionButton>
           </div>
           <div style={{ color: theme.muted, fontSize: 12 }}>
-            Upgrade checkout is not connected yet. Access is controlled by Supabase entitlements or admin app metadata. No broker execution is enabled by this lock.
+            Self-service plan changes are unavailable. Contact the platform operator to request access. Plan changes do not enable live broker execution.
           </div>
         </div>
       </PremiumCard>

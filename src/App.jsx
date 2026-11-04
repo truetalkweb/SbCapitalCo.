@@ -1,4 +1,5 @@
 import { usePaperTrading } from "./hooks/usePaperTrading";
+import { usePaperDrafts } from "./hooks/usePaperDrafts.js";
 import { isWorkingPaperOrder } from "./services/paperTradingEngine";
 import { workstationTheme } from "./components/workstation/workstationTheme";
 import { WorkstationSidebar, WorkstationFooter } from "./components/workstation/WorkstationChrome";
@@ -208,7 +209,6 @@ export default function App() {
     orders: loadSetting("sb_orders", []), positions: loadSetting("sb_positions", {}), realizedPnL: loadSetting("sb_realized_pnl", 0),
   });
   const { orders, positions, realizedPnL } = paperLedger;
-  const [paperDraft, setPaperDraft] = useState(null);
   useEffect(() => { saveSetting("sb_paper_ledger", paperLedger); }, [paperLedger]);
   const [orderAuditTrail, setOrderAuditTrail] = useState(() =>
     loadSetting("sb_order_audit_trail", [])
@@ -928,6 +928,8 @@ export default function App() {
     resetWorkspace,
     workspacePayload,
   });
+  const { drafts: paperDrafts, setPaperDraft } = usePaperDrafts(user?.id);
+  const paperDraft = paperDrafts[selectedStock] || null;
   const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
     paperCosts: premiumPreferences.paperCosts || {},
     userId: user?.id, enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
@@ -1146,6 +1148,9 @@ export default function App() {
       linkedRealizedPnL: Number(realizedPnL || 0).toFixed(2),
     };
 
+    if (entry.recordType === "trade" && entry.status === "closed" && !entry.closedAt) {
+      entry.closedAt = entry.createdAt;
+    }
     setJournalEntries((prev) => [normalizeJournalRecord(entry), ...prev]);
     setJournalDraft({
       ...defaultJournalDraft,
@@ -1156,6 +1161,22 @@ export default function App() {
       result: "Review",
       review: "",
     });
+  }
+
+  function updateJournalEntry(entryId, changes) {
+    setJournalEntries(current => current.map(entry => {
+      if (entry.id !== entryId || entry.immutable) return entry;
+      const updated = { ...entry, ...changes };
+      if ("pnl" in changes) {
+        delete updated.netPnl;
+        delete updated.resultAmount;
+        delete updated.qty;
+        delete updated.entry;
+        delete updated.exit;
+      }
+      if ("review" in changes && entry.notes) updated.notes = changes.review;
+      return normalizeJournalRecord(updated);
+    }));
   }
 
   function removeJournalEntry(entryId) {
@@ -1738,11 +1759,14 @@ export default function App() {
       "screenshotUrl",
       "plan",
       "review",
-      "plannedRiskAmount", "entryChecklistStatus", "mistakeTags",
+      "plannedRiskAmount", "entryChecklistStatus", "notes", "entryPlanSetup", "entryPlanNotes", "firstEntryStopLoss", "firstEntryTakeProfit",
     ];
-    const exportRows = (filtered ? rows : accountJournalEntries).map(normalizeJournalRecord);
+    const exportRows = (filtered ? rows : accountJournalEntries).map(normalizeJournalRecord).map(row => ({ ...row,
+      entryPlanSetup: row.tradePlan?.setup || '', entryPlanNotes: row.tradePlan?.notes || '',
+      firstEntryStopLoss: row.tradePlan?.stopLoss ?? '', firstEntryTakeProfit: row.tradePlan?.takeProfit ?? '',
+    }));
     if (filtered) {
-      headers.push('id', 'closedAt', 'exitCount', 'notes', 'reportView', 'filterFromET', 'filterThroughET', 'filterSymbol', 'filterSetup', 'filterSearch', 'filterKind');
+      headers.push('id', 'closedAt', 'exitCount', 'reportView', 'filterFromET', 'filterThroughET', 'filterSymbol', 'filterSetup', 'filterSearch', 'filterKind');
       for (const row of exportRows) Object.assign(row, { reportView: options.filters.groupExits ? 'Grouped positions and manual records' : 'Realized exits and manual records', filterFromET: options.filters.from, filterThroughET: options.filters.to, filterSymbol: options.filters.symbol, filterSetup: options.filters.setup, filterSearch: options.filters.search, filterKind: options.filters.kind });
     }
     downloadFile(
@@ -3813,6 +3837,7 @@ export default function App() {
         setJournalDraft={setJournalDraft}
         addJournalEntry={addJournalEntry}
         removeJournalEntry={removeJournalEntry}
+        updateJournalEntry={updateJournalEntry}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
         exportDailyReport={exportDailyReport}
@@ -4989,6 +5014,8 @@ export default function App() {
           isOpen={publicOnboardingOpen}
           onClose={closePublicOnboarding}
           onDontShowAgain={dismissPublicOnboarding}
+          entitlements={effectiveEntitlements}
+          onOpenWorkspace={workspace => { setActiveWorkspace(workspace); closePublicOnboarding(); }}
           onReportIssue={() => setIssueReportOpen(true)}
         />
       )}

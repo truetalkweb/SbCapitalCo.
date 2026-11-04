@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { CandlestickSeries, HistogramSeries, createChart } from "lightweight-charts";
 
 import PremiumWorkspace from "/src/components/premium/PremiumWorkspace.jsx";
+import ProductionHealthPanel from "/src/components/ProductionHealthPanel.jsx";
 import { premiumWorkspaceViews } from "/src/config/premiumNavigation.js";
 import { canUseWorkspace } from "/src/services/entitlementPolicy.js";
 import { replaySnapshot } from "/src/utils/replayLedger.js";
@@ -159,6 +160,16 @@ function Harness() {
   });
   const selectedStockData = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
 
+  if (requested === 'health') return <main style={{ maxWidth: 650, padding: 16, background: theme.bg, color: theme.text }}>
+    <ProductionHealthPanel theme={theme} brokerApiUrl="http://localhost" brokerToolsEnabled={true}
+      platformHealth={{ backend: { status: 'online' }, broker: { status: 'private', mode: 'Unavailable' },
+        marketData: { mode: 'Live' }, scanner: { mode: 'Degraded', verifiedCount: 29,
+          userMessage: 'Provider access limits scanner coverage.', recoveryAction: 'Check provider endpoint plan access.' },
+        ai: { configured: true, status: 'pending', mode: 'Unavailable' }, news: { mode: 'Cached' } }}
+      scannerMeta={{}} mainChartStatus="QTRD" refreshBroker={() => setOrderMessage('Health refresh requested')} />
+    <output>{orderMessage}</output>
+  </main>;
+
   return (
     <main
       className={`theme-${theme.mode}`}
@@ -272,7 +283,7 @@ function Harness() {
           setJournalDraft((current) => ({ ...current, setup: "", review: "" }));
         }}
         removeJournalEntry={(id) => setFixtureJournalEntries((current) => current.filter((entry) => entry.id !== id))}
-        entitlements={{ plan, status: "active", capabilities: {} }}
+        entitlements={{ plan, status: "active", capabilities: params.get('denyJournal') === '1' ? { journal: false } : {} }}
       />
     </main>
   );

@@ -32,3 +32,11 @@ test('optional checklist/setup metadata cannot duplicate an older unconfirmed or
   assert.equal(accepted.draft.setup, 'Reviewed setup');
   assert.deepEqual(preparePaperCommand({ ...next, draft: { ...next.draft, setup: 'Changed review', checklist: {} } }, 'user', store), accepted);
 });
+
+test('editing plan notes cannot duplicate an unconfirmed paper order', () => {
+  const store = storage();
+  const first = preparePaperCommand({ ...buy('original'), draft: { ...buy('original').draft, notes: 'Original thesis' } }, 'user', store);
+  const retry = preparePaperCommand({ ...buy('retry'), draft: { ...buy('retry').draft, notes: 'Edited thesis' } }, 'user', store);
+  assert.deepEqual(retry, first);
+  assert.equal(retry.draft.notes, 'Original thesis');
+});

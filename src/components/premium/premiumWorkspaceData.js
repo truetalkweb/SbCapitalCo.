@@ -158,8 +158,8 @@ export function makeJournalTrades(entries) {
     return {
       ...record,
       id: entry.id,
-      date: entry.createdAt
-        ? formatPacificDateTime(entry.createdAt, { fallback: "Not recorded" })
+      date: entry.closedAt || entry.createdAt
+        ? formatPacificDateTime(entry.closedAt || entry.createdAt, { fallback: "Not recorded" })
         : entry.date || "Not recorded",
       symbol: entry.symbol || "Unspecified",
       setup: entry.setup || entry.tags || "Review",

@@ -1,4 +1,4 @@
-import { getCleanProviderMessage, getQuestradeHealth } from "../utils/healthStatus";
+import { getCleanProviderMessage, getQuestradeHealth, getServiceHealthSummary } from "../utils/healthStatus";
 import { formatPacificDateTime } from "../utils/timeFormatters";
 
 function formatDateTime(value) {
@@ -118,11 +118,6 @@ export default function ProductionHealthPanel({
   const aiHealth = platformHealth?.ai || platformHealth?.deepHealth?.ai || {};
   const newsHealth = platformHealth?.news || platformHealth?.deepHealth?.news || {};
   const aiLive = Boolean(aiHealth.live || aiHealth.providerLabel === "LIVE");
-  const aiPersistentCache = aiHealth.persistentCache || {};
-  const aiStatusMessage = getCleanProviderMessage(
-    aiHealth.userMessage || aiHealth.lastError || aiPersistentCache.lastError,
-    "AI intelligence is ready when provider data is available."
-  );
   const brokerStatusMessage = getCleanProviderMessage(
     resolvedQtrdHealth.message || resolvedQtrdHealth.rawMessage,
     "Broker diagnostics are temporarily unavailable."
@@ -148,6 +143,18 @@ export default function ProductionHealthPanel({
           : scannerDegraded
             ? "SCANNER FALLBACK"
             : "SCANNER PENDING";
+  const scannerSummary = getServiceHealthSummary('scanner', {
+    ...platformHealth?.scanner,
+    ...(platformHealth?.scanner?.mode ? {} : { degraded: scannerDegraded, cached: scannerMeta?.cached }),
+  });
+  const aiSummary = getServiceHealthSummary('ai', aiHealth);
+  const newsSummary = getServiceHealthSummary('news', newsHealth);
+  const marketSummary = getServiceHealthSummary('marketData', platformHealth?.marketData);
+  const brokerPrivate = platformHealth?.broker?.status === 'private';
+  const brokerSummary = getServiceHealthSummary('broker', platformHealth?.broker);
+  const limited = [scannerSummary, aiSummary, newsSummary, marketSummary].some(item => ['warn', 'bad'].includes(item.status));
+  const pending = [scannerSummary, newsSummary, marketSummary].some(item => item.label.endsWith(' PENDING'));
+  const operational = backendOnline && !limited && !pending && (!brokerToolsEnabled || brokerPrivate || brokerConnected);
   const endpointLabel = brokerApiUrl.includes("railway.app")
     ? "Railway production backend"
     : brokerApiUrl.includes("localhost")
@@ -176,9 +183,9 @@ export default function ProductionHealthPanel({
           </div>
           <span
             style={{
-              color: backendOnline && (!brokerToolsEnabled || brokerConnected) ? theme.green : theme.amber,
-              border: `1px solid ${backendOnline && (!brokerToolsEnabled || brokerConnected) ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.35)"}`,
-              background: backendOnline && (!brokerToolsEnabled || brokerConnected) ? "rgba(0,200,150,0.08)" : "rgba(245,184,75,0.08)",
+              color: operational ? theme.green : theme.amber,
+              border: `1px solid ${operational ? "rgba(0,200,150,0.35)" : "rgba(245,184,75,0.35)"}`,
+              background: operational ? "rgba(0,200,150,0.08)" : "rgba(245,184,75,0.08)",
               borderRadius: "999px",
               padding: "4px 8px",
               fontSize: "9px",
@@ -186,7 +193,7 @@ export default function ProductionHealthPanel({
               whiteSpace: "nowrap",
             }}
           >
-            {backendOnline && (!brokerToolsEnabled || brokerConnected) ? "OPERATIONAL" : "DEGRADED"}
+            {operational ? "OPERATIONAL" : !backendOnline || pending && !limited ? "PENDING" : "LIMITED"}
           </span>
         </div>
       </div>
@@ -195,8 +202,8 @@ export default function ProductionHealthPanel({
         theme={theme}
         label="Frontend + Chart"
         value={`${appHost} / ${chartLabel}`}
-        status="ok"
-        detail={`Market data: ${marketDataLabel}. ${resolvedQtrdHealth.message} Transport: ${wsStatus || "BACKEND"}.`}
+        status={marketSummary.status}
+        detail={`Market data: ${platformHealth?.marketData?.mode ? marketSummary.label : marketDataLabel}. ${marketSummary.message} Transport: ${wsStatus || "BACKEND"}.`}
       />
       <HealthRow
         theme={theme}
@@ -208,38 +215,38 @@ export default function ProductionHealthPanel({
       <HealthRow
         theme={theme}
         label="Scanner Source"
-        value={scannerLabel}
-        status={scannerDegraded ? "warn" : "ok"}
+        value={scannerLoading ? "SCANNER LOADING" : platformHealth?.scanner?.mode ? scannerSummary.label : scannerLabel}
+        status={scannerSummary.status}
         detail={[
           `Freshness: ${formatDateTime(scannerMeta?.updatedAt || platformHealth?.scanner?.lastSuccessAt)}`,
-          scannerMeta?.cached ? "Cached response active." : "Cache state normal.",
-          scannerWarning ? `Status: ${scannerWarning}` : "No scanner warning reported.",
+          Number.isInteger(platformHealth?.scanner?.verifiedCount) ? `${platformHealth.scanner.verifiedCount} verified symbols in the latest snapshot.` : "",
+          platformHealth?.scanner?.mode ? scannerSummary.message : scannerWarning || scannerSummary.message,
         ].join(" ")}
       />
       <HealthRow
         theme={theme}
         label="News Feed"
-        value={newsLabel}
-        status={newsHealth.providerLimited || newsHealth.degraded || newsHealth.fallback ? "warn" : newsHealth.live ? "ok" : "info"}
-        detail={`Source: ${newsHealth.source || "Backend News"}. Cache: ${newsHealth.cacheSize || 0} entries. ${newsHealth.userMessage || "No raw provider errors exposed."}`}
+        value={newsHealth.mode ? newsSummary.label : newsLabel}
+        status={newsSummary.status}
+        detail={`${newsSummary.message} Last success: ${formatDateTime(newsHealth.lastSuccessAt)}.`}
       />
       <HealthRow
         theme={theme}
         label="AI Intelligence"
-        value={aiLabel}
-        status={aiLive ? "ok" : aiHealth.configured ? "warn" : "info"}
-        detail={`Provider: ${aiHealth.source || aiHealth.provider || "local-fallback"}. Summary cache: ${aiHealth.summaryCacheSize || 0}. Catalyst cache: ${aiHealth.catalystCacheSize || 0}. Persistent cache: ${aiPersistentCache.enabled ? "Firestore" : "disabled"}${aiPersistentCache.lastHitAt ? `, last hit ${formatDateTime(aiPersistentCache.lastHitAt)}` : ""}. ${aiStatusMessage}`}
+        value={aiHealth.mode || aiHealth.status === 'pending' ? aiSummary.label : aiLabel}
+        status={aiSummary.status}
+        detail={`${aiSummary.message} Last success: ${formatDateTime(aiHealth.lastSuccessAt)}.`}
       />
       {brokerToolsEnabled && (
       <HealthRow
         theme={theme}
         label="Questrade Connection"
-        value={brokerConnected ? "BROKER CONNECTED" : marketDataLabel}
-        status={brokerConnected ? "ok" : resolvedQtrdHealth.status === "bad" ? "bad" : "warn"}
-        detail={brokerStatusMessage}
+        value={brokerPrivate ? brokerSummary.label : brokerConnected ? "BROKER CONNECTED" : marketDataLabel}
+        status={brokerPrivate ? 'info' : brokerConnected ? "ok" : resolvedQtrdHealth.status === "bad" ? "bad" : "warn"}
+        detail={brokerPrivate ? brokerSummary.message : brokerStatusMessage}
       />
       )}
-      {brokerToolsEnabled && (
+      {brokerToolsEnabled && !brokerPrivate && (
       <HealthRow
         theme={theme}
         label="Token Persistence"
@@ -248,7 +255,7 @@ export default function ProductionHealthPanel({
         detail={`Expiry: ${formatExpiry(tokenStatus, brokerDetails)}.`}
       />
       )}
-      {brokerToolsEnabled && (
+      {brokerToolsEnabled && !brokerPrivate && (
       <HealthRow
         theme={theme}
         label="Last Broker Sync"

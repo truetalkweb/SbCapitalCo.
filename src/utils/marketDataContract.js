@@ -37,6 +37,9 @@ export function normalizeCandleDataset(payload, request) {
     return unavailable("Chart response interval is missing or does not match the request");
   }
   if (!meta.source) return unavailable("Chart source is missing");
+  if (!meta.isSynthetic && raw.quality === "unavailable" && raw.reason === "provider-rate-limit") {
+    return unavailable("Questrade is temporarily limiting chart requests. Retry shortly.");
+  }
   if (meta.isSynthetic || meta.fallback || meta.degraded || raw.quality === "unavailable") return unavailable("Verified historical candles are unavailable");
   if (!Array.isArray(raw.candles) || !raw.candles.length) return unavailable("No historical candles returned");
   const candles = [];
@@ -57,7 +60,7 @@ export function normalizeCandleDataset(payload, request) {
     candles.push(candle);
   }
   candles.sort((a, b) => a.time - b.time);
-  return { ...meta, asOf: candles.at(-1).time, quality: meta.cached ? "cached" : meta.delayed ? "delayed" : "historical", candles, reason: null };
+  return { ...meta, asOf: candles.at(-1).time, quality: raw.quality === "stale" ? "stale" : meta.cached ? "cached" : meta.delayed ? "delayed" : "historical", candles, reason: null };
 }
 
 export function normalizeMarketQuote(quote, { symbol = quote?.symbol, now = Date.now(), maxAgeMs = 30000 } = {}) {

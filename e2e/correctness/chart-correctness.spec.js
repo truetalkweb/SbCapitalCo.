@@ -31,7 +31,7 @@ async function setup(page, transform = data => data, query = "") {
 const mainCanvas = page => page.locator('[data-chart-panel="main"] [data-chart-canvas]');
 const ledger = page => page.getByTestId("ledger").evaluate(element => JSON.parse(element.textContent));
 
-test("Charts sample breadth excludes synthetic and unknown rows and separates unchanged moves", async ({ page }) => {
+test("Scanner sample breadth excludes synthetic and unknown rows and separates unchanged moves", async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   const evidence = await setup(page, payload => payload, "?chartsSample");
   const card = page.getByText("Workspace Sample Breadth", { exact: true }).locator("..");

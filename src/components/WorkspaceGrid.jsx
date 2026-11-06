@@ -7,7 +7,7 @@ export default function WorkspaceGrid({
   timeframe, setMainTimeframe, secondaryTimeframe, setSecondaryTimeframe,
   selectedStockData, secondaryStockData, allSymbols = [],
   mainChartStatus, secondaryChartStatus, setMainChartStatus, setSecondaryChartStatus,
-  syncCharts, additionalCharts, setAdditionalCharts,
+  syncCharts, additionalCharts, setAdditionalCharts, chartPins = {}, setChartPinned,
   compact = false, embeddedChart = false, viewportWidth = 1920, workstation = false,
 }) {
   const count = compact || layoutMode === "1" ? 1 : gridMode === "4" ? 4 : gridMode === "3" ? 3 : 2;
@@ -43,16 +43,30 @@ export default function WorkspaceGrid({
         gridTemplateColumns: count === 1 || narrow ? "minmax(0, 1fr)" : count === 3 ? "minmax(0, 1.35fr) minmax(0, 0.9fr)" : "repeat(2, minmax(0, 1fr))",
         gridTemplateRows: count >= 3 && !narrow ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)" }}>
         {panels.map((panel, index) => {
-          const symbol = syncCharts ? selectedStock : panel.symbol;
-          const quote = resolveChartQuote(symbol, allSymbols, syncCharts ? selectedStockData : panel.fallback);
+          const linked = syncCharts && !chartPins?.[panel.id];
+          const symbol = linked ? selectedStock : panel.symbol;
+          const quote = resolveChartQuote(symbol, allSymbols, linked ? selectedStockData : panel.fallback);
+          const canPin = index > 0 && setChartPinned && !embeddedChart;
+          function togglePin() {
+            if (linked) {
+              panel.setSymbol?.(selectedStock);
+              panel.setTf?.(timeframe);
+            }
+            setChartPinned(panel.id, !chartPins?.[panel.id]);
+          }
           return (
             <div key={panel.id} data-chart-panel={panel.id} style={{ ...shellStyle,
+              gridTemplateRows: canPin ? "auto minmax(0, 1fr)" : "minmax(0, 1fr)",
               ...(count === 3 && index === 0 && !narrow ? { gridRow: "1 / 3" } : {}),
               ...(narrow && focusedIndex !== index ? { display: "none" } : {}) }}>
+              {canPin && <button type="button" onClick={togglePin} aria-label={panel.title + " pin symbol"} aria-pressed={Boolean(chartPins?.[panel.id])}
+                style={{ justifySelf: "end", background: theme.panel, color: theme.text, border: "1px solid " + theme.border, fontSize: 10 }}>
+                {chartPins?.[panel.id] ? "Pinned" : linked ? "Linked · Pin" : "Independent · Pin"}
+              </button>}
               {renderChartPanel({
                 panelId: panel.id, title: panel.title, symbol, editableSymbol: true,
-                setSymbol: syncCharts ? setMainSymbol : panel.setSymbol,
-                tf: syncCharts ? timeframe : panel.tf, setTf: syncCharts ? setMainTimeframe : panel.setTf,
+                setSymbol: linked ? setMainSymbol : panel.setSymbol,
+                tf: linked ? timeframe : panel.tf, setTf: linked ? setMainTimeframe : panel.setTf,
                 livePrice: quote.price ?? null, quoteChange: quote.change ?? quote.changePercent ?? null,
                 secondary: index !== 0, chartStatus: panel.chartStatus, onStatusChange: panel.onStatusChange,
                 workstation, embedded: embeddedChart || count >= 3, hideToolbar: embeddedChart, dense: count === 2 && viewportWidth < 1800,

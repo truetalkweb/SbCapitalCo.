@@ -1,4 +1,5 @@
 import { useState } from "react";
+import WatchlistDestination from "../WatchlistDestination";
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { Edit3, Star, X } from "lucide-react";
@@ -25,6 +26,14 @@ export default function WatchlistWorkspacePage({
 }) {
     const [listName,setListName] = useState("");
     const [symbolInput,setSymbolInput] = useState("");
+    const [deleteId, setDeleteId] = useState(null);
+    const [feedback, setFeedback] = useState('');
+    const groupIndex = collections?.lists.findIndex(list => list.id === collections.active.id);
+    function addSymbol(symbol) {
+      const exists = collections?.active.symbols.includes(symbol);
+      addSymbolToWatchlist?.(symbol);
+      setFeedback(exists ? symbol + ' is already in this group.' : symbol + ' added to this group.');
+    }
     const pagination = useRecordPage(watchlistRows,25,watchlistSearch+watchlistView+(collections?.active.id||""));
     const member = symbol => collections ? collections.active.symbols.includes(symbol) : watchlistRows.some(row=>row.symbol===symbol);
     const listAlerts = alertRows.filter(row=>member(row.symbol));
@@ -35,16 +44,25 @@ export default function WatchlistWorkspacePage({
           <div style={{ display: "grid", gap: 10 }}>
             <PremiumCard theme={theme}>
               <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
-                <SectionTitle theme={theme} title="Watchlist" subtitle="Track symbols, monitor moves, and organize trade ideas." action={<ActionButton theme={theme} onClick={() => addSymbolToWatchlist?.(selected.symbol)}><Edit3 size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />Add Selected</ActionButton>} />
+                <SectionTitle theme={theme} title="Watchlist" subtitle="Track symbols, monitor moves, and organize trade ideas." action={<ActionButton theme={theme} onClick={() => addSymbol(selected.symbol)}><Edit3 size={14} style={{ verticalAlign: "-2px", marginRight: 6 }} />Add Selected</ActionButton>} />
                 {collections && <div style={{display:"flex",flexWrap:"wrap",gap:10,padding:"12px 0"}}>
                   <select aria-label="Active watchlist" value={collections.active.id} onChange={event=>collections.select(event.target.value)}>{collections.lists.map(list=><option key={list.id} value={list.id}>{list.name}</option>)}</select>
                   <input aria-label="Watchlist name" placeholder="Watchlist name" maxLength={80} value={listName} onChange={event=>setListName(event.target.value)} />
                   <ActionButton theme={theme} disabled={!listName.trim()} onClick={()=>{if(collections.create(listName))setListName("");}}>New List</ActionButton>
                   <ActionButton theme={theme} disabled={!listName.trim()} onClick={()=>{collections.rename(listName);setListName("");}}>Rename</ActionButton>
-                  <ActionButton theme={theme} disabled={collections.lists.length<2} onClick={collections.removeList}>Remove List</ActionButton>
+                  <ActionButton theme={theme} disabled={groupIndex === 0} onClick={() => collections.reorder(-1)}>Move group earlier</ActionButton>
+                  <ActionButton theme={theme} disabled={groupIndex === collections.lists.length - 1} onClick={() => collections.reorder(1)}>Move group later</ActionButton>
+                  <ActionButton theme={theme} disabled={collections.active.id === 'main' || collections.lists.length < 2} onClick={() => setDeleteId(collections.active.id)}>Remove List</ActionButton>
+                  {deleteId === collections.active.id && <div role="group" aria-label="Confirm group deletion">
+                    <span>Remove this group and its memberships? Symbols in other groups remain there. </span>
+                    <ActionButton theme={theme} onClick={() => { collections.removeList(); setDeleteId(null); }}>Confirm group deletion</ActionButton>
+                    <ActionButton theme={theme} onClick={() => setDeleteId(null)}>Cancel</ActionButton>
+                  </div>}
                   <input aria-label="Watchlist symbol" placeholder="Add symbol" value={symbolInput} onChange={event=>setSymbolInput(event.target.value.toUpperCase())} />
-                  <ActionButton theme={theme} disabled={!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbolInput)} onClick={()=>{addSymbolToWatchlist?.(symbolInput);setSymbolInput("");}}>Add Symbol</ActionButton>
+                  <ActionButton theme={theme} disabled={!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbolInput)} onClick={()=>{addSymbol(symbolInput);setSymbolInput("");}}>Add Symbol</ActionButton>
                 </div>}
+                {feedback && <p role="status">{feedback}</p>}
+                {collections && member(selected.symbol) && <WatchlistDestination key={collections.active.id + selected.symbol} collections={collections} symbol={selected.symbol} sourceId={collections.active.id} theme={theme} />}
                 <PremiumTabs theme={theme} tabs={["Main Watchlist", "Momentum", "ETFs", "Earnings"]} active={watchlistView} onChange={setWatchlistView} />
                 <div style={{ marginTop: 14 }}><FilterBar theme={theme} search="Search symbol..." value={watchlistSearch} onSearchChange={setWatchlistSearch} items={[]} /></div>
               </div>

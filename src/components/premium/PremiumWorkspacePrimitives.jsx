@@ -379,7 +379,7 @@ export function FilterBar({ theme, items = [], search = "Search...", value = "",
   );
 }
 
-export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, keyField = "symbol", style = {}, rowMinHeight = 34, headerMinHeight = 34, cellPadding = "0 14px", columnGap = 12, emptyMessage = "No records available" }) {
+export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect, rowLabel, keyField = "symbol", style = {}, rowMinHeight = 34, headerMinHeight = 34, cellPadding = "0 14px", columnGap = 12, emptyMessage = "No records available" }) {
   const minTableWidth = columns.reduce((total, column) => total + (/^\d+px$/.test(column.width || "") ? parseInt(column.width, 10) : column.mono ? 80 : 110), 0) + (columns.length - 1) * columnGap + 28;
   return (
     <div className="ws-data-table" role="table" aria-rowcount={rows.length + 1} aria-colcount={columns.length} style={{ minWidth: 0, overflow: "auto", ...style }}>
@@ -424,7 +424,7 @@ export function PremiumTable({ theme, columns, rows = [], selectedKey, onSelect,
             data-symbol={row.symbol || undefined}
             data-url={row.url || undefined}
             aria-selected={selected}
-            aria-label={`Select ${row.symbol || row.headline || rowValue}`}
+            aria-label={rowLabel ? rowLabel(row) : `Select ${row.symbol || row.headline || rowValue}`}
             onClick={() => onSelect?.(row)}
             onKeyDown={(event) => {
               if (onSelect && (event.key === "Enter" || event.key === " ")) {

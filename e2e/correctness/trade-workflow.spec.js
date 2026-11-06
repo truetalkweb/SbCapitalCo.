@@ -40,6 +40,10 @@ for (const width of [390, 1536]) test(`scanner plan reaches charts, paper execut
   await expect(ticket.getByLabel('Take profit', { exact: true })).toHaveValue('110');
   await ticket.getByLabel('Paper order type').selectOption('MARKET');
   await ticket.getByLabel('Paper quantity').fill('5');
+  const review = ticket.getByRole('region', { name: 'Paper order review' });
+  await expect(review).toContainText('Review Buy · AAPL · 5 shares');
+  await expect(review).toContainText('Stop $95.00 · Target $110.00');
+  await expect(review).toContainText('Isolated provider');
   await ticket.getByLabel('Paper plan notes').fill('Waited for volume confirmation');
   await navigate(page, 'Charts', width);
   await expect(page.getByLabel('Plan notes', { exact: true })).toHaveValue('Waited for volume confirmation');
@@ -53,10 +57,18 @@ for (const width of [390, 1536]) test(`scanner plan reaches charts, paper execut
   await ticket.getByRole('button', { name: 'Place Paper Buy', exact: true }).click();
   await expect(ticket.getByRole('status')).toContainText('FILLED');
   await expect.poll(() => evidence.workspace().paperLedger.positions.AAPL?.tradePlan?.notes).toBe('Waited for volume confirmation');
+  await expect(page.getByRole('heading', { name: 'Selected order activity' })).toBeVisible();
+  const activity = page.getByRole('heading', { name: 'Selected order activity' }).locator('..').locator('..');
+  await expect(activity).toContainText('Linked exit · SELL · STOP');
+  await expect(activity).toContainText('Linked exit · SELL · LIMIT');
   const management = page.getByRole('region', { name: 'Paper account management', exact: true });
   await management.getByRole('button', { name: 'Close AAPL', exact: true }).click();
   await management.getByRole('button', { name: 'Confirm paper action', exact: true }).click();
   await expect.poll(() => Object.keys(evidence.workspace().paperLedger.positions)).toEqual([]);
+  const parent = evidence.workspace().paperLedger.orders.find(order => order.action === 'BUY' && !order.parentId);
+  await page.locator('[data-row-key="' + parent.id + '"]').click();
+  await expect(activity).toContainText('CANCELLED');
+  await expect(activity).toContainText('Cancelled by you');
   await navigate(page, 'Trade Journal', width);
   const record = page.getByRole('row', { name: 'Select AAPL', exact: true });
   await expect(record).toContainText('Opening breakout');
@@ -77,4 +89,42 @@ for (const width of [390, 1536]) test(`scanner plan reaches charts, paper execut
   await page.screenshot({ path: info.outputPath('journal-entry-plan.png'), fullPage: true });
   expect(evidence.errors).toEqual([]);
   expect(evidence.blocked).toEqual([]);
+});
+
+test('a pinned comparison survives a linked symbol change and saved layout restore', async ({ page }) => {
+  const evidence = await setupApp(page, { ...initialWorkspace, selectedStock: 'AAPL', layoutMode: '2', gridMode: '2', syncCharts: true });
+  const chart2 = page.getByLabel('Chart 2 ticker', { exact: true });
+  const main = page.getByLabel('Main Chart ticker', { exact: true });
+  await expect(chart2).toHaveValue('AAPL');
+  await page.getByRole('button', { name: 'Chart 2 pin symbol' }).press('Enter');
+  await chart2.fill('SPY');
+  await chart2.press('Enter');
+  await expect(chart2).toHaveValue('SPY');
+  await main.fill('NVDA');
+  await main.press('Enter');
+  await expect(chart2).toHaveValue('SPY');
+  await expect(page.getByLabel('Historical candle evidence').first()).toContainText('Isolated test history');
+  await page.getByText('Layouts and watchlist groups', { exact: true }).press('Enter');
+  await page.getByLabel('Layout name', { exact: true }).fill('Comparison');
+  await page.getByRole('button', { name: 'Save layout', exact: true }).click();
+  await expect.poll(() => evidence.workspace().premiumPreferences?.savedLayouts?.[0]?.snapshot.chartPins.secondary).toBe(true);
+  await page.reload();
+  await expect(main).toHaveValue('NVDA');
+  await expect(chart2).toHaveValue('SPY');
+  await expect(page.getByRole('button', { name: 'Chart 2 pin symbol' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('watchlist opens the same order review and stale market quotes show no entry reference', async ({ page }) => {
+  await page.clock.setFixedTime(now);
+  await setupApp(page, { ...initialWorkspace, activeWorkspace: 'watchlist', liveStocks: [{ symbol: 'SPY' }] }, {
+    providerQuotes: [{ symbol: 'SPY', price: 100, source: 'Isolated provider', timestamp: (now - 10 * 60_000) / 1000 }],
+  });
+  await page.getByRole('row', { name: 'Select SPY', exact: true }).click();
+  await page.getByRole('button', { name: 'Review Order', exact: true }).press('Enter');
+  await page.getByLabel('Paper order type').selectOption('MARKET');
+  const review = page.getByRole('region', { name: 'Paper order review' });
+  await expect(review).toContainText('SPY');
+  await expect(review).toContainText('Entry reference Unavailable');
+  await expect(review).toContainText('Stop Not set');
+  await expect(page.getByLabel('Planned paper risk')).toContainText('Planned risk unavailable');
 });

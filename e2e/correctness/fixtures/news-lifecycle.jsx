@@ -10,7 +10,7 @@ export function Fixture() {
     <output aria-label="News state">{JSON.stringify({ symbol, loading: data.newsLoading, news: data.news, meta: data.newsMeta, status: data.newsStatusLabel })}</output></main>;
 }
 export function ScannerFixture() {
-  const data = useScannerData({ brokerApiUrl: 'http://127.0.0.1:4999', autoRefresh: false });
+  const data = useScannerData({ brokerApiUrl: 'http://127.0.0.1:4999', autoRefresh: new URLSearchParams(location.search).has("auto") });
   return <main><button onClick={() => data.refreshScanner()}>Refresh scanner</button>
     <output aria-label="Scanner state">{JSON.stringify({ rows: data.fmpGainers, meta: data.scannerMeta, loading: data.scannerLoading })}</output></main>;
 }

@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { expect, test } from '@playwright/test';
 import { initialWorkspace, setupApp } from '../support/appHarness.js';
 
@@ -56,3 +57,40 @@ for (const width of [390, 1536]) {
     expect(evidence.blocked).toEqual([]);
   });
 }
+
+test('CSV preview validates and deduplicates trades that flow into the MST weekly review', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.clock.setFixedTime(new Date('2026-11-04T17:00:00Z'));
+  const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'journal', timeZone: 'America/Dawson_Creek', journalEntries: [] });
+  const tab = name => page.getByRole('tab', { name, exact: true });
+  const upload = csv => page.getByLabel('Journal CSV file').setInputFiles({
+    name: 'trades.csv', mimeType: 'text/csv', buffer: Buffer.from(csv),
+  });
+  const header = 'tradeId,symbol,side,closedAt,quantity,entryPrice,exitPrice,fees,setup,followedPlan\n';
+  const prior = 'prior,MSFT,Long,2026-11-02T06:59:59Z,1,100,150,0,Breakout,\n';
+  const win = 'winner,AAPL,Long,2026-11-02T07:00:00Z,10,100,102,1,"Opening, breakout",Yes\n';
+  const loss = 'loser,SPY,Short,2026-11-03T18:30:00Z,2,100,103,1,Reversal,No\n';
+  await tab('Import').click();
+  await upload(header + win.replace('2026-11-02', '2026-11-31'));
+  await expect(page.getByRole('alert')).toContainText('invalid fields');
+  await expect(page.getByRole('button', { name: 'Import trades' })).toBeDisabled();
+  await upload(header + prior + win + loss);
+  await expect(page.getByText('3 new trades · 0 already imported · 0 errors')).toBeVisible();
+  await expect(page.getByRole('cell', { name: '$19.00', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Import trades' }).click();
+  await expect.poll(() => evidence.workspace().journalEntries.length).toBe(3);
+  await page.reload();
+  await tab('Import').click();
+  await upload(header + prior + win + loss);
+  await expect(page.getByText('0 new trades · 3 already imported · 0 errors')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Import trades' })).toBeDisabled();
+  await tab('Weekly Review').click();
+  await expect(page.getByText('2026-11-02 through 2026-11-08')).toBeVisible();
+  await expect(page.getByText('$12.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('$7.00', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 of 2', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Opening, breakout' })).toBeVisible();
+  await page.getByRole('button', { name: 'Previous week' }).click();
+  await expect(page.getByText('2026-10-26 through 2026-11-01')).toBeVisible();
+  await expect(page.getByRole('cell', { name: '$50.00', exact: true })).toBeVisible();
+});

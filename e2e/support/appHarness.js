@@ -33,10 +33,10 @@ export function candles(symbol, timeframe) {
       open: base + index, high: base + index + 2, low: base + index - 1, close: base + index + 1, volume: 1000 })) };
 }
 
-export async function setupApp(page, payload = initialWorkspace, { unavailableHistory = false, providerQuotes = [], providerNews = [], providerScanner = {}, providerSummary = null, aiEntitled = true, baseUrl = "http://127.0.0.1:4175" } = {}) {
+export async function setupApp(page, payload = initialWorkspace, { identity = user, unavailableHistory = false, providerQuotes = [], providerNews = [], providerScanner = {}, providerSummary = null, aiEntitled = true, baseUrl = "http://127.0.0.1:4175" } = {}) {
   const errors = [];
   const blocked = [];
-  let row = { user_id: user.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
+  let row = { user_id: identity.id, data: structuredClone(payload), revision: 1, schema_version: 1, updated_at: new Date().toISOString() };
   let serverNow = await page.evaluate(() => Date.now());
   const syncFixtureClock = async () => {
     try { serverNow = await page.evaluate(() => Date.now()); }
@@ -57,8 +57,8 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
     if (url.origin === 'http://127.0.0.1:4999' && url.pathname.startsWith('/api/alerts/')) {
       await syncFixtureClock();
       try {
-        if (request.method() === 'GET') { await alertService.tick(); return route.fulfill({ json: await alertService.snapshot(user.id) }); }
-        return route.fulfill({ json: await alertService.transact(user.id, request.postDataJSON().command) });
+        if (request.method() === 'GET') { await alertService.tick(); return route.fulfill({ json: await alertService.snapshot(identity.id) }); }
+        return route.fulfill({ json: await alertService.transact(identity.id, request.postDataJSON().command) });
       } catch (error) { return route.fulfill({ status: error.status || 500, json: { error: error.message } }); }
     }
     if (url.origin === "http://127.0.0.1:4999" && url.pathname === "/api/ai/summarize-news" && request.method() === "POST") {
@@ -69,16 +69,16 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
       await syncFixtureClock();
       if (request.method() === 'GET' && url.pathname === '/api/paper/account') {
         await paper.tick();
-        return route.fulfill({ json: await paper.snapshot(user.id) });
+        return route.fulfill({ json: await paper.snapshot(identity.id) });
       }
       if (request.method() === 'POST' && url.pathname === '/api/paper/commands') {
         const { command, limits } = request.postDataJSON();
-        const result = await paper.transact(user.id, command, limits);
+        const result = await paper.transact(identity.id, command, limits);
         return route.fulfill({ status: result.error ? 422 : 200, json: result });
       }
     }
     if (url.origin === "http://127.0.0.1:4998") {
-      if (url.pathname === "/auth/v1/user") return route.fulfill({ json: user });
+      if (url.pathname === "/auth/v1/user") return route.fulfill({ json: identity });
       if (url.pathname === "/rest/v1/terminal_workspaces") {
         if (request.method() === "GET") return route.fulfill({ json: row });
         if (["POST", "PATCH"].includes(request.method())) {
@@ -108,12 +108,12 @@ export async function setupApp(page, payload = initialWorkspace, { unavailableHi
   });
   const expiry = Math.floor(await page.evaluate(() => Date.now()) / 1000) + 3600;
   const encode = value => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: user.id, role: "authenticated", exp: expiry })}.dGVzdA`;
+  const token = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: identity.id, role: "authenticated", exp: expiry })}.dGVzdA`;
   await page.addInitScript(({ user, token, expiry }) => {
     localStorage.setItem("sb-127-auth-token", JSON.stringify({ user, access_token: token, refresh_token: "isolated-test", expires_at: expiry, expires_in: 3600, token_type: "bearer" }));
     localStorage.setItem("sb_public_onboarding_dismissed", "true");
     localStorage.setItem("sb_focused_terminal_workspace_v1", "true");
-  }, { user, token, expiry });
+  }, { user: identity, token, expiry });
   await page.goto(baseUrl);
-  return { errors, blocked, paper, repository, alertService, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(user.id)?.ledger || row.data.paperLedger }) };
+  return { errors, blocked, paper, repository, alertService, workspace: () => ({ ...row.data, paperLedger: repository.rows.get(identity.id)?.ledger || row.data.paperLedger }) };
 }

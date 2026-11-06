@@ -7,6 +7,7 @@ import AlertDiagnostics from '../AlertDiagnostics.jsx';
 
 export default function AlertsWorkspacePage({
   alertDraftDirection,
+  inbox,
       backgroundAlerts,
       alertDraftPrice,
       alertRows,
@@ -39,6 +40,7 @@ export default function AlertsWorkspacePage({
       <div className="terminal-page" style={page}>
         <div style={mainTwoCol}>
           <div style={{ display: "grid", gap: 10 }}>
+            {inbox}
             <PremiumCard theme={theme}>
               <div style={{ padding: 16, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
                 <SectionTitle theme={theme} title="Alerts" subtitle="Manage price alerts saved to your private workspace." action={(

@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import { createJournalDayFormatter } from "../../../utils/journalCalendar.js";
 import JournalCalendar from "./JournalCalendar";
+import JournalImport from "./JournalImport";
+import JournalWeeklyReview from "./JournalWeeklyReview";
 import { normalizeJournalRecord, recordTimestamp, journalStatistics, groupJournalTrades, journalBreakdowns } from "../../../utils/journalAccounting.js";
 import { DEFAULT_JOURNAL_FILTERS, normalizeJournalFilters, filterJournalRecords } from '../../../utils/journalFilters.js';
 import { journalDiscipline } from '../../../utils/journalDiscipline.js';
@@ -17,6 +19,7 @@ export default function JournalWorkspacePage({
       exportJournalCsv,
       exportWeeklyReport,
       isNarrowWorkspace,
+      importJournalEntries,
       journalDraft: preparedDraft,
       journalRows,
       journalView,
@@ -88,7 +91,7 @@ export default function JournalWorkspacePage({
         fees: row.fees, openedAt: row.openedAt, closedAt: row.closedAt, grade: row.grade,
         result: row.result, review: row.notes === 'No notes' ? '' : row.notes,
         plannedRiskAmount: row.plannedRiskAmount, entryChecklistStatus: row.entryChecklistStatus,
-        mistakeTags: row.mistakeTags,
+        mistakeTags: row.mistakeTags, planAdherence: row.planAdherence,
       };
       setEditing({ id: row.id, timestamp: row.timestamp, original, draft: original });
       setJournalView("Trades");
@@ -120,6 +123,7 @@ export default function JournalWorkspacePage({
       setEditing(null);
     }
 
+    const showFilters = journalView !== "Import" && journalView !== "Weekly Review";
     const showDraft = journalView === "Overview" || journalView === "Trades";
     const showStatistics = journalView === "Overview" || journalView === "Statistics";
     const showTrades = journalView === "Overview" || journalView === "Trades";
@@ -135,7 +139,8 @@ export default function JournalWorkspacePage({
           </div>
           <PremiumCard theme={theme}>
             <div style={{ padding: 12, display: "grid", gap: 12 }}>
-            <PremiumTabs theme={theme} tabs={["Overview", "Calendar", "Trades", "Statistics", "Exports"]} active={journalView} onChange={setJournalView} />
+            <PremiumTabs theme={theme} tabs={["Overview", "Calendar", "Trades", "Statistics", "Weekly Review", "Import", "Exports"]} active={journalView} onChange={setJournalView} />
+              {showFilters && <>
               {!isCalendar && <><label style={{ color: theme.muted, fontSize: 12 }}><input type="checkbox" aria-label="Group paper partial exits" checked={groupExits} onChange={event => updateFilters({ groupExits: event.target.checked })} /> Group paper partial exits by position</label>
               <span style={{ color: theme.muted, fontSize: 11 }}>{groupExits ? 'Grouped statistics count fully closed positions. Partial exits from positions still open are excluded; legacy exits without position IDs remain separate.' : 'Execution view counts each realized exit separately.'}</span></>}
               <div style={{ display: 'grid', gridTemplateColumns: isNarrowWorkspace ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: 8 }}>
@@ -148,8 +153,11 @@ export default function JournalWorkspacePage({
               <FilterBar theme={theme} search="Search journal records" value={filters.search} onSearchChange={search => updateFilters({ search })} />
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><ActionButton theme={theme} onClick={() => setJournalFilters?.({ ...DEFAULT_JOURNAL_FILTERS })}>Clear Filters</ActionButton><span role="status" style={{ color: scope.error ? theme.amber : theme.muted, fontSize: 11 }}>{scope.error || `${presentedRows.length} matching records · ${stats.total} completed USD trades${scope.unknownDateCount ? ` · ${scope.unknownDateCount} records excluded because their date is unknown` : ''}`}</span></div>
               {!isCalendar && <span style={{ color: theme.muted, fontSize: 11 }}>Date range uses the Eastern close/record day. Grouped positions include every partial exit and use their final close date. Table times are Pacific. Filters apply to records, statistics and comparisons.</span>}
+              </>}
             </div>
           </PremiumCard>
+          {journalView === "Import" && <JournalImport journalRows={journalRows} importJournalEntries={importJournalEntries} theme={theme} />}
+          {journalView === "Weekly Review" && <JournalWeeklyReview journalRows={journalRows} reportingDay={reportingDay} theme={theme} />}
           {isCalendar && <JournalCalendar records={presentedRows} reportingDay={reportingDay} theme={theme} />}
           {showDraft && <PremiumCard theme={theme} title={editing ? `Edit ${editing.original.symbol} journal record` : "Prepared Journal Draft"}>
               <div style={{ padding: 14, display: "flex", gap: 12, flexWrap: "wrap", color: theme.muted }}>
@@ -157,6 +165,7 @@ export default function JournalWorkspacePage({
                 {journalDraft.recordType === "trade" && <><label>Status <select aria-label="Journal trade status" value={journalDraft.status || "closed"} onChange={event => setJournalDraft(current => ({ ...current, status: event.target.value }))}><option value="closed">Closed</option><option value="open">Open</option></select></label><label>Side <select aria-label="Journal side" value={journalDraft.bias || "Long"} onChange={event => setJournalDraft(current => ({ ...current, bias: event.target.value }))}><option>Long</option><option>Short</option></select></label>{[["quantity","Quantity"],["entryPrice","Entry price"],["exitPrice","Exit price"],["fees","Total fees"]].map(([key,label])=><label key={key}>{label}<input aria-label={`Journal ${label.toLowerCase()}`} type="number" min="0" step="any" value={journalDraft[key] ?? ""} onChange={event => setJournalDraft(current => ({ ...current, [key]: event.target.value, pnl: null }))} style={{display:"block",width:100}} /></label>)}</>}
                 {journalDraft.recordType === 'trade' && <label>Entry time (UTC)<input aria-label="Journal entry time UTC" type="datetime-local" value={journalDraft.openedAt ? String(journalDraft.openedAt).replace('Z', '').slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, openedAt: event.target.value ? `${event.target.value}:00Z` : null }))} /></label>}
                 {closedTrade && <label>Close time (UTC)<input aria-label="Journal close time UTC" type="datetime-local" value={journalDraft.closedAt ? String(journalDraft.closedAt).slice(0, 16) : ''} onChange={event => setJournalDraft(current => ({ ...current, closedAt: event.target.value ? `${event.target.value}:00Z` : null }))} />{!editing && <small> Defaults to save time</small>}</label>}
+                {closedTrade && <label>Followed trade plan <select value={journalDraft.planAdherence || ''} onChange={event => setJournalDraft(current => ({ ...current, planAdherence: event.target.value }))}><option value="">Unreviewed</option><option>Yes</option><option>No</option></select></label>}
                 <span>Statistics include only completed USD trades with known P&amp;L. Enter total fees, including zero.</span>
                 {saveError && journalDraft.setup?.trim() && <span role="status">{saveError}</span>}
                 {journalDraft.recordType === 'trade' && <><label>Recorded planned risk ($)<input aria-label="Journal planned risk" type="number" min="0" step="any" value={journalDraft.plannedRiskAmount ?? ''} onChange={event => setJournalDraft(current => ({ ...current, plannedRiskAmount: event.target.value }))} style={{ display: 'block', width: 110 }} /></label><label>Recorded checklist<select aria-label="Journal recorded checklist" value={journalDraft.entryChecklistStatus || 'unknown'} onChange={event => setJournalDraft(current => ({ ...current, entryChecklistStatus: event.target.value }))}><option value="unknown">Unknown</option><option value="complete">Complete</option><option value="incomplete">Incomplete</option></select></label></>}

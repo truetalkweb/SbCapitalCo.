@@ -101,6 +101,7 @@ import {
   normalizeIndicatorState,
 } from "./indicators/chartIndicators";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+import { collectAlertEvents } from "./utils/alertInbox.js";
 
 const ProfessionalScanner = lazy(() => import("./components/ProfessionalScanner"));
 const BrokerHeader = lazy(() => import("./components/BrokerHeader"));
@@ -232,7 +233,7 @@ export default function App() {
   const [activeScannerPreset, setActiveScannerPreset] = useState(() =>
     loadSetting("sb_active_scanner_preset", "default")
   );
-  const [premiumDockTab, setPremiumDockTab] = useState("positions");
+  const [alertChartContext, setAlertChartContext] = useState(null);
   const [themeMode, setThemeMode] = useState(() =>
     loadSetting("sb_theme_mode", "dark")
   );
@@ -259,6 +260,11 @@ export default function App() {
     scannerFilters: {},
     ...loadSetting("sb_premium_preferences", {}),
   }));
+
+  const premiumDockTab = premiumPreferences.chartDockTab || "positions";
+  const setPremiumDockTab = useCallback(chartDockTab => {
+    setPremiumPreferences(current => current.chartDockTab === chartDockTab ? current : { ...current, chartDockTab });
+  }, []);
 
   const [journalEntries, setJournalEntries] = useState(() =>
     loadSetting("sb_journal_entries", [])
@@ -933,8 +939,20 @@ export default function App() {
   const paperTrading = usePaperTrading({ state: paperLedger, setState: setPaperLedger, quotes: allSymbols,
     paperCosts: premiumPreferences.paperCosts || {},
     userId: user?.id, enabled: Boolean(user && workspaceReady), limits: { maxOrderValue, dailyLossLimit, riskPerTrade } });
+  const applyServerAlertState = useCallback(next => {
+    setServerAlertState(next);
+    if (!next?.enabled || !Array.isArray(next.alerts)) return;
+    const events = collectAlertEvents(next.alerts);
+    if (!events.length) return;
+    setPremiumPreferences(current => {
+      const archive = Array.isArray(current.alertInboxArchive) ? current.alertInboxArchive : [];
+      const known = new Set(archive.map(event => event?.id));
+      const additions = events.filter(event => !known.has(event.id) && known.add(event.id));
+      return additions.length ? { ...current, alertInboxArchive: [...archive, ...additions] } : current;
+    });
+  }, []);
   const backgroundAlerts = useBackgroundAlerts({ userId: user?.id, enabled: Boolean(user && workspaceReady),
-    alerts, setAlerts, controllerRef: serverAlertController, onState: setServerAlertState,
+    alerts, setAlerts, controllerRef: serverAlertController, onState: applyServerAlertState,
     activityEnabled: premiumPreferences.notificationPreferences?.priceAlerts !== false });
   const accountJournalEntries = [...paperTrading.history, ...journalEntries];
   const workspaceRestoreContext = useRef(null);
@@ -1163,6 +1181,18 @@ export default function App() {
     });
   }
 
+  function importJournalEntries(entries) {
+    setJournalEntries(current => {
+      const known = new Set(current.map(entry => entry.id));
+      const additions = entries.filter(entry => {
+        if (known.has(entry.id)) return false;
+        known.add(entry.id);
+        return true;
+      });
+      return additions.length ? [...additions, ...current] : current;
+    });
+  }
+
   function updateJournalEntry(entryId, changes) {
     setJournalEntries(current => current.map(entry => {
       if (entry.id !== entryId || entry.immutable) return entry;
@@ -1380,6 +1410,7 @@ export default function App() {
     removeSettings(keysToReset);
 
     resetWorkspaceLayout();
+    setAlertChartContext(null);
     resetTerminalSymbols();
     setTimeframe("15m");
     setSecondaryTimeframe("5m");
@@ -1753,6 +1784,7 @@ export default function App() {
       "grade",
       "result",
       "followedPlan",
+      "planAdherence",
       "emotion",
       "tags",
       "mistakeTags",
@@ -3677,6 +3709,10 @@ export default function App() {
       <WorkspaceGrid
         additionalCharts={additionalCharts}
         setAdditionalCharts={setAdditionalCharts}
+        chartPins={premiumPreferences.chartPins}
+        setChartPinned={(panelId, pinned) => setPremiumPreferences(current => ({
+          ...current, chartPins: { ...current.chartPins, [panelId]: pinned },
+        }))}
         theme={theme}
         layoutMode={layoutModeOverride}
         gridMode={gridModeOverride}
@@ -3720,6 +3756,35 @@ export default function App() {
         viewportHeight={viewportHeight}
         theme={theme}
         isDark={isDark}
+        alertChartContext={alertChartContext}
+        openAlertChart={event => {
+          setAlertChartContext(event);
+          selectMainSymbol(event.symbol, null, "alert-inbox");
+          setActiveWorkspace("charts");
+        }}
+        syncCharts={syncCharts}
+        setSyncCharts={setSyncCharts}
+        captureLayout={() => ({
+          activeWorkspace, layoutMode, gridMode, syncCharts, selectedStock, timeframe,
+          secondarySymbol, secondaryTimeframe, additionalCharts, rightTab, leftSectionsOpen, premiumDockTab,
+          chartRailVisible: premiumPreferences.chartRailVisible !== false,
+          chartRailWidth: premiumPreferences.chartRailWidth ?? null,
+          chartPins: premiumPreferences.chartPins || {},
+        })}
+        restoreLayout={snapshot => {
+          applyWorkspaceLayout(snapshot);
+          setAlertChartContext(null);
+          setPremiumPreferences(current => ({
+            ...current, chartRailVisible: snapshot.chartRailVisible !== false,
+            chartRailWidth: snapshot.chartRailWidth ?? null,
+            chartPins: snapshot.chartPins || {},
+          }));
+          if (snapshot.selectedStock) selectMainSymbol(snapshot.selectedStock, null, "saved-layout");
+          if (snapshot.secondarySymbol) setSecondarySymbol(snapshot.secondarySymbol);
+          if (snapshot.timeframe) setTimeframe(snapshot.timeframe);
+          if (snapshot.secondaryTimeframe) setSecondaryTimeframe(snapshot.secondaryTimeframe);
+          if (snapshot.premiumDockTab) setPremiumDockTab(snapshot.premiumDockTab);
+        }}
         renderChartGrid={renderPremiumChartGrid}
         selectedStock={selectedStock}
         selectedStockData={selectedStockData}
@@ -3838,6 +3903,7 @@ export default function App() {
         addJournalEntry={addJournalEntry}
         removeJournalEntry={removeJournalEntry}
         updateJournalEntry={updateJournalEntry}
+        importJournalEntries={importJournalEntries}
         exportJournalCsv={exportJournalCsv}
         exportTradeSummaryCsv={exportTradeSummaryCsv}
         exportDailyReport={exportDailyReport}

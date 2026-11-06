@@ -23,7 +23,7 @@ export function OrderBook({ quote = {} }) {
     ? [{ time: lastTime, price: quote.lastTradePrice, size: quote.lastTradeSize }] : [];
   const trades = tape.length ? tape : snapshot;
   const timeLabel = time => new Date(time * 1000).toLocaleTimeString('en-US', { timeZone:'America/New_York', hour12:false });
-  const detail = tab === 'book' ? (levels.length ? 'Provider depth' : 'Level 1 · best bid / ask') : tape.length ? 'Provider trade prints' : snapshot.length ? 'Last trade snapshot · not full tape' : 'Time & sales not connected';
+  const detail = tab === 'book' ? (levels.length ? 'Provider depth' : rows[0]?.bid || rows[0]?.ask ? 'Level 1 · best bid / ask' : 'Market depth unavailable') : tape.length ? 'Provider trade prints' : snapshot.length ? 'Last trade snapshot · not full tape' : 'Time & sales not connected';
   return <section className="ws-panel ws-order-book" aria-label="Order book">
     <div className="ws-panel-top"><WorkstationTabs tabs={[{ id:'book', label:'Order Book' }, { id:'tape', label:'Time & Sales' }]} active={tab} onChange={setTab} label="Market depth views" /></div>
     <div className="ws-table-scroll"><table><thead><tr>{(tab === 'book' ? ['Size','Bid','Ask','Size'] : ['Time (ET)','Price','Size','Exchange']).map((label,index) => <th key={`${label}-${index}`}>{label}</th>)}</tr></thead><tbody>{tab === 'book' ? rows.map((row,index) => <tr key={index}><td>{row.bidSize ?? '—'}</td><td className="ws-positive ws-bid-cell">{price(row.bid)}</td><td className="ws-negative ws-ask-cell">{price(row.ask)}</td><td>{row.askSize ?? '—'}</td></tr>) : trades.map((row,index) => <tr key={row.id || index}><td>{timeLabel(row.time)}</td><td>{price(row.price)}</td><td>{row.size}</td><td>{row.exchange || '—'}</td></tr>)}</tbody></table></div>

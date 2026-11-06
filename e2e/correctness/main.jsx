@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import ChartPanel from "/src/components/ChartPanel.jsx";
 import ReplayPanel from "/src/components/ReplayPanel.jsx";
 import DashboardMarketIntelligence from "/src/components/premium/DashboardMarketIntelligence.jsx";
-import ChartsWorkspacePage from "/src/components/premium/pages/ChartsWorkspacePage.jsx";
+import ScannerSampleBreadth from "/src/components/premium/ScannerSampleBreadth.jsx";
 import WorkspaceGrid from "/src/components/WorkspaceGrid.jsx";
 import { useReplayEngine } from "/src/hooks/useReplayEngine.js";
 import { useTerminalWorkspace } from "/src/hooks/useTerminalWorkspace.js";
@@ -54,9 +54,7 @@ function Fixture() {
     link.href = canvas.toDataURL();
     link.click();
   };
-  if (new URLSearchParams(window.location.search).has("chartsSample")) return <ChartsWorkspacePage
-    theme={theme} page={{ height: 900 }} viewportHeight={1080} layoutMode="1" gridMode="2"
-    chartIndicators={{}} selected={{ symbol: "AAPL" }} selectedActions={[]} dashboard={{ watchlistRows: [] }} stocks={[
+  if (new URLSearchParams(window.location.search).has("chartsSample")) return <ScannerSampleBreadth theme={theme} stocks={[
       { symbol: "AAPL", price: 100, changePercent: 1, source: "Recorded quote provider", quality: "cached" },
       { symbol: "SPY", price: 300, changePercent: 0, source: "Recorded quote provider", quality: "cached" },
       { symbol: "FAKE", price: 100, changePercent: -99, source: "Recorded quote provider", isSynthetic: true },

@@ -81,6 +81,7 @@ function buildScannerMeta(data) {
     coverageLabel: data.coverageLabel || null,
     coverage: data.coverage || null,
     refreshing: Boolean(data.refreshing),
+    retryAfterMs: Math.max(0, Number(data.retryAfterMs) || 0),
     pending: Boolean(data.pending),
   };
 }
@@ -101,13 +102,18 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   const [scannerLoading, setScannerLoading] = useState(false);
   const scannerGroupsRef = useRef(emptyScannerGroups);
   const request = useRef(null);
-  useEffect(() => () => request.current?.abort(), [brokerApiUrl]);
+  const retryNotBefore = useRef(0);
+  useEffect(() => () => {
+    request.current?.abort();
+    retryNotBefore.current = 0;
+  }, [brokerApiUrl]);
   const [selectedScannerStock, setSelectedScannerStock] = useState(() =>
     loadSetting("sb_selected_scanner_stock", null)
   );
 
   const loadScanner = useCallback(async (options = {}) => {
     const silent = Boolean(options?.silent);
+    if (silent && (request.current || Date.now() < retryNotBefore.current)) return;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     setScannerLoading(true);
@@ -122,6 +128,7 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
       const data = await response.json();
       if (controller.signal.aborted || request.current !== controller) return;
       const nextMeta = buildScannerMeta(data);
+      retryNotBefore.current = Date.now() + nextMeta.retryAfterMs;
       const normalizedGroups = normalizeScannerGroups({
         gainers: data.gainers || [],
         losers: data.losers || [],
@@ -207,14 +214,14 @@ export function useScannerData({ brokerApiUrl, onActivity, autoRefresh = true })
   }, [selectedScannerStock]);
 
   useEffect(() => {
-    if (!scannerMeta.refreshing) return undefined;
+    if (!scannerMeta.refreshing || scannerMeta.retryAfterMs > 0) return undefined;
     let checks = 0;
     const stop = createVisibilityAwarePoller(() => {
       if (++checks > 12) { stop(); return; }
       return loadScanner({ silent: true });
     }, 5000, { immediate: false });
     return stop;
-  }, [scannerMeta.refreshing, loadScanner]);
+  }, [scannerMeta.refreshing, scannerMeta.retryAfterMs, loadScanner]);
 
   return {
     fmpGainers: scannerGroups.gainers,

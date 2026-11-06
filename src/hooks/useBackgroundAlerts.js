@@ -17,7 +17,9 @@ export function useBackgroundAlerts({ userId, enabled, alerts, setAlerts, contro
   const fail = useCallback((message, session, persistent = true) => {
     if (owner.current !== session) return;
     if (persistent) lastError.current = message;
-    setConnection(current => ({ ...current, error: message }));
+    setConnection(current => current.userId === session.id
+      ? { ...current, error: message }
+      : { userId: session.id, ready: false, enabled: false, error: message });
     onState(current => ({ ...current, error: message }));
   }, [onState]);
   const apply = useCallback((payload, session, copyDisabled = false) => {

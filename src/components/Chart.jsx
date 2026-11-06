@@ -1,3 +1,4 @@
+import { marketEvidenceLabel } from "../utils/marketEvidence.js";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
@@ -138,6 +139,7 @@ function Chart({
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
   const [hadChartHistoryBeforeLoad, setHadChartHistoryBeforeLoad] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [historyEvidence, setHistoryEvidence] = useState(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const replayViewRef = useRef({ replayMode, replayIndex });
   const liveQuoteLineRef = useRef(null);
@@ -290,6 +292,7 @@ function Chart({
       chartRef.current.timeScale().fitContent();
     }
 
+    setHistoryEvidence({ symbol: dataset.symbol, interval: dataset.interval, label: marketEvidenceLabel(dataset) });
     if (nextStatus) setStatus(nextStatus);
     return true;
   }, [setStatus]);
@@ -744,6 +747,12 @@ function Chart({
           <span style={{ display: "block", marginTop: "2px", color: chartTheme.muted, fontWeight: 700 }}>
             {hadChartHistoryBeforeLoad ? "Keeping chart context active" : "Building chart history"}
           </span>
+        </div>
+      )}
+
+      {historyEvidence?.symbol === chartSymbol && historyEvidence.interval === timeframe && !isHistoryLoading && !historyError && !replayMode && (
+        <div aria-label="Historical candle evidence" style={{ position: "absolute", bottom: 29, left: 8, zIndex: 5, background: chartTheme.overlay, color: chartTheme.muted, fontSize: 10, pointerEvents: "none" }}>
+          {historyEvidence.label}
         </div>
       )}
 

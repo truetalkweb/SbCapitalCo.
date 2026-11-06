@@ -66,3 +66,21 @@ test('a current scanner failure keeps last verified rows as cached degraded data
   await expect(output).toContainText('latest scanner refresh failed'); await expect(output).toContainText('AAPL');
   await expect(output).toContainText('"cached":true'); await expect(output).toContainText('"loading":false');
 });
+
+test('scanner auto refresh skips provider cooldown and resumes afterward', async ({ page }) => {
+  let calls = 0;
+  await page.clock.install();
+  await page.route('**/api/scanner', route => route.fulfill({ json: {
+    source: ++calls === 1 ? 'Cooling down' : 'Recovered',
+    retryAfterMs: calls === 1 ? 12 * 60_000 : 0,
+    refreshing: calls === 1,
+  } }));
+  await page.goto('/e2e/correctness/fixtures/news-lifecycle.html?scanner=1&auto=1');
+  const output = page.getByLabel('Scanner state');
+  await expect(output).toContainText('Cooling down');
+  await page.clock.runFor(10 * 60_000);
+  expect(calls).toBe(1);
+  await page.clock.runFor(5 * 60_000);
+  await expect(output).toContainText('Recovered');
+  expect(calls).toBe(2);
+});

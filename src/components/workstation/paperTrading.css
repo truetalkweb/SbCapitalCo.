@@ -57,3 +57,12 @@
 .ws-paper-management button:disabled { opacity: .45; cursor: default; }
 .ws-paper-management-form { padding: 10px 0; border-top: 1px solid #26343c; }
 .ws-paper-management-form .ws-paper-grid { margin-bottom: 12px; }
+
+.ws-paper-review {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+  font-size: 11px;
+}

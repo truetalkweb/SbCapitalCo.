@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { paperQuote, paperSellAvailability, paperCoverAvailability, paperCommission, paperPlannedRisk } from '../../services/paperTradingEngine.js';
+import { marketEvidenceLabel } from '../../utils/marketEvidence.js';
+import { normalizeMarketQuote } from '../../utils/marketDataContract.js';
 import { currency } from './workstationFormat.js';
 import './paperTrading.css';
 import { PAPER_CHECKLIST, paperChecklistComplete } from '../../services/paperRiskPolicy.js';
@@ -26,7 +28,14 @@ export default function PaperOrderTicket({ symbol, quote, quantity: sharedQuanti
   const update = (setter, event) => { clear(); setter(event.target.value); };
   const fresh = paperQuote(quote);
   const isOpening = ['BUY', 'SELL_SHORT'].includes(side), isSell = ['SELL', 'SELL_SHORT'].includes(side);
-  const riskLimit = (trading.riskPolicy || trading.legacyLimits)?.riskPerTrade;
+  const policy = trading.riskPolicy || trading.legacyLimits;
+  const riskLimit = policy?.riskPerTrade;
+  const dailyLossLimit = policy?.dailyLossLimit;
+  const dailyLossRemaining = dailyLossLimit > 0 && Number.isFinite(trading.dailyRealized)
+    ? Math.max(0, dailyLossLimit + trading.dailyRealized) : null;
+  const quoteEvidence = normalizeMarketQuote(quote, { symbol });
+  const referencePrice = ['LIMIT', 'STOP_LIMIT'].includes(type) ? Number(limit)
+    : type === 'STOP' ? Number(stop) : isSell ? fresh?.sell : fresh?.buy;
   const available = side === 'BUY_TO_COVER' ? paperCoverAvailability(trading, symbol) : paperSellAvailability(trading, symbol);
   const draft = useMemo(() => ({ symbol, side, type, quantity, limitPrice: limit, stopPrice: stop, stopLoss: isOpening ? stopLoss : '', takeProfit: isOpening ? takeProfit : '', tif, setup, notes, checklist }),
     [symbol, side, type, quantity, limit, stop, isOpening, stopLoss, takeProfit, tif, setup, notes, checklist]);
@@ -34,7 +43,7 @@ export default function PaperOrderTicket({ symbol, quote, quantity: sharedQuanti
   const fingerprint = JSON.stringify(draft);
   const plannedRisk = isOpening ? paperPlannedRisk({ ...draft, limitPrice: ['LIMIT', 'STOP_LIMIT'].includes(type) ? Number(limit) : null,
     stopPrice: ['STOP', 'STOP_LIMIT'].includes(type) ? Number(stop) : null,
-    referencePrice: ['LIMIT', 'STOP_LIMIT'].includes(type) ? Number(limit) : type === 'STOP' ? Number(stop) : isSell ? fresh?.sell : fresh?.buy,
+    referencePrice,
     paperCosts: trading.paperCosts }) : null;
   const currentOrder = feedback?.id ? trading.orders.find(order => order.id === feedback.id) : null;
   useEffect(() => { receipt.current?.scrollIntoView({ block: 'nearest' }); }, [feedback, currentOrder?.status]);
@@ -64,6 +73,12 @@ export default function PaperOrderTicket({ symbol, quote, quantity: sharedQuanti
       {isOpening && <label className="ws-paper-field">Plan notes<textarea aria-label="Paper plan notes" maxLength={2000} rows={3} value={notes} onChange={event => update(setNotes, event)} /></label>}
       <div className="ws-paper-meta">{!isOpening ? <>Available to {side === 'SELL' ? 'sell' : 'cover'} <b>{available.available} / {available.held} {symbol}</b></> : <>Buying power <b>{currency(trading.balances.buyingPower)}</b></>}</div>
       {isOpening && trading.riskPolicy?.checklistRequired && <fieldset className="ws-paper-checklist" style={{ border: '1px solid var(--ws-border)', margin: 0, padding: 8, display: 'grid', gap: 6, fontSize: 11 }}><legend>Pre-trade checklist</legend>{PAPER_CHECKLIST.map(([key, label]) => <label key={key}><input type="checkbox" aria-label={label} checked={Boolean(checklist[key])} onChange={event => { setFeedback(null); request.current = null; setChecklist(current => ({ ...current, [key]: event.target.checked })); }} /> {label}</label>)}</fieldset>}
+      <section aria-label="Paper order review" className="ws-paper-review">
+        <strong>Review {labels[side]} · {symbol} · {Number(quantity) > 0 ? quantity + ' shares' : 'Quantity needed'}</strong>
+        <span>Entry reference {referencePrice > 0 ? currency(referencePrice) : 'Unavailable'}{isOpening && <> · Stop {Number(stopLoss) > 0 ? currency(stopLoss) : 'Not set'} · Target {Number(takeProfit) > 0 ? currency(takeProfit) : 'Not set'}</>}</span>
+        <span>{marketEvidenceLabel(fresh || quoteEvidence)}</span>
+        {isOpening && dailyLossRemaining !== null && <span>Daily realized-loss room {currency(dailyLossRemaining)}</span>}
+      </section>
       <small className="ws-paper-costs">Simulated commission: {currency(paperCommission(trading.paperCosts, Math.max(0, Number(quantity) || 0)))} per fill · adverse slippage: {trading.paperCosts?.slippageBps || 0} bps. Working orders keep their saved costs.</small>
       {isOpening && <small className="ws-paper-costs" aria-label="Planned paper risk">{plannedRisk ? <>Planned loss at stop: {currency(plannedRisk.amount)} · stop distance {currency(plannedRisk.stopDistance)} · slippage {currency(plannedRisk.entrySlippage + plannedRisk.exitSlippage)} · round-trip commissions {currency(plannedRisk.commissions)}{riskLimit > 0 ? ` · limit ${currency(riskLimit)}` : ''}. Gaps can exceed this estimate.</> : 'Planned risk unavailable until quantity, entry reference and attached stop are known.'}</small>}
       {side === 'SELL' && available.held === 0 && <div className="ws-paper-position-help">No {symbol} shares owned. <button type="button" onClick={() => { clear(); setSide('BUY'); }}>Switch to Buy</button></div>}

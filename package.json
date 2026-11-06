@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:soak": "playwright test --config playwright.soak.config.js",
-    "test:workflows": "playwright test --config playwright.correctness.config.js onboarding.spec.js trade-workflow.spec.js journal-pro.spec.js",
+    "test:workflows": "playwright test --config playwright.correctness.config.js onboarding.spec.js trade-workflow.spec.js journal-pro.spec.js terminal-workflow.spec.js",
     "measure:performance": "node scripts/measure-performance.mjs",
     "release:gate": "npm run lint && npm test && npm run build && npm run test:e2e && npm run test:workflows",
     "smoke:production": "node scripts/production-smoke.mjs",

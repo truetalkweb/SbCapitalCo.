@@ -2,6 +2,13 @@ import { lazy, Suspense } from "react";
 import "./workspaceControls.css";
 import "../workstation/workspacePages.css";
 import { workstationTheme, workstationPages } from "../workstation/workstationTheme";
+import ScannerSampleBreadth from "./ScannerSampleBreadth";
+import { marketEvidenceLabel } from "../../utils/marketEvidence.js";
+import { normalizeMarketQuote } from "../../utils/marketDataContract.js";
+import SavedLayouts from "./SavedLayouts";
+import AlertsInbox from "./AlertsInbox";
+import { collectAlertEvents } from "../../utils/alertInbox.js";
+import WatchlistDestination from "./WatchlistDestination";
 import { useWatchlistCollections } from "../../hooks/useWatchlistCollections.js";
 import { Star } from "lucide-react";
 import { buildPositionRows } from "../../utils/portfolioAccounting.js";
@@ -88,6 +95,12 @@ function PremiumWorkspaceContent({
   positions,
   allSymbols,
   accountSummary,
+  alertChartContext,
+  openAlertChart,
+  syncCharts,
+  setSyncCharts,
+  captureLayout,
+  restoreLayout,
   paperTrading,
   backgroundAlerts,
   paperDraft,
@@ -168,6 +181,7 @@ function PremiumWorkspaceContent({
   addJournalEntry,
   removeJournalEntry,
   updateJournalEntry,
+  importJournalEntries,
   exportJournalCsv,
   exportTradeSummaryCsv,
   exportDailyReport,
@@ -180,6 +194,16 @@ function PremiumWorkspaceContent({
   const collections = useWatchlistCollections({ preferences: premiumPreferences, setPreferences: setPremiumPreferences, liveStocks,
     addGlobal: addGlobalWatchlistSymbol, removeGlobal: removeGlobalWatchlistSymbol });
   const addSymbolToWatchlist = collections.add;
+  const layouts = Array.isArray(premiumPreferences.savedLayouts)
+    ? premiumPreferences.savedLayouts.filter(layout => layout?.id && layout?.name && layout?.snapshot) : [];
+  const setLayouts = (savedLayouts, activeSavedLayoutId, unnamedLayout) => setPremiumPreferences?.(current => ({
+    ...current, savedLayouts, activeSavedLayoutId,
+    ...(unnamedLayout ? { unnamedLayout } : {}),
+  }));
+  const readIds = Array.isArray(premiumPreferences.alertInboxRead) ? premiumPreferences.alertInboxRead : [];
+  const markRead = ids => setPremiumPreferences?.(current => ({
+    ...current, alertInboxRead: [...new Set([...(Array.isArray(current.alertInboxRead) ? current.alertInboxRead : []), ...ids])],
+  }));
   const removeWatchlistSymbol = collections.remove;
   const isNarrowWorkspace = viewportWidth <= 900;
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock);
@@ -613,7 +637,7 @@ function PremiumWorkspaceContent({
       <ActionButton theme={theme} onClick={() => prepareReviewAction("Alert review", selected.symbol)}>
         Alert Review
       </ActionButton>
-      <ActionButton theme={theme} good onClick={() => prepareOrderReview(paperDraft?.side === 'SELL_SHORT' ? 'SELL_SHORT' : "BUY", selected.symbol)}>
+      <ActionButton theme={theme} good onClick={() => prepareOrderReview(paperDraft?.symbol === selected.symbol ? paperDraft.side || "BUY" : "BUY", selected.symbol)}>
         Review Order
       </ActionButton>
     </div>
@@ -625,7 +649,8 @@ function PremiumWorkspaceContent({
         theme={theme}
         columns={[
           { key: "symbol", label: "Symbol", width: "1.5fr", mono: true, strong: true, render: (row) => <><Star size={14} color={theme.muted} style={{ verticalAlign: "-2px", marginRight: 10 }} />{row.symbol}<span style={{ display: "block", color: theme.muted, fontFamily: terminalSansFont, fontSize: 10, fontWeight: 500 }}>{row.name}</span></> },
-          { key: "price", label: "Price", width: "90px", align: "right", mono: true, render: (row) => num(row.price).toFixed(2) },
+          { key: "price", label: "Price", width: "90px", align: "right", mono: true, render: (row) => money(row.price) },
+          { key: "evidence", label: "Data evidence", width: "240px", render: row => marketEvidenceLabel(normalizeMarketQuote({ ...row, asOf: row.asOf ?? row.providerTimestamp })) },
           { key: "change", label: "Chg%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) },
           { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: (row) => hasNumericValue(row.gapPercent) ? toneColor(theme, row.gapPercent) : theme.muted, render: (row) => hasNumericValue(row.gapPercent) ? pct(row.gapPercent) : "Unavailable" },
           { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true, render: (row) => hasNumericValue(row.relativeVolume) ? formatMultiple(row.relativeVolume) : "Unavailable" },
@@ -646,7 +671,7 @@ function PremiumWorkspaceContent({
   function selectedRail(extra = null, selectedOverride = selected) {
     return (
       <DetailRail theme={theme} selected={selectedOverride} actions={selectedActions}>
-        {activeWorkspace === 'scanner' && tradePlanEditor}
+        {activeWorkspace === 'scanner' && <>{tradePlanEditor}<ScannerSampleBreadth stocks={stocks} theme={theme} /></>}
         {extra}
       </DetailRail>
     );
@@ -657,7 +682,20 @@ function PremiumWorkspaceContent({
     return (
       <ChartsWorkspacePage
         {...{
-          chartIndicators,
+          reviewOrder: () => prepareOrderReview(paperDraft?.symbol === selected.symbol ? paperDraft.side || "BUY" : "BUY", selected.symbol),
+          alertContext: alertChartContext?.symbol === selected.symbol ? alertChartContext : null,
+          chartRailVisible: premiumPreferences.chartRailVisible !== false,
+          chartRailWidth: premiumPreferences.chartRailWidth,
+          workflowTools: <details style={{ flexBasis: "100%", minWidth: 0 }}>
+            <summary>Layouts and watchlist groups</summary>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 0" }}>
+              <label><input type="checkbox" checked={Boolean(syncCharts)} onChange={event => setSyncCharts?.(event.target.checked)} /> Link chart symbols and timeframes</label>
+              <label><input type="checkbox" checked={premiumPreferences.chartRailVisible !== false} onChange={event => updatePremiumPreference("chartRailVisible", event.target.checked)} /> Show chart side panel</label>
+              {!isNarrowWorkspace && <label>Side panel width <input type="range" min="260" max="400" value={premiumPreferences.chartRailWidth ?? 320} onChange={event => updatePremiumPreference("chartRailWidth", Number(event.target.value))} /></label>}
+            </div>
+            <SavedLayouts layouts={layouts} activeId={premiumPreferences.activeSavedLayoutId} unnamed={premiumPreferences.unnamedLayout} onChange={setLayouts} capture={captureLayout} apply={restoreLayout} theme={theme} />
+            <WatchlistDestination key={selected.symbol} collections={collections} symbol={selected.symbol} theme={theme} />
+          </details>,
           dashboard,
           gridMode,
           isNarrowWorkspace,
@@ -671,7 +709,6 @@ function PremiumWorkspaceContent({
           setGridMode,
           setLayoutMode,
           setOrderMessage,
-          stocks,
           theme,
           viewportHeight,
         }}
@@ -772,6 +809,8 @@ function PremiumWorkspaceContent({
       <AlertsWorkspacePage
         {...{
           backgroundAlerts,
+          inbox: <AlertsInbox alerts={alerts || []} background={backgroundAlerts} timeZone={timeZone} archived={Array.isArray(premiumPreferences.alertInboxArchive) ? premiumPreferences.alertInboxArchive : []} readIds={readIds} markRead={markRead} collections={collections} theme={theme}
+            openChart={openAlertChart} />,
           alertDraftDirection,
           alertDraftPrice,
           alertRows,
@@ -783,7 +822,15 @@ function PremiumWorkspaceContent({
           notificationPreferences,
           page,
           quickOrder,
-          removeAlert,
+          removeAlert: id => {
+            const events = collectAlertEvents((alerts || []).filter(alert => alert.id === id));
+            if (events.length) setPremiumPreferences?.(current => {
+              const archive = Array.isArray(current.alertInboxArchive) ? current.alertInboxArchive : [];
+              const byId = new Map([...archive, ...events].filter(Boolean).map(event => [event.id, event]));
+              return { ...current, alertInboxArchive: [...byId.values()] };
+            });
+            return removeAlert(id);
+          },
           selectMainSymbol,
           selected,
           selectedAlert,
@@ -911,6 +958,7 @@ function PremiumWorkspaceContent({
           theme,
           timeZone,
           updateJournalEntry,
+          importJournalEntries,
         }}
       />
     );

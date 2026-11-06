@@ -1,12 +1,14 @@
 import { terminalMonoFont } from "../../../config/terminalConfig";
-import { CHART_INDICATOR_OPTIONS } from "../../../indicators/chartIndicators";
 import { formatPercent, formatPrice } from "../../../utils/dashboardFormatters";
-import { isProviderSampleRow } from "../../../utils/marketDataContract.js";
 import { hasNumericValue, money, nullableMoveOf, pct, toneColor } from "../premiumWorkspaceData";
 import { ActionButton, DetailRail, PremiumCard, PremiumTable } from "../PremiumWorkspacePrimitives";
 
 export default function ChartsWorkspacePage({
-  chartIndicators,
+  workflowTools,
+  chartRailVisible,
+  chartRailWidth,
+  alertContext,
+  reviewOrder,
   dashboard,
   gridMode,
   isNarrowWorkspace,
@@ -20,20 +22,10 @@ export default function ChartsWorkspacePage({
   setGridMode,
   setLayoutMode,
   setOrderMessage,
-  stocks,
   theme
 }) {
-    const enabledIndicatorRows = CHART_INDICATOR_OPTIONS
-      .filter((indicator) => Boolean(chartIndicators?.[indicator.id]))
-      .map((indicator) => ({
-        indicator: indicator.label,
-        status: "Enabled",
-        params: indicator.id.startsWith("ema") ? `Period: ${indicator.id.replace("ema", "")}` : "Chart-calculated",
-        value: "See chart",
-        signal: "Not classified",
-      }));
+    const sidePanelWidth = Number.isFinite(chartRailWidth) ? Math.max(260, Math.min(400, chartRailWidth)) + "px" : "clamp(300px, 20vw, 360px)";
     const activeChartLayout = layoutMode === "1" ? "1" : gridMode === "4" ? "4" : gridMode === "3" ? "3" : "2";
-    const showChartIntelCards = activeChartLayout === "1" && !isNarrowWorkspace;
     const setDeskLayout = (nextLayout) => {
       setLayoutMode?.(nextLayout === "1" ? "1" : "2");
       setGridMode?.(nextLayout === "1" ? "2" : nextLayout);
@@ -47,36 +39,6 @@ export default function ChartsWorkspacePage({
       ["Market Cap", selected.marketCap],
       ["Beta", selected.beta],
     ];
-    const sampleMoves = stocks.filter(isProviderSampleRow).map(nullableMoveOf).filter(value => value !== null);
-    const intelligenceCards = [
-      {
-        title: "AI Market Brief",
-        body: selected.whyMoving || selected.catalyst || selected.setup || "No confirmed catalyst is available for this symbol yet.",
-        footer: nullableMoveOf(selected) === null ? "Context pending" : `${pct(nullableMoveOf(selected))} selected move`,
-        tone: nullableMoveOf(selected) === null ? "neutral" : nullableMoveOf(selected) >= 0 ? "good" : "bad",
-      },
-      {
-        title: "Workspace Sample Breadth",
-        body: `${sampleMoves.filter(value => value > 0).length} advancing / ${sampleMoves.filter(value => value < 0).length} declining / ${sampleMoves.filter(value => value === 0).length} unchanged in the workspace sample.`,
-        footer: `${sampleMoves.length} of ${stocks.length} tracked symbols with usable moves`,
-        tone: "neutral",
-      },
-      {
-        title: "AI Signals",
-        body: enabledIndicatorRows.length
-          ? `${enabledIndicatorRows.map((row) => row.indicator).join(", ")} enabled on charts.`
-          : "No optional chart indicators are enabled. EMA overlays remain available on the chart.",
-        footer: `${enabledIndicatorRows.length} enabled`,
-        tone: enabledIndicatorRows.length ? "good" : "neutral",
-      },
-      {
-        title: "Sector Pulse",
-        body: `${selected.sector || "Sector context"} is the active context for ${selected.symbol}. Scanner rank and news context update when provider data is available.`,
-        footer: selected.risk ? `Risk: ${selected.risk}` : "Risk context pending",
-        tone: selected.risk === "Low" || selected.risk === "Controlled" ? "good" : "warn",
-      },
-    ];
-
     return (
       <div className="terminal-page ws-charts-page" style={{ ...page, overflow: isNarrowWorkspace ? "auto" : "hidden" }}>
         <div
@@ -84,12 +46,8 @@ export default function ChartsWorkspacePage({
             height: isNarrowWorkspace ? "auto" : "100%",
             minHeight: 0,
             display: "grid",
-            gridTemplateColumns: isNarrowWorkspace ? "minmax(0, 1fr)" : "minmax(0, 1fr) clamp(300px, 20vw, 360px)",
-            gridTemplateRows: isNarrowWorkspace
-              ? "auto"
-              : showChartIntelCards
-                ? "minmax(300px, 1fr) 112px"
-                : "minmax(300px, 1fr)",
+            gridTemplateColumns: isNarrowWorkspace || !chartRailVisible ? "minmax(0, 1fr)" : "minmax(0, 1fr) " + sidePanelWidth,
+            gridTemplateRows: isNarrowWorkspace ? "auto" : "minmax(300px, 1fr)",
             gap: 12,
             overflow: "hidden",
           }}
@@ -143,6 +101,9 @@ export default function ChartsWorkspacePage({
                   </ActionButton>
                 ))}
               </div>
+              {!chartRailVisible && <ActionButton theme={theme} good onClick={reviewOrder}>Review Paper Order</ActionButton>}
+              {alertContext && <div role="status" style={{ color: theme.muted }}>Opened from alert · {alertContext.symbol} price {alertContext.direction} {money(alertContext.trigger)}</div>}
+              {workflowTools}
             </div>
             <div style={{ minHeight: 0, padding: 8, overflow: "hidden" }}>
               {renderChartGrid?.({
@@ -152,10 +113,10 @@ export default function ChartsWorkspacePage({
             </div>
           </PremiumCard>
 
-          <div
+          {chartRailVisible && <div
             style={{
               gridColumn: isNarrowWorkspace ? "auto" : "2 / 3",
-              gridRow: isNarrowWorkspace ? "auto" : showChartIntelCards ? "1 / 3" : "1 / 2",
+              gridRow: isNarrowWorkspace ? "auto" : "1 / 2",
               minHeight: 0,
               display: "grid",
               gap: 10,
@@ -191,33 +152,8 @@ export default function ChartsWorkspacePage({
                 </div>
               </PremiumCard>
             </DetailRail>
-          </div>
+          </div>}
 
-          {showChartIntelCards && (
-            <div
-              style={{
-                gridColumn: isNarrowWorkspace ? "auto" : "1 / 2",
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: 10,
-                minHeight: 0,
-                overflow: "hidden",
-              }}
-            >
-              {intelligenceCards.map((card) => {
-                const tone = card.tone === "good" ? theme.green : card.tone === "bad" ? theme.red : card.tone === "warn" ? theme.amber : theme.blue;
-                return (
-                  <PremiumCard key={card.title} theme={theme} style={{ overflow: "hidden" }}>
-                    <div style={{ padding: 12, display: "grid", gap: 6, minHeight: 0 }}>
-                      <div style={{ color: theme.text, fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>{card.title}</div>
-                      <div style={{ color: theme.muted, fontSize: 11, lineHeight: 1.35, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{card.body}</div>
-                      <div style={{ marginTop: "auto", color: tone, fontFamily: terminalMonoFont, fontSize: 10, fontWeight: 600 }}>{card.footer}</div>
-                    </div>
-                  </PremiumCard>
-                );
-              })}
-            </div>
-          )}
         </div>
       </div>
     );

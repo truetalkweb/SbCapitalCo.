@@ -210,12 +210,20 @@ test("a late response for the previous symbol cannot replace the new chart", asy
   expect(evidence.errors).toEqual([]);
 });
 
+test('chart history can arrive after the former deadline', async ({ page }) => {
+  await setup(page, async payload => {
+    await new Promise(resolve => setTimeout(resolve, 4100));
+    return payload;
+  });
+  await expect(mainCanvas(page)).toHaveAttribute('data-visible-candle-count', '1');
+});
+
 test('stalled chart history reaches unavailable and can retry without fabricated candles', async ({ page }) => {
   let release, recover = false;
   const held = new Promise(resolve => { release = resolve; });
   const evidence = await setup(page, async payload => { if (!recover) await held; return payload; });
   try {
-    await expect(page.locator('header [role="status"]')).toHaveText('UNAVAILABLE');
+    await expect(page.locator('header [role="status"]')).toHaveText('UNAVAILABLE', { timeout: 20000 });
     await expect(page.getByText('Historical data request timed out. Retry when the provider recovers.', { exact: true })).toBeVisible();
     expect((await ledger(page)).mark).toBeNull();
     recover = true; release();

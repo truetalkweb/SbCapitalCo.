@@ -538,7 +538,7 @@ function Chart({
           if (historyStart && historyEnd) { query.set("start", historyStart); query.set("end", historyEnd); }
           const backendData = await fetchJsonWithTimeout(
             `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?${query}`,
-            { timeoutMs: historyStart ? 15000 : 3500, signal: historyRequest.signal }
+            { timeoutMs: 15000, signal: historyRequest.signal }
           );
         const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
         if (disposed) return;

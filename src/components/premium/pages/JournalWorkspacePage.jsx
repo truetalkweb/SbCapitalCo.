@@ -1,5 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { createJournalDayFormatter } from "../../../utils/journalCalendar.js";
+import TradeReplay from "./TradeReplay";
+import { buildTradeReplay } from "../../../utils/tradeReplay.js";
 import JournalCalendar from "./JournalCalendar";
 import JournalImport from "./JournalImport";
 import JournalWeeklyReview from "./JournalWeeklyReview";
@@ -15,6 +17,8 @@ import { ActionButton, FilterBar, MetricTile, PremiumCard, PremiumTable, Premium
 
 export default function JournalWorkspacePage({
   addJournalEntry,
+  brokerApiUrl,
+  paperOrders,
       exportDailyReport,
       exportJournalCsv,
       exportWeeklyReport,
@@ -35,6 +39,7 @@ export default function JournalWorkspacePage({
       updateJournalEntry,
 }) {
     const [analysisDimension, setAnalysisDimension] = useState('setup');
+    const [reviewTrade, setReviewTrade] = useState(null);
     const [editing, setEditing] = useState(null);
     const setupInput = useRef(null);
     const reportingDay = useMemo(() => createJournalDayFormatter(timeZone), [timeZone]);
@@ -122,6 +127,13 @@ export default function JournalWorkspacePage({
       if (Object.keys(changes).length) updateJournalEntry?.(editing.id, changes);
       setEditing(null);
     }
+
+    if (reviewTrade) return <div className="terminal-page" style={page}>
+      {reviewTrade.unavailable ? <PremiumCard theme={theme} title="Trade replay unavailable">
+        <p style={{ padding: 12 }}>This trade is missing linked entry or exit fills in the paper ledger.</p>
+        <ActionButton theme={theme} onClick={() => setReviewTrade(null)}>Back to Journal</ActionButton>
+      </PremiumCard> : <TradeReplay key={reviewTrade.id} trade={reviewTrade} theme={theme} timeZone={timeZone} brokerApiUrl={brokerApiUrl} onBack={() => setReviewTrade(null)} />}
+    </div>;
 
     const showFilters = journalView !== "Import" && journalView !== "Weekly Review";
     const showDraft = journalView === "Overview" || journalView === "Trades";
@@ -295,7 +307,14 @@ export default function JournalWorkspacePage({
                   { key: "outcome", label: "Outcome", width: "80px", color: (row) => row.outcome === "Loss" ? theme.red : theme.green },
                   { key: "tag", label: "Notes", width: "90px", render: (row) => <StatusPill theme={theme} tone={row.outcome === "Loss" ? "warn" : "neutral"}>{row.tag || row.setup}</StatusPill> },
                   { key: "notes", label: "Review", width: "1fr", render: row => <div style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}><span>{row.notes}</span>{row.tradePlan && <details><summary>Entry plan</summary><div>First entry stop: {row.tradePlan.stopLoss > 0 ? money(row.tradePlan.stopLoss) : 'Not recorded'} · target: {row.tradePlan.takeProfit > 0 ? money(row.tradePlan.takeProfit) : 'Not recorded'}</div></details>}</div> },
-                  { key: "actions", label: "", width: "80px", align: "center", render: (row) => row.immutable ? <span title="Execution history is retained by the paper account">Auto</span> : <div style={{ display: 'flex', gap: 4 }}><ActionButton theme={theme} aria-label={`Edit journal entry ${row.symbol}`} onClick={() => startEdit(row)}><Pencil size={13} aria-hidden="true" /></ActionButton><button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button></div> },
+                  { key: "actions", label: "", width: "130px", align: "center", render: (row) => row.immutable ? (
+                    row.tradeGroupId && (row.closesPosition || (row.groupedPosition && row.status === "closed"))
+                      ? <ActionButton theme={theme} onClick={() => {
+                        const trade = buildTradeReplay(row, paperOrders);
+                        setReviewTrade(trade || { id: row.id, unavailable: true });
+                      }}>Replay this trade</ActionButton>
+                      : <span title="Execution history is retained by the paper account">Auto</span>
+                  ) : <div style={{ display: 'flex', gap: 4 }}><ActionButton theme={theme} aria-label={`Edit journal entry ${row.symbol}`} onClick={() => startEdit(row)}><Pencil size={13} aria-hidden="true" /></ActionButton><button type="button" aria-label={`Delete journal entry ${row.symbol}`} title="Delete journal entry" onClick={(event) => { event.stopPropagation(); removeJournalEntry?.(row.id); }} style={{ width: 28, height: 28, display: "grid", placeItems: "center", margin: "0 auto", border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 5, background: "transparent", color: theme.muted, cursor: "pointer" }}><X size={13} /></button></div> },
                 ]}
                 rows={pagination.rows} keyField="id"
               />

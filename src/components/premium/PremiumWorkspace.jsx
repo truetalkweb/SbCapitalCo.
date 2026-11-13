@@ -941,6 +941,8 @@ function PremiumWorkspaceContent({
       <JournalWorkspacePage
         {...{
           addJournalEntry,
+          brokerApiUrl,
+          paperOrders: paperTrading?.orders,
           exportDailyReport,
           exportJournalCsv,
           exportWeeklyReport,

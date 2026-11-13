@@ -83,6 +83,9 @@ function Chart({
   replayIndex = null,
   onReplayData,
   replayTrades = [],
+  historyStart,
+  historyEnd,
+  replayPriceLevels,
   brokerApiUrl = DEFAULT_BROKER_API_URL,
   trendTools = {},
   isDark = true,
@@ -218,11 +221,11 @@ function Chart({
         position: trade.type === "BUY" ? "belowBar" : "aboveBar",
         color: trade.type === "BUY" ? "#00c896" : "#ef5350",
         shape: trade.type === "BUY" ? "arrowUp" : "arrowDown",
-        text:
+        text: trade.label || (
           trade.type === "BUY"
             ? `BUY ${trade.qty}`
-            : `SELL ${trade.qty}${trade.pnl ? ` $${Number(trade.pnl).toFixed(2)}` : ""}`,
-      }));
+            : `SELL ${trade.qty}${trade.pnl ? ` $${Number(trade.pnl).toFixed(2)}` : ""}`),
+      })).sort((a, b) => a.time - b.time);
 
     markersRef.current?.setMarkers(markers);
     containerRef.current.dataset.markerEnd = markers.length ? String(Math.max(...markers.map(marker => marker.time))) : "";
@@ -248,9 +251,8 @@ function Chart({
   const updateTrendTools = useCallback((source = getVisibleCandles()) => {
     clearTrendLines();
 
-    if (!trendTools?.autoLevels || !candleSeriesRef.current) return;
-
-    const levels = calculateAutoLevels(source);
+    if (!candleSeriesRef.current) return;
+    const levels = replayPriceLevels || (trendTools?.autoLevels ? calculateAutoLevels(source) : []);
     trendLineRefs.current = levels.map((level) =>
       candleSeriesRef.current.createPriceLine({
         price: level.price,
@@ -261,7 +263,7 @@ function Chart({
         title: level.title,
       })
     );
-  }, [clearTrendLines, getVisibleCandles, trendTools?.autoLevels]);
+  }, [clearTrendLines, getVisibleCandles, trendTools?.autoLevels, replayPriceLevels]);
 
   const updateVolumeRef = useRef(updateVolume);
   const updateIndicatorsRef = useRef(updateIndicators);
@@ -532,9 +534,11 @@ function Chart({
       try {
         const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
         if (!cleanBrokerApiUrl) throw new Error("Chart provider is not configured");
+          const query = new URLSearchParams({ timeframe });
+          if (historyStart && historyEnd) { query.set("start", historyStart); query.set("end", historyEnd); }
           const backendData = await fetchJsonWithTimeout(
-            `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?timeframe=${encodeURIComponent(timeframe)}`,
-            { timeoutMs: 3500, signal: historyRequest.signal }
+            `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?${query}`,
+            { timeoutMs: historyStart ? 15000 : 3500, signal: historyRequest.signal }
           );
         const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
         if (disposed) return;
@@ -605,7 +609,7 @@ function Chart({
         }
       });
     };
-  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, chartTheme.background, chartTheme.border, chartTheme.grid, chartTheme.text, chartTheme.tooltipTitle, setStatus, timeframe, historyRevision]);
+  }, [applyHistoryDataset, brokerApiUrl, chartSymbol, chartTheme.background, chartTheme.border, chartTheme.grid, chartTheme.text, chartTheme.tooltipTitle, setStatus, timeframe, historyRevision, historyStart, historyEnd]);
 
   useEffect(() => {
     updateIndicators();

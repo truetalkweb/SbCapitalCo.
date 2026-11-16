@@ -51,3 +51,28 @@ test("ownership view shows disclosed figures and switches back to purchases", as
   await expect(page.getByText(/No reported purchases match/)).toBeVisible();
 });
 
+test("institutional holdings show quarterly units and can filter by CUSIP", async ({ page }) => {
+  await setupApp(page, { ...initialWorkspace, activeWorkspace: "news" });
+  await page.route("**/api/edgar/insider-purchases?*", route =>
+    route.fulfill({ json: { status: "ready", total: 0, rows: [] } }));
+  await page.route("**/api/edgar/holdings?*", route => {
+    const params = new URL(route.request().url()).searchParams;
+    const rows = params.get("cusip") === "999999999" ? [] : [{
+      id: "13f:holding:0", issuer: "APPLE INC", ticker: "AAPL", cusip: "037833100",
+      manager: "Example manager", reportingPeriod: "2026-03-31",
+      filingDate: "2026-05-08", shares: 8303, reportedValueUsd: 2107143,
+      form: "13F-HR/A", amendmentType: "Adds holdings",
+      sourceUrl: "https://www.sec.gov/Archives/edgar/data/1308778/000130877826000003/informationtable31032026.xml",
+    }];
+    return route.fulfill({ json: { status: "ready", total: rows.length, rows } });
+  });
+  await page.getByRole("button", { name: "Show filings" }).click();
+  await page.getByRole("tab", { name: "Institutional holdings" }).click();
+  await expect(page.getByText("2026-03-31", { exact: true })).toBeVisible();
+  await expect(page.getByText("$2,107,143", { exact: true })).toBeVisible();
+  await expect(page.getByText("Adds holdings", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "13F-HR/A" })).toHaveAttribute("href", /sec\.gov/);
+  await page.getByLabel("CUSIP", { exact: true }).fill("999999999");
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await expect(page.getByText(/No institutional holdings match/)).toBeVisible();
+});

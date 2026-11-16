@@ -9,6 +9,7 @@ const PAGE_SIZE = 25;
 export default function SecFilings({ brokerApiUrl, theme }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("insider-purchases");
+  const [cusip, setCusip] = useState("");
   const [input, setInput] = useState("");
   const [query, setQuery] = useState({ ticker: "", page: 1 });
   const [result, setResult] = useState({ status: "loading", rows: [] });
@@ -47,6 +48,27 @@ export default function SecFilings({ brokerApiUrl, theme }) {
 
   const status = !brokerApiUrl ? "unavailable" : result.view === view && result.query === query ? result.status : "loading";
   const rows = result.rows ?? [];
+  const holdingsColumns = [
+    { key: "manager", label: "Manager", width: "1.25fr", render: row => text(row.manager) },
+    { key: "issuer", label: "Issuer", width: "1.15fr", render: row => text(row.issuer) },
+    { key: "security", label: "Security", width: "1fr", render: row => (
+      <div>{text(row.security)}{row.optionType ? ` · ${row.optionType}` : ""}
+        <div>{[row.ticker, row.cusip].filter(Boolean).join(" · ") || "Identifier unavailable"}</div>
+      </div>
+    ) },
+    { key: "reportingPeriod", label: "Quarter ended", width: "115px", render: row => text(row.reportingPeriod) },
+    { key: "filingDate", label: "Filed", width: "100px" },
+    { key: "units", label: "Shares / principal", width: "140px", render: row =>
+      row.principal == null ? amount(row.shares) : `${amount(row.principal)} principal` },
+    { key: "value", label: "Reported value (USD)", width: "145px", render: row =>
+      row.reportedValueUsd == null ? "Unavailable" : `$${amount(row.reportedValueUsd)}` },
+    { key: "form", label: "SEC filing", width: "125px", render: row => (
+      <div>
+        <a href={row.sourceUrl} target="_blank" rel="noreferrer" style={{ color: theme.blue }}>{row.form}</a>
+        {row.amendmentType && <div>{row.amendmentType}</div>}
+      </div>
+    ) },
+  ];
   const columns = view === "ownership" ? [
     { key: "issuer", label: "Issuer", width: "1.2fr", render: row => text(row.issuer) },
     { key: "ticker", label: "Ticker", width: "80px", render: row => text(row.ticker) },
@@ -64,7 +86,7 @@ export default function SecFilings({ brokerApiUrl, theme }) {
         {row.previousAccession && <div title={row.previousAccession}>Prior disclosure on file</div>}
       </div>
     ) },
-  ] : [
+  ] : view === "holdings" ? holdingsColumns : [
     { key: "issuer", label: "Issuer", width: "1.25fr", render: row => text(row.issuer) },
     { key: "ticker", label: "Ticker", width: "70px", render: row => text(row.ticker) },
     { key: "owners", label: "Reporting owners", width: "1.25fr", render: row => text(row.owners.map(owner => owner.name).filter(Boolean).join(", ")) },
@@ -92,17 +114,20 @@ export default function SecFilings({ brokerApiUrl, theme }) {
           <PremiumTabs theme={theme} ariaLabel="SEC filings views" tabs={[
             { id: "insider-purchases", label: "Reported insider purchases" },
             { id: "ownership", label: "Ownership filings" },
+            { id: "holdings", label: "Institutional holdings" },
           ]} active={view} onChange={next => {
             setView(next);
-            setQuery(prior => ({ ...prior, page: 1 }));
+            setQuery(prior => ({ ticker: prior.ticker, page: 1 }));
           }} />
           {view === "ownership" && <p>Schedule 13D and 13G figures show ownership as disclosed by each reporting person.</p>}
+          {view === "holdings" && <p>Form 13F shows quarterly holdings snapshots. Ticker matches are limited to securities with verified identifiers. Use CUSIP for other holdings.</p>}
           <form onSubmit={event => {
             event.preventDefault();
-            setQuery({ ticker: input.trim().toUpperCase(), page: 1 });
+            setQuery({ ticker: input.trim().toUpperCase(), page: 1, ...(view === "holdings" && { cusip: cusip.trim().toUpperCase() }) });
           }} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <label htmlFor="edgar-ticker">Ticker</label>
             <input id="edgar-ticker" value={input} onChange={event => setInput(event.target.value)} maxLength={15} pattern="[A-Za-z0-9][A-Za-z0-9.\\-]{0,14}" placeholder="All tickers" />
+            {view === "holdings" && <label>CUSIP <input value={cusip} onChange={event => setCusip(event.target.value)} maxLength={9} pattern="[A-Za-z0-9]{9}" /></label>}
             <button type="submit">Filter</button>
           </form>
           <div role="status" style={{ color: theme.muted, marginTop: 8 }}>
@@ -118,7 +143,11 @@ export default function SecFilings({ brokerApiUrl, theme }) {
         {(status === "ready" || status === "cached") && <>
           <div style={{ overflowX: "auto" }}>
             <PremiumTable theme={theme} columns={columns} rows={rows} keyField="id"
-              emptyMessage={view === "ownership" ? "No ownership filings match this filter in the verified filing subset." : "No reported purchases match this filter in the verified filing subset."} />
+              emptyMessage={{
+                ownership: "No ownership filings match this filter in the verified filing subset.",
+                holdings: "No institutional holdings match this filter in the verified filing subset.",
+                "insider-purchases": "No reported purchases match this filter in the verified filing subset.",
+              }[view]} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 12 }}>
             <ActionButton theme={theme} disabled={query.page === 1}
@@ -132,4 +161,3 @@ export default function SecFilings({ brokerApiUrl, theme }) {
     </PremiumCard>
   );
 }
-

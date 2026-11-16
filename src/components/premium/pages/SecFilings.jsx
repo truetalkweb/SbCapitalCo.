@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { ActionButton, PremiumCard, PremiumTable } from "../PremiumWorkspacePrimitives";
+import { ActionButton, PremiumCard, PremiumTable, PremiumTabs } from "../PremiumWorkspacePrimitives";
 
 const quantity = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 });
 const amount = (value) => value == null ? "Unavailable" : quantity.format(value);
 const text = (value) => value || "Unavailable";
 const PAGE_SIZE = 25;
 
-export default function InsiderPurchases({ brokerApiUrl, theme }) {
+export default function SecFilings({ brokerApiUrl, theme }) {
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState("insider-purchases");
   const [input, setInput] = useState("");
   const [query, setQuery] = useState({ ticker: "", page: 1 });
   const [result, setResult] = useState({ status: "loading", rows: [] });
@@ -17,18 +18,18 @@ export default function InsiderPurchases({ brokerApiUrl, theme }) {
     if (!open || !brokerApiUrl) return;
     const controller = new AbortController();
     let timer;
-    setResult({ status: "loading", rows: [] });
+    setResult({ status: "loading", rows: [], view, query });
 
     async function load() {
       try {
         const params = new URLSearchParams({ ...query, pageSize: PAGE_SIZE });
-        const response = await fetch(`${brokerApiUrl.replace(/\/$/, "")}/api/edgar/insider-purchases?${params}`, {
+        const response = await fetch(`${brokerApiUrl.replace(/\/$/, "")}/api/edgar/${view}?${params}`, {
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
         });
         if (!response.ok) throw new Error("Filings request failed");
         const data = await response.json();
         if (controller.signal.aborted) return;
-        setResult(data);
+        setResult({ ...data, view, query });
         if (data.refreshing) timer = setTimeout(load, 3000);
       } catch {
         if (!controller.signal.aborted) setResult((prior) => ({
@@ -42,11 +43,28 @@ export default function InsiderPurchases({ brokerApiUrl, theme }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [open, brokerApiUrl, query, retry]);
+  }, [open, brokerApiUrl, query, retry, view]);
 
-  const status = brokerApiUrl ? result.status : "unavailable";
+  const status = !brokerApiUrl ? "unavailable" : result.view === view && result.query === query ? result.status : "loading";
   const rows = result.rows ?? [];
-  const columns = [
+  const columns = view === "ownership" ? [
+    { key: "issuer", label: "Issuer", width: "1.2fr", render: row => text(row.issuer) },
+    { key: "ticker", label: "Ticker", width: "80px", render: row => text(row.ticker) },
+    { key: "reportingPerson", label: "Reporting person", width: "1.2fr", render: row => text(row.reportingPerson) },
+    { key: "security", label: "Security", width: "1fr", render: row => text(row.security) },
+    { key: "filingDate", label: "Filed", width: "100px" },
+    { key: "shares", label: "Disclosed shares", width: "125px", render: row => amount(row.shares) },
+    { key: "ownershipPercent", label: "Disclosed ownership", width: "140px", render: row => row.ownershipPercent == null ? "Unavailable" : `${amount(row.ownershipPercent)}%` },
+    { key: "form", label: "SEC filing", width: "145px", render: row => (
+      <div>
+        <a href={row.sourceUrl} target="_blank" rel="noreferrer" style={{ color: theme.blue }}>
+          {row.form.replace(/^SC /, "Schedule ").replace(/^SCHEDULE /, "Schedule ")}
+        </a>
+        {row.form.endsWith("/A") && <div>Amendment{row.amendmentNumber == null ? "" : ` ${row.amendmentNumber}`}</div>}
+        {row.previousAccession && <div title={row.previousAccession}>Prior disclosure on file</div>}
+      </div>
+    ) },
+  ] : [
     { key: "issuer", label: "Issuer", width: "1.25fr", render: row => text(row.issuer) },
     { key: "ticker", label: "Ticker", width: "70px", render: row => text(row.ticker) },
     { key: "owners", label: "Reporting owners", width: "1.25fr", render: row => text(row.owners.map(owner => owner.name).filter(Boolean).join(", ")) },
@@ -71,7 +89,14 @@ export default function InsiderPurchases({ brokerApiUrl, theme }) {
     }>
       {open && <>
         <div style={{ padding: 16 }}>
-          <h3>Reported insider purchases</h3>
+          <PremiumTabs theme={theme} ariaLabel="SEC filings views" tabs={[
+            { id: "insider-purchases", label: "Reported insider purchases" },
+            { id: "ownership", label: "Ownership filings" },
+          ]} active={view} onChange={next => {
+            setView(next);
+            setQuery(prior => ({ ...prior, page: 1 }));
+          }} />
+          {view === "ownership" && <p>Schedule 13D and 13G figures show ownership as disclosed by each reporting person.</p>}
           <form onSubmit={event => {
             event.preventDefault();
             setQuery({ ticker: input.trim().toUpperCase(), page: 1 });
@@ -84,8 +109,8 @@ export default function InsiderPurchases({ brokerApiUrl, theme }) {
             {status === "loading" && "Loading verified SEC filings…"}
             {status === "unavailable" && "SEC filings are temporarily unavailable."}
             {status === "cached" && "Showing cached SEC filings. "}
-            {result.refreshedAt && `Last verified ${new Date(result.refreshedAt).toLocaleString()}. `}
-            {result.coverage && `${result.coverage.verified.toLocaleString()} of ${result.coverage.eligible.toLocaleString()} eligible filings checked in the latest ${result.coverage.lookbackDays} days.`}
+            {status !== "loading" && result.refreshedAt && `Last verified ${new Date(result.refreshedAt).toLocaleString()}. `}
+            {status !== "loading" && result.coverage && `${result.coverage.verified.toLocaleString()} of ${result.coverage.eligible.toLocaleString()} eligible filings checked in the latest ${result.coverage.lookbackDays} days.`}
           </div>
           {(status === "unavailable" || status === "cached") &&
             <ActionButton theme={theme} onClick={() => setRetry(value => value + 1)}>Check again</ActionButton>}
@@ -93,7 +118,7 @@ export default function InsiderPurchases({ brokerApiUrl, theme }) {
         {(status === "ready" || status === "cached") && <>
           <div style={{ overflowX: "auto" }}>
             <PremiumTable theme={theme} columns={columns} rows={rows} keyField="id"
-              emptyMessage="No reported purchases match this filter in the verified filing subset." />
+              emptyMessage={view === "ownership" ? "No ownership filings match this filter in the verified filing subset." : "No reported purchases match this filter in the verified filing subset."} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 12 }}>
             <ActionButton theme={theme} disabled={query.page === 1}

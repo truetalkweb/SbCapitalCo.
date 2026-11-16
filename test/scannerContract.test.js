@@ -43,6 +43,7 @@ test("a failed refresh marks retained rows cached and old quotes stale", () => {
   assert.equal(fresh.dataStatus, "Cached");
   const old = normalizeScannerRow(marketRow({ providerTimestamp: "2026-01-01T00:00:00Z", freshness: "live" }));
   assert.equal(old.dataStatus, "Stale");
+  assert.equal(normalizeScannerRow(marketRow({ freshness: "unavailable" })).dataStatus, "Unavailable");
   assert.equal(normalizeScannerRow(marketRow(), { updatedAt: new Date().toISOString() }).dataStatus, "Delayed");
 });
 

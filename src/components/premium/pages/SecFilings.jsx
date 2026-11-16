@@ -6,35 +6,38 @@ const amount = (value) => value == null ? "Unavailable" : quantity.format(value)
 const text = (value) => value || "Unavailable";
 const PAGE_SIZE = 25;
 
-export default function SecFilings({ brokerApiUrl, theme }) {
+export default function SecFilings({ brokerApiUrl, theme, selectedTicker = "" }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("insider-purchases");
-  const [input, setInput] = useState("");
-  const [query, setQuery] = useState({ ticker: "", page: 1 });
+
+  const [selection, setSelection] = useState(null);
+  const ticker = selection?.selectedTicker === selectedTicker ? selection.ticker : selectedTicker;
+  const page = selection?.selectedTicker === selectedTicker ? selection.page : 1;
+  const queryKey = `${view}:${ticker}:${page}`;
   const [result, setResult] = useState({ status: "loading", rows: [] });
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (!open || !brokerApiUrl) return;
+    if (!open || !brokerApiUrl || !ticker) return;
     const controller = new AbortController();
     let timer;
-    setResult({ status: "loading", rows: [], view, query });
 
     async function load() {
       try {
-        const params = new URLSearchParams({ ...query, pageSize: PAGE_SIZE });
+        const params = new URLSearchParams({ ticker, page, pageSize: PAGE_SIZE });
         const response = await fetch(`${brokerApiUrl.replace(/\/$/, "")}/api/edgar/${view}?${params}`, {
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
         });
         if (!response.ok) throw new Error("Filings request failed");
         const data = await response.json();
         if (controller.signal.aborted) return;
-        setResult({ ...data, view, query });
+        setResult({ ...data, queryKey });
         if (data.refreshing) timer = setTimeout(load, 3000);
       } catch {
-        if (!controller.signal.aborted) setResult((prior) => ({
-          ...prior, status: prior.refreshedAt ? "cached" : "unavailable",
-        }));
+        if (!controller.signal.aborted) setResult((prior) =>
+          prior.queryKey === queryKey && prior.refreshedAt
+            ? { ...prior, status: "cached" }
+            : { queryKey, status: "unavailable", rows: [] });
       }
     }
 
@@ -43,15 +46,16 @@ export default function SecFilings({ brokerApiUrl, theme }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [open, brokerApiUrl, query, retry, view]);
+  }, [open, brokerApiUrl, ticker, page, queryKey, retry, view]);
 
-  const status = !brokerApiUrl ? "unavailable" : result.view === view && result.query === query ? result.status : "loading";
+  const status = !ticker ? "no-ticker" : !brokerApiUrl ? "unavailable" : result.queryKey === queryKey ? result.status : "loading";
   const rows = result.rows ?? [];
   const columns = view === "ownership" ? [
     { key: "issuer", label: "Issuer", width: "1.2fr", render: row => text(row.issuer) },
     { key: "ticker", label: "Ticker", width: "80px", render: row => text(row.ticker) },
     { key: "reportingPerson", label: "Reporting person", width: "1.2fr", render: row => text(row.reportingPerson) },
     { key: "security", label: "Security", width: "1fr", render: row => text(row.security) },
+    { key: "disclosureDate", label: "Event date", width: "110px", render: row => text(row.disclosureDate) },
     { key: "filingDate", label: "Filed", width: "100px" },
     { key: "shares", label: "Disclosed shares", width: "125px", render: row => amount(row.shares) },
     { key: "ownershipPercent", label: "Disclosed ownership", width: "140px", render: row => row.ownershipPercent == null ? "Unavailable" : `${amount(row.ownershipPercent)}%` },
@@ -94,18 +98,20 @@ export default function SecFilings({ brokerApiUrl, theme }) {
             { id: "ownership", label: "Ownership filings" },
           ]} active={view} onChange={next => {
             setView(next);
-            setQuery(prior => ({ ...prior, page: 1 }));
+            setSelection({ selectedTicker, ticker, page: 1 });
           }} />
           {view === "ownership" && <p>Schedule 13D and 13G figures show ownership as disclosed by each reporting person.</p>}
-          <form onSubmit={event => {
+          <form key={ticker} onSubmit={event => {
             event.preventDefault();
-            setQuery({ ticker: input.trim().toUpperCase(), page: 1 });
+            const symbol = String(new FormData(event.currentTarget).get("ticker")).trim().toUpperCase();
+            setSelection({ selectedTicker, ticker: symbol, page: 1 });
           }} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <label htmlFor="edgar-ticker">Ticker</label>
-            <input id="edgar-ticker" value={input} onChange={event => setInput(event.target.value)} maxLength={15} pattern="[A-Za-z0-9][A-Za-z0-9.\\-]{0,14}" placeholder="All tickers" />
+            <input id="edgar-ticker" name="ticker" defaultValue={ticker} required maxLength={15} pattern="[A-Za-z0-9][A-Za-z0-9.\\-]{0,14}" placeholder="Enter a ticker" />
             <button type="submit">Filter</button>
           </form>
           <div role="status" style={{ color: theme.muted, marginTop: 8 }}>
+            {status === "no-ticker" && "Enter a ticker to see SEC filings."}
             {status === "loading" && "Loading verified SEC filings…"}
             {status === "unavailable" && "SEC filings are temporarily unavailable."}
             {status === "cached" && "Showing cached SEC filings. "}
@@ -121,15 +127,14 @@ export default function SecFilings({ brokerApiUrl, theme }) {
               emptyMessage={view === "ownership" ? "No ownership filings match this filter in the verified filing subset." : "No reported purchases match this filter in the verified filing subset."} />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 12 }}>
-            <ActionButton theme={theme} disabled={query.page === 1}
-              onClick={() => setQuery({ ...query, page: query.page - 1 })}>Previous</ActionButton>
-            <span>Page {query.page}</span>
-            <ActionButton theme={theme} disabled={query.page * PAGE_SIZE >= result.total}
-              onClick={() => setQuery({ ...query, page: query.page + 1 })}>Next</ActionButton>
+            <ActionButton theme={theme} disabled={page === 1}
+              onClick={() => setSelection({ selectedTicker, ticker, page: page - 1 })}>Previous</ActionButton>
+            <span>Page {page}</span>
+            <ActionButton theme={theme} disabled={page * PAGE_SIZE >= result.total}
+              onClick={() => setSelection({ selectedTicker, ticker, page: page + 1 })}>Next</ActionButton>
           </div>
         </>}
       </>}
     </PremiumCard>
   );
 }
-

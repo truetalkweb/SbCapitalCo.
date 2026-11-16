@@ -732,8 +732,8 @@ export default function ProfessionalScanner({
                 <div style={scannerGridStyle}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ ...monoStyle, fontWeight: 800, color: theme.text }}>{stock.symbol}</div>
-                    <div style={{ color: theme.muted, fontSize: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {rowSourceType} / {rowSourceProfile.confidence} / {analysis.tags.slice(0, 1).join(" / ") || analysis.catalyst.label}
+                    <div title={stock.providerTimestamp || "Provider timestamp unavailable"} style={{ color: theme.muted, fontSize: "8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {stock.dataStatus || "Unavailable"} · {rowSourceType}
                     </div>
                   </div>
                   <div style={{ ...monoStyle, color: theme.text, fontWeight: 650, textAlign: "right" }}>

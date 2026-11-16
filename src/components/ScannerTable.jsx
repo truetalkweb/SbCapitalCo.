@@ -143,7 +143,9 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
                   whiteSpace: "nowrap",
                 }}
               >
-                {stock.catalystType || (String(stock.source || "").includes("FMP") ? "Provider" : stock.source) || "Context"}
+                <span title={stock.providerTimestamp || "Provider timestamp unavailable"}>
+                  {stock.dataStatus || (stock.fallback ? "Fallback context" : "Unavailable")} · {stock.catalystType || stock.source || "Context"}
+                </span>
               </span>
             </span>
             <span title={formatFlow(stock)} style={{ ...monoStyle, color: theme.text, fontWeight: 750, textAlign: "right" }}>

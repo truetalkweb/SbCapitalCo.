@@ -352,7 +352,7 @@ test("scanner filters, presets, and table keyboard selection remain functional",
   await expect(page.getByRole("row", { name: /Select AAPL/i })).toBeVisible();
   await expect(page.getByRole("row", { name: /Select NVDA/i })).toHaveCount(0);
 
-  await page.getByLabel("Minimum relative volume").selectOption("1.50");
+  await page.getByLabel("Minimum volume vs. average day").selectOption("1.50");
   await page.getByLabel("Risk filter").selectOption("controlled");
   await page.getByRole("button", { name: "Save Preset", exact: true }).click();
   await expect(page.getByTestId("order-message")).toContainText("Scanner preset saved");

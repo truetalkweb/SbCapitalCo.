@@ -19,7 +19,6 @@ export default function SecFilings({ brokerApiUrl, theme }) {
     if (!open || !brokerApiUrl) return;
     const controller = new AbortController();
     let timer;
-    setResult({ status: "loading", rows: [], view, query });
 
     async function load() {
       try {
@@ -33,9 +32,10 @@ export default function SecFilings({ brokerApiUrl, theme }) {
         setResult({ ...data, view, query });
         if (data.refreshing) timer = setTimeout(load, 3000);
       } catch {
-        if (!controller.signal.aborted) setResult((prior) => ({
-          ...prior, status: prior.refreshedAt ? "cached" : "unavailable",
-        }));
+        if (!controller.signal.aborted) setResult((prior) =>
+          prior.view === view && prior.query === query && prior.refreshedAt
+            ? { ...prior, status: "cached" }
+            : { view, query, status: "unavailable", rows: [] });
       }
     }
 

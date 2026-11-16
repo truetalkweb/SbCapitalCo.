@@ -518,7 +518,7 @@ export default function MarketIntelligenceTerminal({
                 {!compactLayout && <div>Price</div>}
                 <div>Move</div>
                 {!phoneLayout && <div>Volume</div>}
-                <div>RVOL</div>
+                <div title="Session volume so far divided by average full-day volume">Volume vs. average day</div>
                 {!compactLayout && <div>Why Attention</div>}
               </div>
 

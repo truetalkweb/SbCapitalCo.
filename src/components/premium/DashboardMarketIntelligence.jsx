@@ -339,7 +339,7 @@ export function OpportunityBoard({ theme, groups = {}, news = [], selectedSymbol
       </div>
       <div style={{ overflow: "auto" }}>
         <div role="row" style={{ minWidth: 760, minHeight: 32, padding: "0 12px", display: "grid", gridTemplateColumns: "90px 90px 90px 90px 100px 1fr 70px", alignItems: "center", gap: 10, color: theme.muted, fontSize: 10, fontWeight: 800, textTransform: "uppercase", borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
-          {["Symbol", "Price", "Move", "Gap", "RVOL", "Catalyst", "Score"].map((label) => <span key={label}>{label}</span>)}
+          {["Symbol", "Price", "Move", "Gap", "Volume vs. average day", "Catalyst", "Score"].map((label) => <span key={label} title={label === "Volume vs. average day" ? "Session volume so far divided by average full-day volume" : undefined}>{label}</span>)}
         </div>
         {rows.length === 0 ? <EmptyState theme={theme}>No provider rows meet the selected category. Nothing has been synthesized.</EmptyState> : rows.map((row) => {
           const symbol = symbolOf(row);

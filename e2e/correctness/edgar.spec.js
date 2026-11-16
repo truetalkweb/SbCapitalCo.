@@ -1,0 +1,30 @@
+import { test, expect } from "@playwright/test";
+import { setupApp, initialWorkspace } from "../support/appHarness.js";
+
+test("terminal news opens reported purchases and filters by ticker with SEC evidence links", async ({ page }) => {
+  await setupApp(page, { ...initialWorkspace, activeWorkspace: "news" });
+  const href = "https://www.sec.gov/Archives/edgar/data/896493/000121465926011871/0001214659-26-011871-index.htm";
+  await page.route("**/api/edgar/insider-purchases?*", route => {
+    const ticker = new URL(route.request().url()).searchParams.get("ticker");
+    const rows = ticker && ticker !== "EX" ? [] : [{
+      id: "accession:purchase:0", issuer: "Example Inc.", ticker: "EX",
+      owners: [{ name: "Reporting Owner" }], transactionDate: "2026-11-11",
+      filingDate: "2026-11-12", shares: 50, price: 2, estimatedValue: 100,
+      purchaseType: "Reported purchase", form: "4", sourceUrl: href,
+    }];
+    return route.fulfill({ json: {
+      status: "cached", refreshing: false, refreshedAt: "2026-11-13T00:00:00Z",
+      coverage: { verified: 1, eligible: 2, lookbackDays: 30 }, total: rows.length, rows,
+    } });
+  });
+
+  await page.getByRole("button", { name: "Show filings" }).click();
+  await expect(page.getByText("Reported insider purchases", { exact: true })).toBeVisible();
+  await expect(page.getByText("Showing cached SEC filings.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Reporting Owner", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Form 4", exact: true })).toHaveAttribute("href", href);
+  await page.getByLabel("Ticker", { exact: true }).fill("NVDA");
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await expect(page.getByText(/No reported purchases match/)).toBeVisible();
+});
+

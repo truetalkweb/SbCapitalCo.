@@ -298,10 +298,11 @@ test("scanner shows bounded verified quotes and keeps empty categories independe
     providerScanner: { gainers: [row], active: [row], verifiedMovers: [row], losers: [],
       fallback: true, degraded: true, coverageLabel: "Bounded coverage; not market-wide rankings", contractVersion: "scanner-v2" },
   });
-  await page.getByLabel("Minimum relative volume").selectOption("0");
+  await page.getByLabel("Minimum volume vs. average day").selectOption("0");
   const workspace = page.locator('.ws-workspace[data-workspace="scanner"]');
   await expect(workspace).toContainText("Verified provider");
   await expect(workspace).toContainText("Bounded coverage; not market-wide rankings");
+  await expect(workspace.getByRole("tab", { name: "Volume vs. average day" })).toBeVisible();
   await expect(workspace).toContainText("Results: 1");
   await page.getByRole("tab", { name: "Losers", exact: true }).click();
   await expect(workspace).toContainText("Results: 0");

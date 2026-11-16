@@ -14,7 +14,7 @@ for (const width of [390, 1536]) test(`scanner plan reaches charts, paper execut
   const evidence = await setupApp(page, { ...initialWorkspace, activeWorkspace: 'scanner', layoutMode: '1', positions: {}, orders: [], journalEntries: [] },
     { providerQuotes: ['AAPL', 'MSFT'].map(symbol => ({ symbol, price: 100, source: 'Isolated provider', timestamp: now / 1000 })),
       providerScanner: { gainers: [row('AAPL'), row('MSFT')], verifiedMovers: [row('AAPL'), row('MSFT')], coverage: 'bounded-universe' } });
-  await page.getByLabel('Minimum relative volume', { exact: true }).selectOption('0');
+  await page.getByLabel('Minimum volume vs. average day', { exact: true }).selectOption('0');
   await page.getByRole('row', { name: 'Select AAPL', exact: true }).first().click();
   await page.getByLabel('Plan setup', { exact: true }).fill('Opening breakout');
   await page.getByLabel('Plan stop loss', { exact: true }).fill('95');

@@ -369,3 +369,26 @@ for (const [width, height] of [[1920,1080], [1600,900], [1366,768], [390,844]]) 
     });
   }
 }
+test("open charts refresh provider candles and keep the last verified bar through a failed refresh", async ({ page }) => {
+  let requests = 0;
+  await page.clock.install();
+  await setup(page, data => {
+    if (data.symbol !== "AAPL" || data.timeframe !== "1m") return data;
+    requests++;
+    if (requests === 2) return "error";
+    if (requests >= 3) {
+      const last = data.candles.at(-1);
+      return { ...data, candles: [...data.candles.slice(1), { ...last, time: last.time + 60 }] };
+    }
+    return data;
+  });
+  await page.getByRole("checkbox", { name: "Replay", exact: true }).uncheck();
+  const chart = mainCanvas(page);
+  await expect(chart).toHaveAttribute("data-visible-end", String(start + 69 * 60));
+  await page.clock.fastForward(30001);
+  await expect(chart.getByLabel("Historical candle evidence")).toContainText("stale");
+  await expect(chart).toHaveAttribute("data-visible-end", String(start + 69 * 60));
+  await page.clock.fastForward(120001);
+  await expect(chart).toHaveAttribute("data-visible-end", String(start + 70 * 60));
+  await expect(chart.getByLabel("Historical candle evidence")).toContainText("Latest bar");
+});

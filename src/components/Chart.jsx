@@ -530,37 +530,67 @@ function Chart({
     });
 
     const historyRequest = new AbortController();
-    async function loadCandles() {
-      try {
-        const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
-        if (!cleanBrokerApiUrl) throw new Error("Chart provider is not configured");
-          const query = new URLSearchParams({ timeframe });
-          if (historyStart && historyEnd) { query.set("start", historyStart); query.set("end", historyEnd); }
-          const backendData = await fetchJsonWithTimeout(
-            `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?${query}`,
-            { timeoutMs: 15000, signal: historyRequest.signal }
-          );
-        const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
-        if (disposed) return;
-        if (!dataset.candles.length) {
-          setStatus("UNAVAILABLE");
-          setHistoryError(dataset.reason);
-          onReplayDataRef.current?.(dataset);
-          setIsHistoryLoading(false);
-          return;
+    const cleanBrokerApiUrl = String(brokerApiUrl || "").replace(/\/+$/, "");
+    const query = new URLSearchParams({ timeframe });
+    const isFixedHistory = Boolean(historyStart || historyEnd);
+    if (historyStart && historyEnd) {
+      query.set("start", historyStart);
+      query.set("end", historyEnd);
+    }
+    let refreshTimer;
+    let lastDataset;
+
+    function scheduleRefresh(delay) {
+      if (disposed || !cleanBrokerApiUrl || isFixedHistory) return;
+      refreshTimer = window.setTimeout(() => {
+        if (document.hidden || replayViewRef.current.replayMode) {
+          scheduleRefresh(delay);
+        } else {
+          void loadCandles();
         }
-        applyHistoryDataset(dataset, dataset.quality.toUpperCase(), { fitContent: true });
-        setIsHistoryLoading(false);
+      }, delay);
+    }
+
+    async function loadCandles() {
+      let delay = 30000;
+      try {
+        if (!cleanBrokerApiUrl) throw new Error("Chart provider is not configured");
+        const backendData = await fetchJsonWithTimeout(
+          `${cleanBrokerApiUrl}/api/questrade/candles/${encodeURIComponent(chartSymbol)}?${query}`,
+          { timeoutMs: 15000, signal: historyRequest.signal }
+        );
+        if (disposed || (lastDataset && replayViewRef.current.replayMode)) return;
+        const dataset = normalizeCandleDataset(backendData, { symbol: chartSymbol, interval: timeframe });
+        if (!dataset.candles.length) throw new Error(dataset.reason);
+        if (lastDataset && dataset.asOf < lastDataset.asOf) throw new Error("Provider returned older candles");
+        const isInitial = !lastDataset;
+        lastDataset = dataset;
+        if (dataset.quality === "stale") delay = 120000;
+        setHistoryError("");
+        applyHistoryDataset(dataset, isInitial || statusRef.current !== "LIVE QUOTE"
+          ? dataset.quality.toUpperCase() : null, { fitContent: isInitial });
       } catch (error) {
-        if (disposed) return;
-        setStatus("UNAVAILABLE");
-        setHistoryError(error.message || "Historical data is unavailable");
-        onReplayDataRef.current?.({ symbol: chartSymbol, interval: timeframe, quality: "unavailable", candles: [], reason: error.message });
-        setIsHistoryLoading(false);
+        if (disposed || (lastDataset && replayViewRef.current.replayMode)) return;
+        delay = 120000;
+        if (lastDataset) {
+          setHistoryEvidence({
+            symbol: chartSymbol, interval: timeframe,
+            label: marketEvidenceLabel({ ...lastDataset, quality: "stale" }),
+          });
+        } else {
+          setStatus("UNAVAILABLE");
+          setHistoryError(error.message || "Historical data is unavailable");
+          onReplayDataRef.current?.({ symbol: chartSymbol, interval: timeframe, quality: "unavailable", candles: [], reason: error.message });
+        }
+      } finally {
+        if (!disposed) {
+          setIsHistoryLoading(false);
+          scheduleRefresh(delay);
+        }
       }
     }
 
-    loadCandles();
+    void loadCandles();
 
     let priorWidth = containerRef.current.clientWidth;
     const resizeObserver = new ResizeObserver(() => {
@@ -586,6 +616,7 @@ function Chart({
     return () => {
       disposed = true;
       historyRequest.abort();
+      window.clearTimeout(refreshTimer);
       resizeObserver.disconnect();
       if (streamFrameRef.current) {
         cancelAnimationFrame(streamFrameRef.current);
@@ -756,7 +787,7 @@ function Chart({
 
       {historyEvidence?.symbol === chartSymbol && historyEvidence.interval === timeframe && !isHistoryLoading && !historyError && !replayMode && (
         <div aria-label="Historical candle evidence" style={{ position: "absolute", bottom: 29, left: 8, zIndex: 5, background: chartTheme.overlay, color: chartTheme.muted, fontSize: 10, pointerEvents: "none" }}>
-          {historyEvidence.label}
+          Latest bar · {historyEvidence.label}
         </div>
       )}
 

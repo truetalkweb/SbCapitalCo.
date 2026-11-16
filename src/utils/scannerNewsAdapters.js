@@ -155,6 +155,7 @@ export function normalizeScannerRow(row, meta = {}) {
   const isCached = Boolean(row.isCached || row.cached || meta.cached);
   const ageMs = timestamp ? Date.now() - new Date(timestamp).getTime() : null;
   const freshness = syntheticMode ? "simulated"
+    : row.freshness === "unavailable" ? "unavailable"
     : ageMs !== null && ageMs < -60_000 ? "stale"
     : ageMs !== null && ageMs > 60 * 60_000 ? "stale"
     : isCached ? "cached"
@@ -162,7 +163,8 @@ export function normalizeScannerRow(row, meta = {}) {
     : row.freshness || (ageMs <= 2 * 60_000 ? "live" : "delayed");
   const dataStatus = syntheticMode ? "Simulated" : fallbackMode ? "Fallback Context"
     : freshness === "live" && !row.quoteDelayed ? "Live"
-    : freshness === "stale" ? "Stale" : freshness === "cached" ? "Cached" : "Delayed";
+    : freshness === "stale" ? "Stale" : freshness === "cached" ? "Cached"
+    : freshness === "unavailable" ? "Unavailable" : "Delayed";
   const trustTier = numericOrNull(row.trustTier) ?? (row.verified ? 3 : syntheticMode ? 1 : 2);
   const source = text(row.source || meta.source, "Scanner Engine");
 

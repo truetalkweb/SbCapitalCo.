@@ -170,7 +170,7 @@ export default function ProfessionalScanner({
     if (move >= 8 && relativeVolume >= 3) {
       return {
         label: "Momentum",
-        text: `${stock.symbol} is active on observed momentum and elevated relative volume.`,
+        text: `${stock.symbol} is active on observed momentum and elevated volume vs. average day.`,
       };
     }
 
@@ -190,7 +190,7 @@ export default function ProfessionalScanner({
 
     if (relativeVolume >= 2) {
       return {
-        label: "RVOL",
+        label: "Volume vs. average day",
         text: `${stock.symbol} is showing above-normal participation versus its baseline.`,
       };
     }
@@ -208,7 +208,7 @@ export default function ProfessionalScanner({
 
     if (analysis.move >= 5) drivers.push(`${analysis.signedMove > 0 ? "up" : "down"} ${analysis.move.toFixed(1)}% intraday`);
     if (Math.abs(analysis.gap) >= 1) drivers.push(`${analysis.gap > 0 ? "positive" : "negative"} ${Math.abs(analysis.gap).toFixed(1)}% gap`);
-    if (analysis.relativeVolume >= 1.5) drivers.push(`${analysis.relativeVolume.toFixed(1)}x relative volume`);
+    if (analysis.relativeVolume >= 1.5) drivers.push(`${analysis.relativeVolume.toFixed(1)}x volume vs. average day`);
     if (analysis.volume >= 1_000_000) drivers.push(`${formatCompactNumber(analysis.volume)} shares traded`);
     if (analysis.floatBucket === "Low Float") drivers.push("low-float profile");
 
@@ -286,7 +286,7 @@ export default function ProfessionalScanner({
       tags: [
         move >= 5 ? "Momentum" : null,
         Math.abs(gap) >= 2 ? "Gap" : null,
-        relativeVolume >= 2 ? "RVOL" : null,
+        relativeVolume >= 2 ? "Volume vs. average day" : null,
         floatBucket === "Low Float" ? "Low Float" : null,
         ["Catalyst", "News"].includes(catalyst.label) ? "Catalyst" : null,
       ].filter(Boolean),
@@ -472,7 +472,7 @@ export default function ProfessionalScanner({
               fontWeight: 850,
             }}
           >
-            {tab}
+            {tab === "Relative Volume" ? "Volume vs. average day" : tab}
           </button>
         ))}
       </div>
@@ -535,8 +535,8 @@ export default function ProfessionalScanner({
           <option value="HundredPlus">Over $100</option>
         </select>
 
-        <select value={minRvol} onChange={(event) => setMinRvol(event.target.value)} title="Minimum relative volume" style={filterControlStyle}>
-          <option value="0">Any RVOL</option>
+        <select value={minRvol} onChange={(event) => setMinRvol(event.target.value)} title="Session volume so far divided by average full-day volume" style={filterControlStyle}>
+          <option value="0">Any volume ratio</option>
           <option value="1.5">1.5x+</option>
           <option value="2">2x+</option>
           <option value="3">3x+</option>
@@ -619,7 +619,7 @@ export default function ProfessionalScanner({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "5px", marginTop: "8px" }}>
             {[
               ["Vol", formatCompactNumber(detailAnalysis.volume)],
-              ["RVOL", `${detailAnalysis.relativeVolume.toFixed(1)}x`],
+              ["Volume vs. average day", `${detailAnalysis.relativeVolume.toFixed(1)}x`],
               ["Score", `${detailAnalysis.score10}/10`],
               ["Risk", detailAnalysis.risk.label],
             ].map(([label, value]) => (
@@ -667,7 +667,7 @@ export default function ProfessionalScanner({
         <div>Symbol</div>
         <div>Price</div>
         <div>Move</div>
-        <div>RVOL</div>
+        <div title="Session volume so far divided by average full-day volume">Volume vs. average day</div>
         <div>Score/Risk</div>
       </div>
 

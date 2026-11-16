@@ -51,7 +51,7 @@ export default function ScannerWorkspacePage({
             <div style={{ padding: 20, borderBottom: `1px solid ${theme.borderSoft || theme.border}` }}>
               <SectionTitle theme={theme} title="Scanner" subtitle="Find high-quality trading opportunities" />
               <ScannerCoverageNotice meta={scannerMeta} theme={theme} />
-              <PremiumTabs theme={theme} tabs={["Gainers", "Losers", "Active", "Momentum", "High RVOL", "News Movers", "New Highs", "New Lows", "Premarket"]} active={scannerTab} onChange={setScannerTab} />
+              <PremiumTabs theme={theme} tabs={["Gainers", "Losers", "Active", "Momentum", { id: "High RVOL", label: "Volume vs. average day" }, "News Movers", "New Highs", "New Lows", "Premarket"]} active={scannerTab} onChange={setScannerTab} />
               <div style={{ marginTop: 18, display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
                 <select aria-label="Scanner preset" value={activeScannerPreset} onChange={(event) => {
                   const id = event.target.value;
@@ -67,8 +67,8 @@ export default function ScannerWorkspacePage({
                 }} style={{ height: 36, minWidth: 150, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px" }}>
                   {scannerPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
                 </select>
-                <select aria-label="Minimum relative volume" value={String(relativeVolumeThreshold)} onChange={(event) => updatePremiumPreference("relativeVolumeThreshold", event.target.value)} style={{ height: 36, minWidth: 120, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px" }}>
-                  {["0", "1.25", "1.50", "2.00", "3.00"].map((value) => <option key={value} value={value}>RVOL {value === "0" ? "Any" : `>= ${value}x`}</option>)}
+                <select aria-label="Minimum volume vs. average day" title="Session volume so far divided by average full-day volume" value={String(relativeVolumeThreshold)} onChange={(event) => updatePremiumPreference("relativeVolumeThreshold", event.target.value)} style={{ height: 36, minWidth: 120, border: `1px solid ${theme.borderSoft || theme.border}`, borderRadius: 6, background: theme.panel2, color: theme.text, padding: "0 10px" }}>
+                  {["0", "1.25", "1.50", "2.00", "3.00"].map((value) => <option key={value} value={value}>Volume ratio {value === "0" ? "Any" : `>= ${value}x`}</option>)}
                 </select>
                 <input aria-label="Scanner preset name" placeholder="Name this screen" value={presetName} maxLength={80} onChange={event => setPresetName(event.target.value)} style={{height:30, maxWidth:180}} />
                 <ActionButton theme={theme} active onClick={() => {
@@ -89,7 +89,7 @@ export default function ScannerWorkspacePage({
                   ["minPrice", "Min price"],
                   ["maxPrice", "Max price"],
                   ["minVolume", "Min volume"],
-                  ["minRvol", "Min RVOL"],
+                  ["minRvol", "Min volume ratio"],
                   ["minMarketCap", "Min cap"],
                   ["maxFloat", "Max float"],
                 ].map(([key, placeholder]) => (
@@ -134,7 +134,7 @@ export default function ScannerWorkspacePage({
               <PremiumCard theme={theme} title="Scanner Evidence"><div style={{ padding: 14, display: "grid", gap: 10 }}>{[
                 ["Trust", scannerSelected.verified ? "Verified provider" : scannerSelected.isSynthetic ? "Synthetic context" : scannerSelected.dataMode === "unavailable" ? "Unavailable" : "Calculated context"],
                 ["Freshness", scannerSelected.freshness || "Unavailable"],
-                ["Relative volume", hasNumericValue(scannerSelected.relativeVolume) ? formatMultiple(scannerSelected.relativeVolume) : "Unavailable"],
+                ["Volume vs. average day", hasNumericValue(scannerSelected.relativeVolume) ? formatMultiple(scannerSelected.relativeVolume) : "Unavailable"],
                 ["Volume", scannerSelected.volumeLabel || (hasNumericValue(scannerSelected.volume) ? formatCompactNumber(scannerSelected.volume, 1) : "Unavailable")],
                 ["Score", hasNumericValue(scannerSelected.scannerScore ?? scannerSelected.score) ? scannerSelected.scannerScore ?? scannerSelected.score : "Unavailable"],
                 ["Source", scannerSelected.source || "Scanner Engine"],

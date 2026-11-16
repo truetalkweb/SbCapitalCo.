@@ -2786,7 +2786,7 @@ export default function App() {
                   textTransform: "capitalize",
                 }}
               >
-                {tab === "Relative Volume" ? "High RVOL" : tab}
+                {tab === "Relative Volume" ? "Volume vs. average day" : tab}
               </button>
             ))}
           </div>
@@ -3102,7 +3102,7 @@ export default function App() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
             {[
               ["Volume", selectedStockData?.volume || selectedDockStock?.volume],
-              ["RVOL", selectedDockStock?.relativeVolume || selectedDockStock?.rvol],
+              ["Volume vs. average day", selectedDockStock?.relativeVolume || selectedDockStock?.rvol],
               ["Score", selectedDockStock?.score10 || selectedDockStock?.score],
               ["Risk", selectedDockStock?.riskLabel || selectedDockStock?.risk || selectedDataConfidence.confidence],
             ].map(([label, value]) => (
@@ -4417,7 +4417,7 @@ export default function App() {
             </div>
           ))}
 
-          {sectionHeader("movers", "Small Cap Movers", String(liveSmallCapMovers.length))}
+          {sectionHeader("movers", "Under $20", String(liveSmallCapMovers.length))}
 
           {leftSectionsOpen.movers && (
             <ScannerTable

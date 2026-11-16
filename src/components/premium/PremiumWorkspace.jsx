@@ -653,7 +653,7 @@ function PremiumWorkspaceContent({
           { key: "evidence", label: "Data evidence", width: "240px", render: row => marketEvidenceLabel(normalizeMarketQuote({ ...row, asOf: row.asOf ?? row.providerTimestamp })) },
           { key: "change", label: "Chg%", width: "90px", align: "right", mono: true, color: (row) => toneColor(theme, moveOf(row)), render: (row) => pct(moveOf(row)) },
           { key: "gap", label: "Gap%", width: "90px", align: "right", mono: true, color: (row) => hasNumericValue(row.gapPercent) ? toneColor(theme, row.gapPercent) : theme.muted, render: (row) => hasNumericValue(row.gapPercent) ? pct(row.gapPercent) : "Unavailable" },
-          { key: "rvol", label: "RVOL", width: "70px", align: "right", mono: true, render: (row) => hasNumericValue(row.relativeVolume) ? formatMultiple(row.relativeVolume) : "Unavailable" },
+          { key: "rvol", label: "Volume vs. average day", width: "125px", align: "right", mono: true, render: (row) => hasNumericValue(row.relativeVolume) ? formatMultiple(row.relativeVolume) : "Unavailable" },
           { key: "volume", label: "Volume", width: "95px", align: "right", mono: true, render: (row) => row.volumeLabel || (typeof row.volume === "string" ? row.volume : formatCompactNumber(row.volume, 1)) },
           { key: "float", label: "Float", width: "90px", align: "right", mono: true, render: (row) => row.floatLabel || (row.floatShares ? formatCompactNumber(row.floatShares, 2) : "Unavailable") },
           { key: "setup", label: "Catalyst", width: "130px", render: (row) => row.catalyst || row.setup },

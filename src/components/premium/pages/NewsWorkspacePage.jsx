@@ -1,4 +1,5 @@
 import { useState } from "react";
+import SecFilings from "./SecFilings";
 import RecordPagination from "../RecordPagination";
 import { useRecordPage } from "../../../hooks/useRecordPage.js";
 import { Star } from "lucide-react";
@@ -95,6 +96,7 @@ export default function NewsWorkspacePage({
               />
             </PremiumCard>
             <RecordPagination theme={theme} state={pagination} label="headlines" />
+            <SecFilings theme={theme} brokerApiUrl={brokerApiUrl} selectedTicker={selected?.symbol} />
             <PremiumCard theme={theme} title="Watchlist News"><PremiumTable theme={theme} keyField="id" columns={[
               {key:"symbol",label:"Symbol",width:"90px"},{key:"headline",label:"Headline",width:"2fr"},{key:"source",label:"Source",width:"120px"},
             ]} rows={watchlistHeadlines} onSelect={row=>{ setNewsView("Watchlist"); setNewsSearch(""); setSource("all"); setImpact("all"); setSelectedNewsId(row.id); if(row.symbol)selectMainSymbol?.(row.symbol,row,"news-row"); }} emptyMessage="No articles for this watchlist" /></PremiumCard>

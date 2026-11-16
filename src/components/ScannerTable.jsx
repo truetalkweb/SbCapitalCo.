@@ -91,7 +91,7 @@ export default function ScannerTable({ rows = [], onPick, theme }) {
         <span>Symbol</span>
         <span style={{ textAlign: "right" }}>Price</span>
         <span style={{ textAlign: "right" }}>Move</span>
-        <span style={{ textAlign: "right" }}>RVOL</span>
+        <span style={{ textAlign: "right" }} title="Session volume so far divided by average full-day volume">Volume vs. average day</span>
         <span style={{ textAlign: "right" }}>Score</span>
       </div>
 

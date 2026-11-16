@@ -6,7 +6,9 @@ export function scannerCoverage(meta = {}) {
   return {
     partial,
     label: partial ? 'Partial scanner coverage' : 'Provider-reported coverage',
-    detail: meta.coverageLabel || 'Available provider symbols only; full-market coverage is unverified.',
+    detail: meta.coverage === 'bounded-universe'
+      ? 'Results cover a configured subset of symbols.'
+      : meta.coverageLabel || 'Available provider symbols only; full-market coverage is unverified.',
     warning: limited ? 'Provider plan limit active. Available symbols are a subset, not full-market rankings.'
       : getCleanProviderMessage(meta.userMessage || meta.lastWarning || meta.warnings?.[0], ''),
     snapshot: meta.pending ? 'Waiting for initial provider results.' : meta.cached ? 'Cached snapshot; row timestamps show quote freshness.' : 'Row timestamps show quote freshness.',

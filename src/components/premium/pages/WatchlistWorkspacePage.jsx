@@ -34,6 +34,23 @@ export default function WatchlistWorkspacePage({
       addSymbolToWatchlist?.(symbol);
       setFeedback(exists ? symbol + ' is already in this group.' : symbol + ' added to this group.');
     }
+    const symbols = [...new Set(symbolInput.trim().toUpperCase().split(/[,\s]+/).filter(Boolean))];
+    const invalidSymbols = symbols.filter(symbol => !/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbol));
+    function submitSymbols(event) {
+      event.preventDefault();
+      if (!symbols.length) return;
+      if (invalidSymbols.length) {
+        setFeedback("Check these symbols: " + invalidSymbols.join(", ") + ".");
+        return;
+      }
+      const additions = symbols.filter(symbol => !collections.active.symbols.includes(symbol));
+      if (additions.length) collections.addMany(additions);
+      setFeedback(additions.length ? additions.join(", ") + " added to this group." :
+        symbols.length === 1 ? symbols[0] + " is already in this group." : "These symbols are already in this group.");
+      setWatchlistSearch("");
+      setWatchlistView("Main Watchlist");
+      setSymbolInput("");
+    }
     const pagination = useRecordPage(watchlistRows,25,watchlistSearch+watchlistView+(collections?.active.id||""));
     const member = symbol => collections ? collections.active.symbols.includes(symbol) : watchlistRows.some(row=>row.symbol===symbol);
     const listAlerts = alertRows.filter(row=>member(row.symbol));
@@ -58,8 +75,10 @@ export default function WatchlistWorkspacePage({
                     <ActionButton theme={theme} onClick={() => { collections.removeList(); setDeleteId(null); }}>Confirm group deletion</ActionButton>
                     <ActionButton theme={theme} onClick={() => setDeleteId(null)}>Cancel</ActionButton>
                   </div>}
-                  <input aria-label="Watchlist symbol" placeholder="Add symbol" value={symbolInput} onChange={event=>setSymbolInput(event.target.value.toUpperCase())} />
-                  <ActionButton theme={theme} disabled={!/^[A-Z0-9][A-Z0-9./:-]{0,13}$/.test(symbolInput)} onClick={()=>{addSymbol(symbolInput);setSymbolInput("");}}>Add Symbol</ActionButton>
+                  <form onSubmit={submitSymbols} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input aria-label="Watchlist symbol" placeholder="e.g. ORCL, GOOGL, AMD" value={symbolInput} onChange={event=>setSymbolInput(event.target.value)} />
+                    <ActionButton theme={theme} type="submit" disabled={!symbols.length}>{symbols.length > 1 ? "Add Symbols" : "Add Symbol"}</ActionButton>
+                  </form>
                 </div>}
                 {feedback && <p role="status">{feedback}</p>}
                 {collections && member(selected.symbol) && <WatchlistDestination key={collections.active.id + selected.symbol} collections={collections} symbol={selected.symbol} sourceId={collections.active.id} theme={theme} />}

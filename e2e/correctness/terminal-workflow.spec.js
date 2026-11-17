@@ -183,6 +183,10 @@ test('inbox filters distinct rule events and watchlist groups can be reordered a
   await page.getByLabel('Watchlist symbol', { exact: true }).fill('AAPL');
   await click('Add Symbol');
   await expect(page.getByText('AAPL is already in this group.')).toBeVisible();
+  await page.getByLabel('Watchlist symbol', { exact: true }).fill(' orcl, googl rklb,RKLB ');
+  await page.getByLabel('Watchlist symbol', { exact: true }).press('Enter');
+  await expect(page.getByText('ORCL, GOOGL, RKLB added to this group.')).toBeVisible();
+  await expect.poll(() => evidence.workspace().premiumPreferences?.watchlists[0].symbols).toEqual(['AAPL', 'ORCL', 'GOOGL', 'RKLB']);
   await click('Remove List');
   await expect(groups.locator('option')).toHaveCount(2);
   await click('Confirm group deletion');

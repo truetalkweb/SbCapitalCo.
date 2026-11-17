@@ -17,12 +17,20 @@ export function useWatchlistCollections({ preferences, setPreferences, liveStock
       return { watchlists: sourceId ? changeWatchlistMember(added, sourceId, symbol, false) : added };
     });
   };
+  const addMany = symbols => {
+    for (const symbol of symbols) {
+      if (!liveStocks.some(row => row.symbol === symbol)) addGlobal?.(symbol);
+    }
+    update(rows => ({
+      watchlists: symbols.reduce((result, symbol) => changeWatchlistMember(result, active.id, symbol, true), rows),
+    }));
+  };
   const add = symbol => transfer(symbol, active.id);
   const remove = symbol => {
     if (!lists.some(list=>list.id!==active.id && list.symbols.includes(symbol))) removeGlobal?.(symbol);
     update((rows,id)=>({watchlists:changeWatchlistMember(rows,id,symbol,false)}));
   };
-  return { lists, active, add, remove, transfer,
+  return { lists, active, add, addMany, remove, transfer,
     reorder: offset => update((rows, id) => {
       const from = rows.findIndex(row => row.id === id);
       const to = from + offset;

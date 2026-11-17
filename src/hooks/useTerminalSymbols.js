@@ -263,7 +263,7 @@ export function useTerminalSymbols({
       const knownStock = allSymbols.find((stock) => stock.symbol === cleanSymbol);
 
       if (!exists) {
-        setLiveStocks((prev) => [
+        setLiveStocks((prev) => prev.some(stock => stock.symbol === cleanSymbol) ? prev : [
           ...prev,
           {
             symbol: cleanSymbol,

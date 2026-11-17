@@ -9,6 +9,7 @@ import SavedLayouts from "./SavedLayouts";
 import AlertsInbox from "./AlertsInbox";
 import { collectAlertEvents } from "../../utils/alertInbox.js";
 import WatchlistDestination from "./WatchlistDestination";
+import { applyWatchlistDetails, useWatchlistDetails } from "../../hooks/useWatchlistDetails.js";
 import { useWatchlistCollections } from "../../hooks/useWatchlistCollections.js";
 import { Star } from "lucide-react";
 import { buildPositionRows } from "../../utils/portfolioAccounting.js";
@@ -207,7 +208,9 @@ function PremiumWorkspaceContent({
   const removeWatchlistSymbol = collections.remove;
   const isNarrowWorkspace = viewportWidth <= 900;
   const stocks = buildStocks(liveStocks, scannerStocks, selectedStockData, selectedStock);
-  const selected = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
+  const selectedRow = stocks.find((row) => row.symbol === selectedStock) || stocks[0];
+  const selectedDetails = useWatchlistDetails(brokerApiUrl, selectedRow ? [selectedRow] : []);
+  const selected = applyWatchlistDetails(selectedRow, selectedDetails.get(selectedRow?.symbol));
   const headlines = makeNews(news, selectedStock);
   const dashboard = useDashboardData({
     selectedStock,
@@ -756,6 +759,7 @@ function PremiumWorkspaceContent({
         {...{
           collections,
           addSymbolToWatchlist,
+          brokerApiUrl,
           alertRows,
           journalRows,
           mainTwoCol,

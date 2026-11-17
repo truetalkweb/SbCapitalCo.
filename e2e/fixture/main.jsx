@@ -188,6 +188,7 @@ function Harness() {
         renderChartGrid={() => <ReleaseChartFixture theme={theme} />}
         selectedStock={selectedStock}
         selectedStockData={selectedStockData}
+        brokerApiUrl={params.has("fundamentals") ? window.location.origin : ""}
         liveStocks={watchlistStocks}
         scannerStocks={scannerUniverse}
         scannerGroups={{

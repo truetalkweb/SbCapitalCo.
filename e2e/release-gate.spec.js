@@ -59,6 +59,17 @@ test("news preview does not open a tab and watchlist news contains articles",asy
   await expect(card).toContainText("Nvidia extends AI infrastructure partnership");
 });
 
+test("watchlist shows matched fundamentals from the symbol details feed", async ({ page }) => {
+  await page.route("**/api/watchlist/details?*", route => route.fulfill({
+    json: { rows: [{ symbol: "AAPL", name: "Apple Inc.", averageVolume: 27_600_000, floatShares: 14_000_000_000, peRatio: 32.5, beta: 0.91 }] },
+  }));
+  await page.goto(fixtureUrl("watchlist", "&fundamentals=1"));
+  const row = page.getByRole("row", { name: "Select AAPL", exact: true });
+  for (const value of ["Apple Inc.", "2.0x", "14.00B", "32.50", "0.91"]) {
+    await expect(row.getByText(value, { exact: true })).toBeVisible();
+  }
+});
+
 const workspaces = {
   dashboard: "Account Equity",
   scanner: "Heuristic Ranking",

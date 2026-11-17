@@ -37,6 +37,7 @@ export default function ChartsWorkspacePage({
       ["Volume", selected.volume],
       ["Float", selected.floatShares ?? selected.float],
       ["Market Cap", selected.marketCap],
+      ["P/E", selected.peRatio ?? selected.pe],
       ["Beta", selected.beta],
     ];
     return (

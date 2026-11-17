@@ -4552,7 +4552,7 @@ export default function App() {
                         fontSize: "9px",
                         fontFamily: terminalSansFont,
                         fontWeight: 800,
-                        borderColor: activeRightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent",
+                        border: `1px solid ${activeRightTab === tab.id ? "rgba(25,198,216,0.7)" : "transparent"}`,
                         background: activeRightTab === tab.id
                           ? `linear-gradient(180deg, ${theme.blue}, #1765c6)`
                           : isDark ? "rgba(255,255,255,0.015)" : theme.panel,

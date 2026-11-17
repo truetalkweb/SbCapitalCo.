@@ -79,7 +79,7 @@ export default function TerminalTopBar({
   const quietButton = {
     opacity: 0.78,
     background: "transparent",
-    borderColor: theme.borderSoft || theme.border,
+    border: `1px solid ${theme.borderSoft || theme.border}`,
   };
   const chromeBackground = isDark
     ? "linear-gradient(180deg, #07090d 0%, #090d14 100%)"

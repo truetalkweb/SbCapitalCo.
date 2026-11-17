@@ -98,7 +98,6 @@ export default function ChartPanel({
     padding: isPhoneChart ? "0" : dense ? "0 7px" : premiumShell ? "0 10px" : "0 9px",
     width: isPhoneChart ? "36px" : dense ? "78px" : premiumShell ? "104px" : "112px",
     background: theme.panel2,
-    borderColor: theme.borderSoft || theme.border,
     fontSize: "10px",
     flex: "0 0 auto",
   };
@@ -256,7 +255,7 @@ export default function ChartPanel({
                     ...timeframeButtonStyle(tf === item),
                     height: dense ? "22px" : "24px",
                     width: dense ? "30px" : "38px",
-                    borderColor: workstation ? "transparent" : tf === item ? "rgba(45,140,255,0.7)" : "transparent",
+                    border: `1px solid ${!workstation && tf === item ? "rgba(45,140,255,0.7)" : "transparent"}`,
                     background: tf === item ? workstation ? `${theme.green}18` : `linear-gradient(180deg, ${theme.blue}, #1765c6)` : "transparent",
                     color: tf === item && workstation ? theme.green : theme.text,
                     fontWeight: workstation ? 600 : 800,
@@ -301,7 +300,7 @@ export default function ChartPanel({
               style={{
                 ...toolButtonStyle,
                 background: showTrendTools || trendTools.autoLevels ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : toolButtonStyle.background,
-                borderColor: showTrendTools || trendTools.autoLevels ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
+                border: showTrendTools || trendTools.autoLevels ? "1px solid rgba(45,140,255,0.7)" : toolButtonStyle.border,
                 color: showTrendTools || trendTools.autoLevels ? "#ffffff" : toolButtonStyle.color,
               }}
               onClick={toggleTrendToolsMenu}
@@ -375,7 +374,7 @@ export default function ChartPanel({
               style={{
                 ...toolButtonStyle,
                 background: showIndicators ? `linear-gradient(180deg, ${theme.blue}, #1765c6)` : toolButtonStyle.background,
-                borderColor: showIndicators ? "rgba(45,140,255,0.7)" : toolButtonStyle.borderColor,
+                border: showIndicators ? "1px solid rgba(45,140,255,0.7)" : toolButtonStyle.border,
                 color: showIndicators ? "#ffffff" : toolButtonStyle.color,
               }}
               onClick={toggleIndicatorsMenu}

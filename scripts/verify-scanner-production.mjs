@@ -60,7 +60,7 @@ try {
   await page.goto(url);
   const workspace = page.locator('.ws-workspace[data-workspace="scanner"]');
   await expect(workspace).toBeVisible({ timeout: 30000 });
-  await page.getByLabel('Minimum relative volume').selectOption('0');
+  await page.getByLabel('Minimum volume vs. average day').selectOption('0');
   await expect(workspace).toContainText(scanner.coverageLabel, { timeout: 30000 });
   await expect(workspace).toContainText('Verified provider');
   assert.ok(await workspace.getByRole('row').count() > 1, 'Scanner table has provider rows');

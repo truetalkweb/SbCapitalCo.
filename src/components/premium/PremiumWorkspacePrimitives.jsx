@@ -544,14 +544,14 @@ export function SymbolBadge({ theme, symbol }) {
   );
 }
 
-export function DetailRail({ theme, selected, children, title = "Selected Symbol", actions, compact = false, detailStats }) {
+export function DetailRail({ theme, selected, children, title = "Selected Symbol", actions, compact = false, detailStats, showBeta = true }) {
   const stats = detailStats || [
     ["Day High", selected.dayHigh ?? selected.high],
     ["Day Low", selected.dayLow ?? selected.low],
     ["Volume", selected.volume],
     ["Float", selected.floatShares ?? selected.float],
     ["P/E", selected.peRatio ?? selected.pe],
-    ["Beta", selected.beta],
+    ...(showBeta ? [["Beta", selected.beta]] : []),
   ];
 
   return (

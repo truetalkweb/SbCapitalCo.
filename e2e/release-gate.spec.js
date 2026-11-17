@@ -65,7 +65,11 @@ test("watchlist shows matched fundamentals from the symbol details feed", async 
   }));
   await page.goto(fixtureUrl("watchlist", "&fundamentals=1"));
   const row = page.getByRole("row", { name: "Select AAPL", exact: true });
-  for (const value of ["Apple Inc.", "2.0x", "14.00B", "32.50", "0.91"]) {
+  for (const label of ["Beta", "Context"]) {
+    await expect(page.getByRole("columnheader", { name: label, exact: true })).toHaveCount(0);
+  }
+  await expect(page.getByText("Beta", { exact: true })).toHaveCount(0);
+  for (const value of ["Apple Inc.", "2.0x", "14.00B", "32.50"]) {
     await expect(row.getByText(value, { exact: true })).toBeVisible();
   }
 });

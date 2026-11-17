@@ -673,7 +673,7 @@ function PremiumWorkspaceContent({
 
   function selectedRail(extra = null, selectedOverride = selected) {
     return (
-      <DetailRail theme={theme} selected={selectedOverride} actions={selectedActions}>
+      <DetailRail theme={theme} selected={selectedOverride} actions={selectedActions} showBeta={activeWorkspace !== "watchlist"}>
         {activeWorkspace === 'scanner' && <>{tradePlanEditor}<ScannerSampleBreadth stocks={stocks} theme={theme} /></>}
         {extra}
       </DetailRail>

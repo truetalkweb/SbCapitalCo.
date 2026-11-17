@@ -50,6 +50,13 @@ export default function ReplayWorkspacePage({
 }) {
     const replayStartingCash = 100000;
     const ready = Boolean(replayStats?.candle);
+    const canPlay = ready && replayDataLength > 1;
+    const atEnd = ready && replayIndex >= replayDataLength - 1;
+    const togglePlayback = () => {
+      if (!canPlay) return;
+      if (!replayPlaying && atEnd) setReplayIndex?.(0);
+      setReplayPlaying?.(!replayPlaying);
+    };
     const value = amount => amount === null || amount === undefined ? "Unavailable" : money(amount);
     const replayPositions = (replayStats?.positions || []).map(position => ({
       symbol: position.symbol, side: position.side, qty: position.qty,
@@ -158,9 +165,9 @@ export default function ReplayWorkspacePage({
               ].map(([label, value]) => replayMetric(label, value))}
               <div style={{ display: "flex", gap: 8, justifyContent: "end", flexWrap: "wrap", gridColumn: isNarrowWorkspace ? "1 / -1" : "auto" }}>
                 <ActionButton theme={theme} disabled={!ready} onClick={() => jumpReplay("open")}>Go to Start</ActionButton>
-                <ActionButton theme={theme} onClick={() => stepReplay?.()}>Step</ActionButton>
-                <ActionButton theme={theme} good onClick={() => setReplayPlaying?.(!replayPlaying)}>
-                  {replayPlaying ? "Pause Replay" : "Start Replay"}
+                <ActionButton theme={theme} disabled={!canPlay || atEnd} onClick={() => stepReplay?.()}>Step</ActionButton>
+                <ActionButton theme={theme} good disabled={!canPlay} onClick={togglePlayback}>
+                  {replayPlaying ? "Pause Replay" : atEnd && canPlay ? "Restart Replay" : "Start Replay"}
                 </ActionButton>
               </div>
             </div>
@@ -311,7 +318,7 @@ export default function ReplayWorkspacePage({
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "end" }}>
                     <ActionButton theme={theme} aria-label="Jump to replay start" title="Jump to start" onClick={() => setReplayIndex?.(0)}>|&lt;</ActionButton>
                     <ActionButton theme={theme} aria-label="Previous replay candle" title="Previous candle" onClick={() => moveReplay(-1)}>&lt;</ActionButton>
-                    <ActionButton theme={theme} aria-label={replayPlaying ? "Pause replay" : "Play replay"} active={replayPlaying} onClick={() => setReplayPlaying?.(!replayPlaying)}>
+                    <ActionButton theme={theme} aria-label={replayPlaying ? "Pause replay" : atEnd && canPlay ? "Restart replay" : "Play replay"} active={replayPlaying} disabled={!canPlay} onClick={togglePlayback}>
                       {replayPlaying ? "||" : ">"}
                     </ActionButton>
                     <ActionButton theme={theme} aria-label="Advance replay five candles" title="Advance five candles" onClick={() => moveReplay(5)}>&gt;&gt;</ActionButton>

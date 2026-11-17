@@ -1365,3 +1365,23 @@ test('background alerts retain server activity after reload, respect pause and p
   await toggle.click(); await expect(toggle).not.toBeChecked(); await expect.poll(async () => (await evidence.alertService.snapshot(user.id)).enabled).toBe(false);
   expect(evidence.errors).toEqual([]); expect(evidence.blocked).toEqual([]);
 });
+
+test("Tools Replay restarts after the last bar and advances", async ({ page }) => {
+  await setupApp(page, { ...initialWorkspace, activeWorkspace: "dashboard" });
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  const start = page.getByRole("button", { name: "Start Replay", exact: true });
+  await expect(start).toBeEnabled();
+  await page.getByRole("button", { name: "Last Bar", exact: true }).click();
+  await expect(page.getByText(/Step 50 of 50/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Step", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Restart Replay", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Pause Replay", exact: true })).toBeVisible();
+  await expect(page.getByText(/Replay running · Step [2-9] of 50/)).toBeVisible();
+});
+
+test("Tools Replay disables playback when verified history is unavailable", async ({ page }) => {
+  await setupApp(page, { ...initialWorkspace, activeWorkspace: "replay" }, { unavailableHistory: true });
+  await expect(page.getByRole("button", { name: "Retry chart data" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start Replay", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Step", exact: true })).toBeDisabled();
+});
